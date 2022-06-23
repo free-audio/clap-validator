@@ -63,6 +63,24 @@ impl ClapPlugin {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(path);
 
+        // NOTE: Apple says you can dlopen() bundles. This is a lie.
+        #[cfg(target_os = "macos")]
+        let path = {
+            use core_foundation::bundle::CFBundle;
+            use core_foundation::url::CFURL;
+
+            let bundle =
+                CFBundle::new(CFURL::from_path(&path, true).context("Could not create CFURL")?)
+                    .context("Could not open bundle")?;
+            let executable = bundle
+                .executable_url()
+                .context("Could not get executable URL within bundle")?;
+
+            executable
+                .to_path()
+                .context("Could not convert bundle executable path")?
+        };
+
         let library =
             unsafe { libloading::Library::new(&path) }.context("Could not load the library")?;
 
