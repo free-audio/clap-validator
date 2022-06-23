@@ -1,0 +1,11 @@
+[package]
+name = "clapval"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+description = "A validator and automatic test suite for CLAP plugins"
+readme = "README.md"
+repository = "https://github.com/robbert-vdh/clapval"
+
+[dependencies]
