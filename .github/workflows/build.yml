@@ -1,0 +1,82 @@
+name: Automated Builds
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      # Run when pushing version tags, since otherwise it's impossible to
+      # restart a successful build after pushing a tag
+      - '*.*.*'
+  pull_request:
+    branches:
+      - master
+
+defaults:
+  run:
+    # This otherwise gets run under dash which does not support brace expansion
+    shell: bash
+
+jobs:
+  # We'll only package the plugins with an entry in bundler.toml
+  package:
+    strategy:
+      matrix:
+        include:
+          - { name: ubuntu-18.04,       os: ubuntu-18.04,   cross-target: '' }
+          - { name: macos-10.15-x86_64, os: macos-10.15,    cross-target: '' }
+          - { name: macos-11-aarch64,   os: macos-11,       cross-target: aarch64-apple-darwin }
+          - { name: windows,            os: windows-latest, cross-target: '' }
+    name: Build binary
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Fetch all git history
+        run: git fetch --force --prune --tags --unshallow
+
+      - uses: actions/cache@v2
+        with:
+          # FIXME: In combination with `actions-rs/toolchain@v1` this may
+          #        somehow cause the AArch64 version of rustup to end up here
+          # ~/.cargo/bin/
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          default: true
+          # The macOS AArch64 build is done from an x86_64 macOS CI runner, so
+          # it needs to be cross compiled
+          target: ${{ matrix.cross-target }}
+      - name: Build the binary
+        if: '!matrix.cross-target'
+        run: cargo build --release
+      - name: Build the binary
+        if: matrix.cross-target
+        run: cargo build --release --target="${{ matrix.cross-target }}"
+
+      - name: Determine the build archive name
+        run: |
+          echo "ARCHIVE_NAME=clapval-$(git describe --always)-${{ matrix.name }}" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v2
+        if: startsWith(matrix.os, 'ubuntu') || (startsWith(matrix.os, 'macos') && !matrix.cross-target)
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: target/release/clapval
+      - uses: actions/upload-artifact@v2
+        if: startsWith(matrix.os, 'windows')
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: target/release/clapval.exe
+      - uses: actions/upload-artifact@v2
+        if: startsWith(matrix.os, 'macos') && matrix.cross-target
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: target/${{ matrix.cross-target }}/release/clapval
