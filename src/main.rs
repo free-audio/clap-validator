@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod hosting;
 mod index;
 mod plugin;
 mod util;

@@ -2,11 +2,16 @@
 
 use anyhow::{Context, Result};
 use clap_sys::entry::clap_plugin_entry;
+use clap_sys::plugin::clap_plugin;
 use clap_sys::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use serde::Serialize;
 use std::ffi::CString;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::ptr::NonNull;
 
+use crate::hosting::ClapHost;
 use crate::util;
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over
@@ -16,6 +21,18 @@ pub struct ClapPluginLibrary {
     /// The plugin's library. Its entry point has already been initialized, and it will
     /// autoamtically be deinitialized when this object gets dropped.
     library: libloading::Library,
+    /// The hosting side for this library. This can be used to see how the plugin interacts w ith
+    /// the host.
+    pub host: Pin<Box<ClapHost>>,
+}
+
+/// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped.
+#[derive(Debug)]
+pub struct ClapPlugin<'lib> {
+    handle: NonNull<clap_plugin>,
+    /// The CLAP plugin library this plugin instance was created from. The plugin's host instance
+    /// also comes from here
+    library: &'lib ClapPluginLibrary,
 }
 
 /// Metadata for a CLAP plugin library, which may contain multiple plugins.
@@ -47,6 +64,20 @@ impl Drop for ClapPluginLibrary {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A ClapPlugin was constructed for a plugin with no entry point");
         unsafe { (entry_point.deinit)() };
+    }
+}
+
+impl Drop for ClapPlugin<'_> {
+    fn drop(&mut self) {
+        unsafe { (self.handle.as_ref().destroy)(self.handle.as_ptr()) };
+    }
+}
+
+impl Deref for ClapPlugin<'_> {
+    type Target = clap_plugin;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.handle.as_ref() }
     }
 }
 
@@ -96,7 +127,11 @@ impl ClapPluginLibrary {
             anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false");
         }
 
-        Ok(ClapPluginLibrary { library })
+        Ok(ClapPluginLibrary {
+            library,
+            // All plugins created for this plugin library share the same host instance
+            host: ClapHost::new(),
+        })
     }
 
     /// Get the metadata for all plugins stored in this plugin library. Most plugin libraries
@@ -160,6 +195,39 @@ impl ClapPluginLibrary {
         }
 
         Ok(metadata)
+    }
+
+    /// Try to create the plugin with the given ID. The plugin IDs supported by this plugin library
+    /// can be found by calling [`metadata()`][Self::metadata()]. The return plugin has not yet been
+    /// initialized, and `destroy()` will be called automatically when the object is dropped.
+    pub fn create_plugin(&self, id: &str) -> Result<ClapPlugin> {
+        let entry_point = get_clap_entry_point(&self.library)
+            .expect("A ClapPlugin was constructed for a plugin with no entry point");
+        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID) }
+            as *const clap_plugin_factory;
+        if plugin_factory.is_null() {
+            anyhow::bail!("The plugin does not support the 'clap_plugin_factory'");
+        }
+
+        let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
+        let plugin = unsafe {
+            ((*plugin_factory).create_plugin)(
+                plugin_factory,
+                self.host.as_ptr(),
+                id_cstring.as_ptr(),
+            )
+        };
+        if plugin.is_null() {
+            anyhow::bail!(
+                "'clap_plugin_factory::create_plugin({id_cstring:?})' returned a null pointer"
+            );
+        }
+
+        Ok(ClapPlugin {
+            // TODO: There's no *const NonNull equivalent, right?
+            handle: NonNull::new(plugin as *mut _).unwrap(),
+            library: self,
+        })
     }
 }
 

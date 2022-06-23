@@ -12,7 +12,8 @@ repository = "https://github.com/robbert-vdh/clapval"
 anyhow = "1.0.58"
 # All the claps!
 clap = { version = "3.2.6", features = ["derive"] }
-clap-sys = "0.2"
+# TODO: Switch back to the crates.rs version once the debug prints are merged
+clap-sys = { git = "https://github.com/robbert-vdh/clap-sys.git", branch = "feature/debug-derives" }
 libloading = "0.7.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

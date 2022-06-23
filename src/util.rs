@@ -3,6 +3,27 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
 
+/// Early exit out of a function with the specified return value when one of the passed pointers is
+/// null.
+macro_rules! check_null_ptr {
+    ($ret:expr, $ptr:expr $(, $ptrs:expr)* $(, )?) => {
+        $crate::util::check_null_ptr_msg!("Null pointer passed to function", $ret, $ptr $(, $ptrs)*)
+    };
+}
+
+/// The same as [`check_null_ptr!`], but with a custom message.
+macro_rules! check_null_ptr_msg {
+    ($msg:expr, $ret:expr, $ptr:expr $(, $ptrs:expr)* $(, )?) => {
+        if $ptr.is_null() $(|| $ptrs.is_null())* {
+            eprintln!($msg);
+            return $ret;
+        }
+    };
+}
+
+pub(crate) use check_null_ptr;
+pub(crate) use check_null_ptr_msg;
+
 /// Convert a `*const c_char` to a `String`. Returns `None` if the pointer is a null pointer or if
 /// the string is not valid UTF-8.
 ///
