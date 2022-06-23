@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
@@ -17,15 +17,17 @@ const PATH_SEPARATOR: char = ';';
 
 /// A containing metadata for all CLAP plugins found on this system. Each plugin path in the map
 /// contains zero or more plugins. See [`index()`].
+///
+/// Uses a `BTreeMap` purely so the order is stable.
 #[derive(Debug, Serialize)]
-pub struct Index(pub HashMap<PathBuf, ClapMetadata>);
+pub struct Index(pub BTreeMap<PathBuf, ClapMetadata>);
 
 /// Build an index of all CLAP plugins on this system. This finds all `.clap` files as specified in
 /// [entry.h](https://github.com/free-audio/clap/blob/main/include/clap/entry.h), and lists all
 /// plugins contained within those files. If a `.clap` file was found during the scan that could not
 /// be read, then a warning will be printed.
 pub fn index() -> Index {
-    let mut index = Index(HashMap::new());
+    let mut index = Index(BTreeMap::new());
     let directories = match clap_directories() {
         Ok(directories) => directories,
         Err(err) => {
