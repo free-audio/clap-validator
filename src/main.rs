@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 mod index;
 mod plugin;
+mod util;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -57,7 +58,16 @@ fn main() {
             todo!("Implement the validator")
         }
         Commands::List { json } => {
-            //
+            let plugin_index = index::index();
+
+            if *json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&plugin_index).expect("Could not format JSON")
+                );
+            }
+
+            eprintln!("TODO: Pretty printing, use the --json option to get the output as JSON")
         }
     }
 }
