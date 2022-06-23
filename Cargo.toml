@@ -9,6 +9,7 @@ readme = "README.md"
 repository = "https://github.com/robbert-vdh/clapval"
 
 [dependencies]
+anyhow = "1.0.58"
 # All the claps!
 clap = { version = "3.2.6", features = ["derive"] }
 clap-sys = "0.2"
