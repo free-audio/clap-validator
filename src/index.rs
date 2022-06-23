@@ -53,7 +53,7 @@ pub fn index() -> Index {
                 Ok(metadata) => {
                     index.0.insert(clap_plugin_path.into_path(), metadata);
                 }
-                Err(err) => eprintln!("{}", err),
+                Err(err) => eprintln!("{err:#}"),
             }
         }
     }
