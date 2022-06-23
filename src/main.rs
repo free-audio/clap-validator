@@ -21,6 +21,13 @@ enum Commands {
         /// Paths to one or more plugins that should be validated.
         #[clap(value_parser, required(true))]
         paths: Vec<PathBuf>,
+        /// Only validate plugins with this ID.
+        ///
+        /// If the plugin library contains multiple plugins, then you can pass a single plugin's ID
+        /// to this option to only validate that plugin. Otherwise all plugins in the library are
+        /// validated.
+        #[clap(value_parser, short = 'i', long)]
+        plugin_id: Option<String>,
         /// Run the tests within this process.
         ///
         /// Tests are normally run in separate processes in case the plugin crashes. Another benefit
