@@ -6,6 +6,11 @@ A validator and automatic test suite for [CLAP](https://github.com/free-audio/cl
 
 <!-- TODO: More usage instructions -->
 
+## Download
+
+Prebuilt binaries can be found
+[here](https://nightly.link/robbert-vdh/clapval/workflows/build/master).
+
 ## Building
 
 After installing [Rust](https://rustup.rs/), you can compile and run clapval as follows:
@@ -13,7 +18,3 @@ After installing [Rust](https://rustup.rs/), you can compile and run clapval as 
 ```shell
 cargo run --release
 ```
-
-<!-- TODO: Do this -->
-
-Prebuilt binaries will be made available soon.
