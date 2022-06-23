@@ -1,12 +1,15 @@
 //! Utilities and data structures for indexing plugins.
 
 use serde::Serialize;
+use std::collections::HashMap;
+use std::path::PathBuf;
 
-use crate::plugin::ClapPlugin;
+use crate::plugin::ClapMetadata;
 
-/// A list of known CLAP plugins found on this system. See [`index()`].
-#[derive(Serialize)]
-pub struct Index(Vec<ClapPlugin>);
+/// A containing metadata for all CLAP plugins found on this system. Each plugin path in the map
+/// contains zero or more plugins. See [`index()`].
+#[derive(Debug, Serialize)]
+pub struct Index(pub HashMap<PathBuf, ClapMetadata>);
 
 /// Build an index of all CLAP plugins on this system. This finds all `.clap` files as specified in
 /// [entry.h](https://github.com/free-audio/clap/blob/main/include/clap/entry.h), and lists all
