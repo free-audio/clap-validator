@@ -23,11 +23,9 @@ impl Drop for ClapPlugin {
     fn drop(&mut self) {
         // The `ClapPlugin` only exists if `init()` returned true, so we ned to deinitialize the
         // plugin here
-        unsafe {
-            (get_clap_entry_point(&self.library)
-                .expect("A ClapPlugin was constructed for a plugin with no entry point")
-                .deinit)()
-        };
+        let entry_point = get_clap_entry_point(&self.library)
+            .expect("A ClapPlugin was constructed for a plugin with no entry point");
+        unsafe { (entry_point.deinit)() };
     }
 }
 
@@ -47,14 +45,14 @@ impl ClapPlugin {
             unsafe { libloading::Library::new(&path) }.context("Could not load the library")?;
 
         // The entry point needs to be initialized before it can be used. It will be deinitialized
-        // whe nthe `ClapPlugin` object is dropped.
+        // when the `ClapPlugin` object is dropped.
+        let entry_point = get_clap_entry_point(&library)?;
         let path_cstring = CString::new(
             path.as_os_str()
                 .to_str()
                 .context("Path contains invalid UTF-8")?,
         )
         .context("Path contains null bytes")?;
-        let entry_point = get_clap_entry_point(&library)?;
         if !unsafe { (entry_point.init)(path_cstring.as_ptr()) } {
             anyhow::bail!("clap_plugin_entry::init({path_cstring:?}) returned false");
         }
@@ -64,9 +62,13 @@ impl ClapPlugin {
 }
 
 /// Get a plugin's entry point.
-fn get_clap_entry_point(
-    library: &libloading::Library,
-) -> Result<libloading::Symbol<'_, clap_plugin_entry>> {
-    unsafe { library.get(b"clap_entry") }
-        .context("The library does not expose a 'clap_entry' symbol")
+fn get_clap_entry_point(library: &libloading::Library) -> Result<&clap_plugin_entry> {
+    let entry_point: libloading::Symbol<*const clap_plugin_entry> =
+        unsafe { library.get(b"clap_entry") }
+            .context("The library does not expose a 'clap_entry' symbol")?;
+    if entry_point.is_null() {
+        anyhow::bail!("clap_entry is a null pointer");
+    }
+
+    Ok(unsafe { &**entry_point })
 }
