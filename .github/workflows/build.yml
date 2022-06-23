@@ -76,7 +76,7 @@ jobs:
         run: |
           tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/${{ matrix.cross-target }}/release/clapval
       - uses: actions/upload-artifact@v2
-        if: '!startsWith(matrix.os, "windows")'
+        if: "!startsWith(matrix.os, 'windows')"
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.tar.gz
