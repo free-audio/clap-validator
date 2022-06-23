@@ -65,9 +65,57 @@ fn main() {
                     "{}",
                     serde_json::to_string_pretty(&plugin_index).expect("Could not format JSON")
                 );
-            }
+            } else {
+                let mut first = true;
+                for (plugin_path, metadata) in plugin_index.0 {
+                    if !first {
+                        println!();
+                    }
+                    first = false;
 
-            eprintln!("TODO: Pretty printing, use the --json option to get the output as JSON")
+                    println!(
+                        "{}: (CLAP {}.{}.{}, contains {} {})",
+                        plugin_path.display(),
+                        metadata.version.0,
+                        metadata.version.1,
+                        metadata.version.2,
+                        metadata.plugins.len(),
+                        if metadata.plugins.len() == 1 {
+                            "plugin"
+                        } else {
+                            "plugins"
+                        },
+                    );
+
+                    for plugin in metadata.plugins {
+                        println!();
+                        println!(
+                            " - {} {} ({})",
+                            plugin.name,
+                            plugin.version.as_deref().unwrap_or("(unknown version)"),
+                            plugin.id
+                        );
+
+                        // Whether it makes sense to always show optional fields or not depends on
+                        // the field
+                        if let Some(description) = plugin.description {
+                            println!("   {}", description);
+                        }
+                        println!();
+                        println!(
+                            "   vendor: {}",
+                            plugin.vendor.as_deref().unwrap_or("(unknown)"),
+                        );
+                        if let Some(manual_url) = plugin.manual_url {
+                            println!("   manual url: {}", manual_url);
+                        }
+                        if let Some(support_url) = plugin.support_url {
+                            println!("   support url: {}", support_url);
+                        }
+                        println!("   features: [{}]", plugin.features.join(", "));
+                    }
+                }
+            }
         }
     }
 }
