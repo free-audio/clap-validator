@@ -3,10 +3,11 @@
 
 use anyhow::Result;
 use clap::Args;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+mod tests;
 
 /// A test case for testing the behavior of a plugin. This `Test` object contains the result of a
 /// test, which is serialized to and from JSON so the test can be run in another process.
