@@ -15,7 +15,7 @@ const PATH_SEPARATOR: char = ':';
 #[cfg(windows)]
 const PATH_SEPARATOR: char = ';';
 
-/// A containing metadata for all CLAP plugins found on this system. Each plugin path in the map
+/// A map containing metadata for all CLAP plugins found on this system. Each plugin path in the map
 /// contains zero or more plugins. See [`index()`].
 ///
 /// Uses a `BTreeMap` purely so the order is stable.

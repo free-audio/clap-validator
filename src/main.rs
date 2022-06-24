@@ -1,10 +1,12 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use validator::ValidatorSettings;
 
 mod hosting;
 mod index;
 mod plugin;
 mod util;
+mod validator;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -19,28 +21,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Validate one or more plugins.
-    Validate {
-        /// Paths to one or more plugins that should be validated.
-        #[clap(value_parser, required(true))]
-        paths: Vec<PathBuf>,
-        /// Only validate plugins with this ID.
-        ///
-        /// If the plugin library contains multiple plugins, then you can pass a single plugin's ID
-        /// to this option to only validate that plugin. Otherwise all plugins in the library are
-        /// validated.
-        #[clap(value_parser, short = 'i', long)]
-        plugin_id: Option<String>,
-        /// Run the tests within this process.
-        ///
-        /// Tests are normally run in separate processes in case the plugin crashes. Another benefit
-        /// of the out of process validation is that the test always starts from a clean state.
-        /// Using this option will remove those protections, but in turn the tests may run faster.
-        #[clap(value_parser, short, long)]
-        in_process: bool,
-        /// Print the test output as JSON instead of human readable text.
-        #[clap(value_parser, short, long)]
-        json: bool,
-    },
+    Validate(ValidatorSettings),
     // TODO: A hidden subcommand for running a single test for a single plugin. Used by the out of
     //       process mode
     /// Lists basic information about all installed CLAP plugins.
@@ -55,9 +36,20 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Validate { .. } => {
-            todo!("Implement the validator")
-        }
+        Commands::Validate(settings) => match validator::validate(settings) {
+            Ok(result) => {
+                if settings.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&result).expect("Could not format JSON")
+                    );
+                } else {
+                    // TODO: Pretty printing
+                    dbg!(result);
+                }
+            }
+            Err(err) => eprintln!("Could not run the validator: {err:#}"),
+        },
         Commands::List { json } => {
             let plugin_index = index::index();
 
