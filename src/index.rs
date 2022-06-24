@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::plugin::{ClapPluginLibrary, ClapPluginLibraryMetadata};
+use crate::plugin::library::{ClapPluginLibrary, ClapPluginLibraryMetadata};
 
 /// The separator for path environment variables.
 #[cfg(unix)]
