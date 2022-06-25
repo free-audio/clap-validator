@@ -299,3 +299,13 @@ impl<'a> TestCase<'a> for PluginTestCase {
         }
     }
 }
+
+impl TestStatus {
+    /// Returns `true` if this status should be considered as a failure.
+    pub fn failed(&self) -> bool {
+        match self {
+            TestStatus::Success | TestStatus::Skipped { .. } => false,
+            TestStatus::Crashed { .. } | TestStatus::Failed { .. } => true,
+        }
+    }
+}

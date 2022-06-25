@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
 
 mod hosting;
@@ -37,12 +38,22 @@ enum Commands {
     },
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match &cli.command {
         Commands::Validate(settings) => match validator::validate(settings) {
             Ok(result) => {
+                // If any of the tests failed, this process should exiti with a failure code
+                let failed = result
+                    .plugin_library_tests
+                    .iter()
+                    .any(|(_, tests)| tests.iter().any(|test| test.result.failed()))
+                    || result
+                        .plugin_tests
+                        .iter()
+                        .any(|(_, tests)| tests.iter().any(|test| test.result.failed()));
+
                 if settings.json {
                     println!(
                         "{}",
@@ -51,6 +62,10 @@ fn main() {
                 } else {
                     // TODO: Pretty printing
                     dbg!(result);
+                }
+
+                if failed {
+                    return ExitCode::FAILURE;
                 }
             }
             Err(err) => eprintln!("Could not run the validator: {err:#}"),
@@ -122,4 +137,6 @@ fn main() {
             }
         }
     }
+
+    ExitCode::SUCCESS
 }
