@@ -5,6 +5,7 @@ use validator::{SingleTestSettings, ValidatorSettings};
 mod hosting;
 mod index;
 mod plugin;
+mod tests;
 mod util;
 mod validator;
 

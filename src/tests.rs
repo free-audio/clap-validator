@@ -10,20 +10,16 @@
 //! be converted to and from a string representation.
 
 use anyhow::{Context, Result};
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
-use crate::plugin::library::ClapPluginLibrary;
+mod plugin;
+mod plugin_library;
 
-/// The string representation for [`TestCase::PluginScanTime`].
-pub const TEST_PLUGIN_SCAN_TIME: &str = "plugin-scan-time";
-
-pub const PLUGIN_SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
+pub use plugin::PluginTestCase;
+pub use plugin_library::PluginLibraryTestCase;
 
 /// A test case for testing the behavior of a plugin. This `Test` object contains the result of a
 /// test, which is serialized to and from JSON so the test can be run in another process.
@@ -52,18 +48,6 @@ pub enum TestStatus {
     Failed { reason: Option<String> },
     /// Preconditions for running the test were not met, so the test has been skipped.
     Skipped { reason: Option<String> },
-}
-
-/// Tests for entire CLAP libraries. These are mostly to ensure good plugin scanning practices. See
-/// the module's heading for more information.
-pub enum PluginLibraryTestCase {
-    /// Asserts whether the plugin takes longer than `PLUGIN_SCAN_TIME_LIMIT` to scan.
-    PluginScanTime,
-}
-
-/// The tests for individual CLAP plugins. See the module's heading for more information.
-pub enum PluginTestCase {
-    // TODO: Test some things
 }
 
 /// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
@@ -165,138 +149,6 @@ pub trait TestCase<'a>: Sized + 'static {
             .context("Could not parse the child process output to JSON")?;
 
         Ok(result)
-    }
-}
-
-impl<'a> TestCase<'a> for PluginLibraryTestCase {
-    /// The path to a CLAP plugin library.
-    type TestArgs = &'a Path;
-
-    const ALL: &'static [Self] = &[PluginLibraryTestCase::PluginScanTime];
-
-    fn from_str(string: &str) -> Option<Self> {
-        match string {
-            TEST_PLUGIN_SCAN_TIME => Some(PluginLibraryTestCase::PluginScanTime),
-            _ => None,
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            PluginLibraryTestCase::PluginScanTime => TEST_PLUGIN_SCAN_TIME,
-        }
-    }
-
-    fn description(&self) -> String {
-        match self {
-            PluginLibraryTestCase::PluginScanTime => format!(
-                "Tests whether the plugin can be scanned in under {} milliseconds.",
-                PLUGIN_SCAN_TIME_LIMIT.as_millis()
-            ),
-        }
-    }
-
-    fn set_out_of_process_args(&self, command: &mut Command, library_path: Self::TestArgs) {
-        let test_name = self.as_str();
-
-        command
-            .arg(
-                super::SingleTestType::PluginLibrary
-                    .to_possible_value()
-                    .unwrap()
-                    .get_name(),
-            )
-            .arg(library_path)
-            // This is the plugin ID argument. We could make the `run-single-test` subcommand more
-            // complicated and have this conditionally be required depending on the test type, but
-            // this is simpler to reason about.
-            .arg("(none)")
-            .arg(test_name);
-    }
-
-    fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
-        let result = match &self {
-            PluginLibraryTestCase::PluginScanTime => {
-                let test_start = Instant::now();
-
-                eprintln!("TODO: Actually implement the plugin scanning time");
-
-                let test_end = Instant::now();
-                let init_duration = test_end - test_start;
-                if init_duration <= PLUGIN_SCAN_TIME_LIMIT {
-                    TestStatus::Success
-                } else {
-                    TestStatus::Failed {
-                        reason: Some(format!(
-                            "The plugin took {} milliseconds to scan",
-                            init_duration.as_millis()
-                        )),
-                    }
-                }
-            }
-        };
-
-        TestResult {
-            name: self.as_str().to_string(),
-            description: self.description(),
-            result,
-        }
-    }
-}
-
-impl<'a> TestCase<'a> for PluginTestCase {
-    /// A loaded CLAP plugin library and the ID of the plugin contained within that library that
-    /// should be tested.
-    type TestArgs = (&'a ClapPluginLibrary, &'a str);
-
-    const ALL: &'static [Self] = &[];
-
-    fn from_str(string: &str) -> Option<Self> {
-        match string {
-            _ => None,
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            // TODO: Add tests
-            _ => "This enum doesn't have any variants right now",
-        }
-    }
-
-    fn description(&self) -> String {
-        match self {
-            // TODO: Add tests
-            _ => String::from("This enum doesn't have any variants right now"),
-        }
-    }
-
-    fn set_out_of_process_args(&self, command: &mut Command, (library, plugin_id): Self::TestArgs) {
-        let test_name = self.as_str();
-
-        command
-            .arg(
-                super::SingleTestType::Plugin
-                    .to_possible_value()
-                    .unwrap()
-                    .get_name(),
-            )
-            .arg(library.library_path())
-            .arg(plugin_id)
-            .arg(test_name);
-    }
-
-    fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
-        let result = match &self {
-            // TODO: Add tests
-            _ => TestStatus::Skipped { reason: None },
-        };
-
-        TestResult {
-            name: self.as_str().to_string(),
-            description: self.description(),
-            result,
-        }
     }
 }
 

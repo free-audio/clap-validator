@@ -9,10 +9,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use self::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult};
 use crate::plugin::library::ClapPluginLibrary;
-
-mod tests;
+use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult};
 
 /// The results of running the validation test suite on one or more plugins.
 ///
