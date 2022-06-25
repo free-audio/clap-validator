@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use self::tests::{TestCase, TestResult};
+use self::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult};
 use crate::plugin::library::ClapPluginLibrary;
 
 mod tests;
@@ -122,18 +122,17 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
             }
 
             let mut test_results = Vec::new();
-            for test in TestCase::ALL {
+            for test in PluginTestCase::ALL {
                 match &settings.test_filter {
                     Some(test_filter) if !test.as_str().contains(test_filter) => continue,
                     _ => (),
                 }
 
                 test_results.push(if settings.in_process {
-                    test.run_in_process(&plugin_library, &plugin_metadata.id)
+                    test.run_in_process((&plugin_library, &plugin_metadata.id))
                 } else {
                     test.run_out_of_process(
-                        &plugin_library,
-                        &plugin_metadata.id,
+                        (&plugin_library, &plugin_metadata.id),
                         settings.hide_output,
                     )?
                 });
@@ -155,12 +154,13 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 /// Run a single test case, and write the result to specified the output file path. This is used for
 /// the out-of-process validation mode.
 pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
+    // TODO: Support plugin library test cases
     let plugin_library = ClapPluginLibrary::load(&settings.path)
         .with_context(|| format!("Could not load '{}'", settings.path.display()))?;
-    let test_case = TestCase::from_str(&settings.name)
+    let test_case = PluginTestCase::from_str(&settings.name)
         .with_context(|| format!("Unknown test name: {}", &settings.name))?;
 
-    let result = test_case.run_in_process(&plugin_library, &settings.plugin_id);
+    let result = test_case.run_in_process((&plugin_library, &settings.plugin_id));
     fs::write(
         &settings.output_file,
         serde_json::to_string(&result).context("Could not format the result as JSON")?,

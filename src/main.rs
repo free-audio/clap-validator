@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use validator::{SingleTestSettings, ValidatorSettings};
 
 mod hosting;
