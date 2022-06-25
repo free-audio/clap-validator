@@ -60,10 +60,6 @@ impl<'a> TestCase<'a> for PluginTestCase {
             _ => TestStatus::Skipped { reason: None },
         };
 
-        TestResult {
-            name: self.as_str().to_string(),
-            description: self.description(),
-            result,
-        }
+        self.create_result(result)
     }
 }

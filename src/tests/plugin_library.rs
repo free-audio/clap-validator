@@ -4,7 +4,10 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use clap::ValueEnum;
+
+use crate::plugin::library::ClapPluginLibrary;
 
 use super::{TestCase, TestResult, TestStatus};
 
@@ -71,7 +74,30 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             PluginLibraryTestCase::PluginScanTime => {
                 let test_start = Instant::now();
 
-                eprintln!("TODO: Actually implement the plugin scanning time");
+                {
+                    // The library will be unloaded when this object is dropped, so that is part of
+                    // the measurement
+                    let plugin_library = ClapPluginLibrary::load(library_path)
+                        .with_context(|| format!("Could not load '{}'", library_path.display()));
+
+                    // This goes through all plugins and builds a data structure containing
+                    // information for all of those plugins, mimicing most of a DAW's plugin
+                    // scanning process
+                    let metadata = plugin_library.and_then(|plugin_library| {
+                        plugin_library
+                            .metadata()
+                            .context("Could not query the plugin's metadata")
+                    });
+
+                    match metadata {
+                        Ok(metadata) => drop(metadata),
+                        Err(err) => {
+                            return self.create_result(TestStatus::Failed {
+                                reason: Some(format!("{err:#}")),
+                            })
+                        }
+                    }
+                }
 
                 let test_end = Instant::now();
                 let init_duration = test_end - test_start;
@@ -88,10 +114,6 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             }
         };
 
-        TestResult {
-            name: self.as_str().to_string(),
-            description: self.description(),
-            result,
-        }
+        self.create_result(result)
     }
 }
