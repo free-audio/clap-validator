@@ -10,9 +10,11 @@
 //! be converted to and from a string representation.
 
 use anyhow::{Context, Result};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -55,14 +57,13 @@ pub enum TestStatus {
 /// Tests for entire CLAP libraries. These are mostly to ensure good plugin scanning practices. See
 /// the module's heading for more information.
 pub enum PluginLibraryTestCase {
-    // TODO: Move PluginScanTime over to here
+    /// Asserts whether the plugin takes longer than `PLUGIN_SCAN_TIME_LIMIT` to scan.
+    PluginScanTime,
 }
 
 /// The tests for individual CLAP plugins. See the module's heading for more information.
 pub enum PluginTestCase {
-    // TODO: Move over to `PluginLibraryTestCase`
-    /// Asserts whether the plugin takes longer than `PLUGIN_SCAN_TIME_LIMIT` to scan.
-    PluginScanTime,
+    // TODO: Test some things
 }
 
 /// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
@@ -86,63 +87,35 @@ pub trait TestCase<'a>: Sized + 'static {
     /// but it may consist of multiple sentences.
     fn description(&self) -> String;
 
-    /// Run the test case for a plugin in another process, returning the result. If the test cuases
-    /// the plugin to segfault, then the result will have a status of `TestStatus::Crashed`. If
+    /// Set the arguments for `clapval run-single-test` to run this test with the specified
+    /// arguments. This way the [`run_out_of_process()`][Self::run_out_of_process()] method can be
+    /// defined in a way that works for all `TestCase`s.
+    fn set_out_of_process_args(&self, command: &mut Command, args: Self::TestArgs);
+
+    /// Run a test case for a specified arguments in the current, returning the result. If the test
+    /// cuases the plugin to segfault, then this will obviously not return. See
+    /// [`run_out_of_process()`][Self::run_out_of_process()] for a generic way to run test cases in
+    /// a separate process.
+    ///
+    /// In the event that this is called for a plugin ID that does not exist within the plugin
+    /// library, then the test will also be marked as failed.
+    fn run_in_process(&self, args: Self::TestArgs) -> TestResult;
+
+    /// Run a test case for a plugin in another process, returning the result. If the test cuases the
+    /// plugin to segfault, then the result will have a status of `TestStatus::Crashed`. If
     /// `hide_output` is set, then the tested plugin's output will not be printed to STDIO.
     ///
     /// In the event that this is called for a plugin ID that does not exist within the plugin
     /// library, then the test will also be marked as failed.
     ///
     /// This will only return an error if the actual `clapval` process call failed.
-    fn run_out_of_process(&self, args: Self::TestArgs, hide_output: bool) -> Result<TestResult>;
-
-    /// Run the test case for a plugin within this process, returning the result. If the test cuases
-    /// the plugin to segfault, then this will obviously not return.
-    ///
-    /// In the event that this is called for a plugin ID that does not exist within the plugin
-    /// library, then the test will also be marked as failed.
-    fn run_in_process(&self, args: Self::TestArgs) -> TestResult;
-}
-
-impl<'a> TestCase<'a> for PluginTestCase {
-    type TestArgs = (&'a ClapPluginLibrary, &'a str);
-
-    const ALL: &'static [Self] = &[PluginTestCase::PluginScanTime];
-
-    fn from_str(string: &str) -> Option<Self> {
-        match string {
-            TEST_PLUGIN_SCAN_TIME => Some(PluginTestCase::PluginScanTime),
-            _ => None,
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            PluginTestCase::PluginScanTime => TEST_PLUGIN_SCAN_TIME,
-        }
-    }
-
-    fn description(&self) -> String {
-        match self {
-            PluginTestCase::PluginScanTime => format!(
-                "Tests whether the plugin can be scanned in under {} milliseconds.",
-                PLUGIN_SCAN_TIME_LIMIT.as_millis()
-            ),
-        }
-    }
-
-    fn run_out_of_process(
-        &self,
-        (library, plugin_id): Self::TestArgs,
-        hide_output: bool,
-    ) -> Result<TestResult> {
+    fn run_out_of_process(&self, args: Self::TestArgs, hide_output: bool) -> Result<TestResult> {
         // The idea here is that we'll invoke the same clapval binary with a special hidden command
         // that runs a single test. This is the reason why test cases must be convertible to and
         // from strings. If everything goes correctly, then the child process will write the results
         // as JSON to the specified file path. This is intentionaly not done through STDIO since the
         // hosted plugin may also write things there, and doing STDIO redirection within the child
         // process is more complicated than just writing the result to a temporary file.
-        let test_name = self.as_str();
 
         // This temporary file will automatically be removed when this function exits
         let output_file_path = tempfile::Builder::new()
@@ -152,18 +125,17 @@ impl<'a> TestCase<'a> for PluginTestCase {
             .into_temp_path();
         let clapval_binary =
             std::env::current_exe().context("Could not find the path to the current executable")?;
-
         let mut command = Command::new(clapval_binary);
+
         command
             .arg("run-single-test")
-            .arg(library.library_path())
-            .arg(plugin_id)
-            .arg(test_name)
             .args([OsStr::new("--output-file"), output_file_path.as_os_str()]);
+        self.set_out_of_process_args(&mut command, args);
         if hide_output {
             command.stdout(Stdio::null());
             command.stderr(Stdio::null());
         }
+
         let exit_status = command
             .spawn()
             .context("Could not call clapval for out-of-process validation")?
@@ -190,19 +162,64 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     output_file_path.display()
                 )
             })?)
-            .context("Could not pasre the child process output to JSON")?;
+            .context("Could not parse the child process output to JSON")?;
 
         Ok(result)
     }
+}
 
-    fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
+impl<'a> TestCase<'a> for PluginLibraryTestCase {
+    /// The path to a CLAP plugin library.
+    type TestArgs = &'a Path;
+
+    const ALL: &'static [Self] = &[PluginLibraryTestCase::PluginScanTime];
+
+    fn from_str(string: &str) -> Option<Self> {
+        match string {
+            TEST_PLUGIN_SCAN_TIME => Some(PluginLibraryTestCase::PluginScanTime),
+            _ => None,
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            PluginLibraryTestCase::PluginScanTime => TEST_PLUGIN_SCAN_TIME,
+        }
+    }
+
+    fn description(&self) -> String {
+        match self {
+            PluginLibraryTestCase::PluginScanTime => format!(
+                "Tests whether the plugin can be scanned in under {} milliseconds.",
+                PLUGIN_SCAN_TIME_LIMIT.as_millis()
+            ),
+        }
+    }
+
+    fn set_out_of_process_args(&self, command: &mut Command, library_path: Self::TestArgs) {
+        let test_name = self.as_str();
+
+        command
+            .arg(
+                super::SingleTestType::PluginLibrary
+                    .to_possible_value()
+                    .unwrap()
+                    .get_name(),
+            )
+            .arg(library_path)
+            // This is the plugin ID argument. We could make the `run-single-test` subcommand more
+            // complicated and have this conditionally be required depending on the test type, but
+            // this is simpler to reason about.
+            .arg("(none)")
+            .arg(test_name);
+    }
+
+    fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
         let result = match &self {
-            // TODO: This test scans every plugin in the library, so it will be repeated
-            //       unnecessarily for multi-plugin libraries
-            PluginTestCase::PluginScanTime => {
+            PluginLibraryTestCase::PluginScanTime => {
                 let test_start = Instant::now();
 
-                // TODO: We should be loading the library here, doesn't make much sense otherwise
+                eprintln!("TODO: Actually implement the plugin scanning time");
 
                 let test_end = Instant::now();
                 let init_duration = test_end - test_start;
@@ -217,6 +234,62 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     }
                 }
             }
+        };
+
+        TestResult {
+            name: self.as_str().to_string(),
+            description: self.description(),
+            result,
+        }
+    }
+}
+
+impl<'a> TestCase<'a> for PluginTestCase {
+    /// A loaded CLAP plugin library and the ID of the plugin contained within that library that
+    /// should be tested.
+    type TestArgs = (&'a ClapPluginLibrary, &'a str);
+
+    const ALL: &'static [Self] = &[];
+
+    fn from_str(string: &str) -> Option<Self> {
+        match string {
+            _ => None,
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            // TODO: Add tests
+            _ => "This enum doesn't have any variants right now",
+        }
+    }
+
+    fn description(&self) -> String {
+        match self {
+            // TODO: Add tests
+            _ => String::from("This enum doesn't have any variants right now"),
+        }
+    }
+
+    fn set_out_of_process_args(&self, command: &mut Command, (library, plugin_id): Self::TestArgs) {
+        let test_name = self.as_str();
+
+        command
+            .arg(
+                super::SingleTestType::Plugin
+                    .to_possible_value()
+                    .unwrap()
+                    .get_name(),
+            )
+            .arg(library.library_path())
+            .arg(plugin_id)
+            .arg(test_name);
+    }
+
+    fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
+        let result = match &self {
+            // TODO: Add tests
+            _ => TestStatus::Skipped { reason: None },
         };
 
         TestResult {
