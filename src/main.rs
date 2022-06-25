@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use validator::ValidatorSettings;
+use validator::{SingleTestSettings, ValidatorSettings};
 
 mod hosting;
 mod index;
@@ -22,6 +22,12 @@ struct Cli {
 enum Commands {
     /// Validate one or more plugins.
     Validate(ValidatorSettings),
+    /// Run a single test.
+    ///
+    /// This is used for the out-of-process testing. Since it's merely an implementation detail, the
+    /// option is not shown in the CLI.
+    #[clap(hide(true))]
+    RunSingleTest(SingleTestSettings),
     // TODO: A hidden subcommand for running a single test for a single plugin. Used by the out of
     //       process mode
     /// Lists basic information about all installed CLAP plugins.
@@ -49,6 +55,12 @@ fn main() {
                 }
             }
             Err(err) => eprintln!("Could not run the validator: {err:#}"),
+        },
+        Commands::RunSingleTest(settings) => match validator::run_single_test(settings) {
+            // The result has been serialized as JSON and written to a file so the main validator
+            // process can read it
+            Ok(()) => (),
+            Err(err) => eprintln!("Could not run test the case: {err:#}"),
         },
         Commands::List { json } => {
             let plugin_index = index::index();

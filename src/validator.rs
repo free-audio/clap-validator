@@ -6,6 +6,7 @@ use clap::Args;
 use clap_sys::version::clap_version_is_compatible;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::PathBuf;
 
 use self::tests::{TestCase, TestResult};
@@ -36,7 +37,7 @@ pub struct ValidatorSettings {
     /// Print the test output as JSON instead of human readable text.
     #[clap(value_parser, short, long)]
     pub json: bool,
-    /// When running the validation out of process, hide the plugin's output.
+    /// When running the validation out-of-process, hide the plugin's output.
     ///
     /// This can be useful for validating noisy plugins.
     #[clap(value_parser, long)]
@@ -44,10 +45,30 @@ pub struct ValidatorSettings {
     /// Run the tests within this process.
     ///
     /// Tests are normally run in separate processes in case the plugin crashes. Another benefit
-    /// of the out of process validation is that the test always starts from a clean state.
+    /// of the out-of-process validation is that the test always starts from a clean state.
     /// Using this option will remove those protections, but in turn the tests may run faster.
     #[clap(value_parser, long)]
     pub in_process: bool,
+}
+
+/// Options for running a single test. This is used for the out-of-process testing method. This
+/// option is hidden from the CLI as it's merely an implementation detail.
+#[derive(Debug, Args)]
+pub struct SingleTestSettings {
+    /// The path to the plugin's library.
+    #[clap(value_parser, required(true))]
+    pub path: PathBuf,
+    /// The ID of the plugin within the library that needs to be tested.
+    #[clap(value_parser)]
+    pub plugin_id: String,
+    /// The name of the test to run. [`TestCase`]s can be converted to and from strings to
+    /// facilitate this.
+    #[clap(value_parser)]
+    pub name: String,
+    /// The name of the file to write the test's JSON result to. This is not done through STDIO
+    /// because the hosted plugin may also write things there.
+    #[clap(value_parser, long)]
+    pub output_file: PathBuf,
 }
 
 /// Run the validator using the specified settings. Returns an error if any of the plugin paths
@@ -97,13 +118,14 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 
             let mut test_results = Vec::new();
             for test in TestCase::ALL {
-                // TODO: Actually test things
-                test_results.push(TestResult {
-                    name: test.as_str().to_string(),
-                    description: test.description(),
-                    result: tests::TestStatus::Skipped {
-                        reason: Some(String::from("Not yet implemented")),
-                    },
+                test_results.push(if settings.in_process {
+                    test.run_in_process(&plugin_library, &plugin_metadata.id)
+                } else {
+                    test.run_out_of_process(
+                        &plugin_library,
+                        &plugin_metadata.id,
+                        settings.hide_output,
+                    )?
                 });
             }
 
@@ -118,4 +140,25 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     }
 
     Ok(ValidationResult(results))
+}
+
+/// Run a single test case, and write the result to specified the output file path. This is used for
+/// the out-of-process validation mode.
+pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
+    let plugin_library = ClapPluginLibrary::load(&settings.path)
+        .with_context(|| format!("Could not load '{}'", settings.path.display()))?;
+    let test_case = TestCase::from_str(&settings.name)
+        .with_context(|| format!("Unknown test name: {}", &settings.name))?;
+
+    let result = test_case.run_in_process(&plugin_library, &settings.plugin_id);
+    fs::write(
+        &settings.output_file,
+        serde_json::to_string(&result).context("Could not format the result as JSON")?,
+    )
+    .with_context(|| {
+        format!(
+            "Could not write the result to '{}'",
+            settings.output_file.display()
+        )
+    })
 }

@@ -18,6 +18,8 @@ use crate::util;
 /// all plugins exposed by the library and to initialize plugins.
 #[derive(Debug)]
 pub struct ClapPluginLibrary {
+    /// The path to this plugin library.
+    library_path: PathBuf,
     /// The plugin's library. Its entry point has already been initialized, and it will
     /// autoamtically be deinitialized when this object gets dropped.
     library: libloading::Library,
@@ -105,10 +107,15 @@ impl ClapPluginLibrary {
         }
 
         Ok(ClapPluginLibrary {
+            library_path: path,
             library,
             // All plugins created for this plugin library share the same host instance
             host: ClapHost::new(),
         })
+    }
+
+    pub fn library_path(&self) -> &Path {
+        &self.library_path
     }
 
     /// Get the metadata for all plugins stored in this plugin library. Most plugin libraries
