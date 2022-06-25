@@ -28,12 +28,14 @@ pub struct TestResult {
 /// The result of running a test. Skipped and failed test may optionally include an explanation for
 /// why this happened.
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(tag = "status")]
 pub enum TestStatus {
     /// The test passed successfully.
     Success,
     /// The plugin segfaulted, SIGABRT'd, or otherwise crashed while running the test. This is only
     /// caught for out-of-process validation, for obvious reasons.
-    Crashed { status: String },
+    Crashed { reason: String },
     /// The test failed.
     Failed { reason: Option<String> },
     /// Preconditions for running the test were not met, so the test has been skipped.
