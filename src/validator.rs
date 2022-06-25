@@ -37,6 +37,11 @@ pub struct ValidatorSettings {
     /// Print the test output as JSON instead of human readable text.
     #[clap(value_parser, short, long)]
     pub json: bool,
+    /// Only run the tests that match this string.
+    ///
+    /// This is case-sensitive, and does not match regular expressions.
+    #[clap(value_parser, short = 'f', long)]
+    pub test_filter: Option<String>,
     /// When running the validation out-of-process, hide the plugin's output.
     ///
     /// This can be useful for validating noisy plugins.
@@ -118,6 +123,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 
             let mut test_results = Vec::new();
             for test in TestCase::ALL {
+                match &settings.test_filter {
+                    Some(test_filter) if !test.as_str().contains(test_filter) => continue,
+                    _ => (),
+                }
+
                 test_results.push(if settings.in_process {
                     test.run_in_process(&plugin_library, &plugin_metadata.id)
                 } else {
