@@ -102,7 +102,12 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                 let test_end = Instant::now();
                 let init_duration = test_end - test_start;
                 if init_duration <= PLUGIN_SCAN_TIME_LIMIT {
-                    TestStatus::Success
+                    TestStatus::Success {
+                        notes: Some(format!(
+                            "The plugin can be scanned in {} milliseconds.",
+                            init_duration.as_millis()
+                        )),
+                    }
                 } else {
                     TestStatus::Failed {
                         reason: Some(format!(

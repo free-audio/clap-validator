@@ -40,7 +40,7 @@ pub struct TestResult {
 #[serde(tag = "status")]
 pub enum TestStatus {
     /// The test passed successfully.
-    Success,
+    Success { notes: Option<String> },
     /// The plugin segfaulted, SIGABRT'd, or otherwise crashed while running the test. This is only
     /// caught for out-of-process validation, for obvious reasons.
     Crashed { reason: String },
@@ -165,7 +165,7 @@ impl TestStatus {
     /// Returns `true` if this status should be considered as a failure.
     pub fn failed(&self) -> bool {
         match self {
-            TestStatus::Success | TestStatus::Skipped { .. } => false,
+            TestStatus::Success { .. } | TestStatus::Skipped { .. } => false,
             TestStatus::Crashed { .. } | TestStatus::Failed { .. } => true,
         }
     }
