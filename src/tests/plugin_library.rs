@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use clap::ValueEnum;
+use clap_sys::version::clap_version_is_compatible;
 
 use crate::plugin::library::ClapPluginLibrary;
 
@@ -90,7 +91,19 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                     });
 
                     match metadata {
-                        Ok(metadata) => drop(metadata),
+                        Ok(metadata) => {
+                            if !clap_version_is_compatible(metadata.clap_version()) {
+                                return self.create_result(TestStatus::Skipped {
+                                    reason: Some(format!(
+                                        "'{}' uses an unsupported CLAP version ({}.{}.{})",
+                                        library_path.display(),
+                                        metadata.version.0,
+                                        metadata.version.1,
+                                        metadata.version.2
+                                    )),
+                                });
+                            }
+                        }
                         Err(err) => {
                             return self.create_result(TestStatus::Failed {
                                 reason: Some(format!("{err:#}")),
