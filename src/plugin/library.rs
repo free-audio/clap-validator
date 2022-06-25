@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
+use clap_sys::version::clap_version;
 use serde::Serialize;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
@@ -204,6 +205,17 @@ impl ClapPluginLibrary {
             NonNull::new(plugin as *mut _).unwrap(),
             self,
         ))
+    }
+}
+
+impl ClapPluginLibraryMetadata {
+    /// Get the CLAP version representation for this plugin library.
+    pub fn clap_version(&self) -> clap_version {
+        clap_version {
+            major: self.version.0,
+            minor: self.version.1,
+            revision: self.version.2,
+        }
     }
 }
 

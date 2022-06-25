@@ -1,47 +1,24 @@
 //! The base of the validation framework. This contains utilities for setting up a test case in a
 //! way that somewhat mimics a real host.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Args;
-use serde::{Deserialize, Serialize};
+use clap_sys::version::clap_version_is_compatible;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use self::tests::{TestCase, TestResult};
+use crate::plugin::library::ClapPluginLibrary;
+
 mod tests;
-
-/// A test case for testing the behavior of a plugin. This `Test` object contains the result of a
-/// test, which is serialized to and from JSON so the test can be run in another process.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Test {
-    /// The name of this test.
-    name: String,
-    /// A description of what this test case has tested.
-    description: String,
-    /// The outcome of the test.
-    result: TestResult,
-}
-
-/// The result of running a test. Skipped and failed test may optionally include an explanation for
-/// why this happened.
-#[derive(Debug, Deserialize, Serialize)]
-pub enum TestResult {
-    /// The test passed successfully.
-    Success,
-    /// The plugin segfaulted, SIGABRT'd, or otherwise crashed while running the test. This is only
-    /// caught for out-of-process validation, for obvious reasons.
-    Crashed { status: String },
-    /// The test failed.
-    Failed { reason: Option<String> },
-    /// Preconditions for running the test were not met, so the test has been skipped.
-    Skipped { reason: Option<String> },
-}
 
 /// A map indexed by plugin IDs containing the results of running the validation tests on one or
 /// more plugins.
 ///
 /// Uses a `BTreeMap` purely so the order is stable.
 #[derive(Debug, Serialize)]
-pub struct ValidationResult(pub BTreeMap<PathBuf, Vec<Test>>);
+pub struct ValidationResult(pub BTreeMap<String, Vec<TestResult>>);
 
 /// Options for the validator.
 #[derive(Debug, Args)]
@@ -76,9 +53,63 @@ pub struct ValidatorSettings {
 /// Run the validator using the specified settings. Returns an error if any of the plugin paths
 /// could not loaded, or if the plugin ID filter did not match any plugins.
 pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
-    let results: BTreeMap<PathBuf, Vec<Test>> = BTreeMap::new();
+    let mut results: BTreeMap<String, Vec<TestResult>> = BTreeMap::new();
 
-    // TODO: Dew it
+    // TODO: We now gather all the results and print everything in one go at the end. This is the
+    //       only way to do JSON, but for the human readable version printing things as we go could
+    //       be nice.
+    for library_path in &settings.paths {
+        let plugin_library = ClapPluginLibrary::load(library_path)
+            .with_context(|| format!("Could not load '{}'", library_path.display()))?;
+        let metadata = plugin_library.metadata().with_context(|| {
+            format!(
+                "Could not fetch plugin metadata for '{}'",
+                library_path.display()
+            )
+        })?;
+        if !clap_version_is_compatible(metadata.clap_version()) {
+            eprintln!(
+                "'{}' uses an unsupported CLAP version ({}.{}.{}), skipping...",
+                library_path.display(),
+                metadata.version.0,
+                metadata.version.1,
+                metadata.version.2
+            );
+
+            continue;
+        }
+
+        for plugin_metadata in metadata.plugins {
+            if results.contains_key(&plugin_metadata.id) {
+                anyhow::bail!(
+                    "Duplicate plugin ID in validation results: '{}' ({}) has already been validated",
+                    plugin_metadata.id,
+                    library_path.display(),
+                );
+            }
+
+            // It's possible to filter by plugin ID in case you want to validate a single plugin
+            // from a plugin library containing multiple plugins
+            match &settings.plugin_id {
+                Some(plugin_id) if &plugin_metadata.id != plugin_id => continue,
+                _ => (),
+            }
+
+            let mut test_results = Vec::new();
+            for test in TestCase::ALL {
+                // TODO: Actually test things
+                test_results.push(TestResult {
+                    name: test.as_str().to_string(),
+                    description: test.description(),
+                    result: tests::TestStatus::Skipped {
+                        reason: Some(String::from("Not yet implemented")),
+                    },
+                });
+            }
+
+            results.insert(plugin_metadata.id, test_results);
+        }
+    }
 
     if let Some(plugin_id) = &settings.plugin_id {
         if results.is_empty() {

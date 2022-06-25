@@ -5,12 +5,40 @@
 //! To facilitate this, the test cases are all identified by variants in an enum, and that enum can
 //! be converted to and from a string representation.
 
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// The string representation for [`TestCase::PluginScanTime`].
 pub const TEST_PLUGIN_SCAN_TIME: &str = "plugin-scan-time";
 
 pub const PLUGIN_SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
+
+/// A test case for testing the behavior of a plugin. This `Test` object contains the result of a
+/// test, which is serialized to and from JSON so the test can be run in another process.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TestResult {
+    /// The name of this test.
+    pub name: String,
+    /// A description of what this test case has tested.
+    pub description: String,
+    /// The outcome of the test.
+    pub result: TestStatus,
+}
+
+/// The result of running a test. Skipped and failed test may optionally include an explanation for
+/// why this happened.
+#[derive(Debug, Deserialize, Serialize)]
+pub enum TestStatus {
+    /// The test passed successfully.
+    Success,
+    /// The plugin segfaulted, SIGABRT'd, or otherwise crashed while running the test. This is only
+    /// caught for out-of-process validation, for obvious reasons.
+    Crashed { status: String },
+    /// The test failed.
+    Failed { reason: Option<String> },
+    /// Preconditions for running the test were not met, so the test has been skipped.
+    Skipped { reason: Option<String> },
+}
 
 /// All test in the validator. See the module's heading for more information.
 pub enum TestCase {
@@ -20,7 +48,7 @@ pub enum TestCase {
 
 impl TestCase {
     /// All available test cases.
-    const ALL: [TestCase; 1] = [TestCase::PluginScanTime];
+    pub const ALL: [TestCase; 1] = [TestCase::PluginScanTime];
 
     /// Try to parse a test case's string representation as produced by
     /// [`as_str()`][Self::as_str()]. Returns `None` if the test case name was not recognized.
