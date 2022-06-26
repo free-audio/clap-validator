@@ -7,6 +7,7 @@ use clap::ValueEnum;
 
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
+use crate::plugin::ext::audio_ports::AudioPorts;
 use crate::plugin::library::PluginLibrary;
 
 /// The string representation for [`PluginTestCase::BasicAudioProcessing`].
@@ -69,6 +70,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 let plugin = library
                     .create_plugin(plugin_id, host)
                     .context("Could not create the plugin instance");
+
+                let audio_port_config = plugin.as_ref().and_then(|plugin| {
+                    let audio_ports = plugin.get_extension::<AudioPorts>();
+
+                    // TODO: Query the audio port information
+
+                    Ok(())
+                });
 
                 // TODO: Query the audio and note ports with their default configuration
                 // TODO: Spawn an audio thread

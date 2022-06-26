@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
+use super::ext::Extension;
 use super::library::PluginLibrary;
 use crate::hosting::ClapHost;
 
@@ -58,6 +59,21 @@ impl<'lib> Plugin<'lib> {
             _library: library,
             _host: host,
             _send_sync_marker: PhantomData,
+        }
+    }
+
+    /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
+    /// this extension. Returns `None` if it does not.
+    pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
+        let extension_ptr =
+            unsafe { (self.handle.as_ref().get_extension)(self.handle.as_ptr(), T::EXTENSION_ID) };
+        if extension_ptr.is_null() {
+            None
+        } else {
+            Some(T::new(
+                self,
+                NonNull::new(extension_ptr as *mut T::Struct).unwrap(),
+            ))
         }
     }
 }
