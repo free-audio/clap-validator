@@ -1,5 +1,6 @@
 //! Abstractions for single CLAP plugin instances.
 
+use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -33,7 +34,7 @@ pub struct Plugin<'lib> {
 
 impl Drop for Plugin<'_> {
     fn drop(&mut self) {
-        unsafe { (self.handle.as_ref().destroy)(self.handle.as_ptr()) };
+        unsafe { (self.handle.as_ref().destroy)(self.as_ptr()) };
     }
 }
 
@@ -62,11 +63,21 @@ impl<'lib> Plugin<'lib> {
         }
     }
 
+    /// Initialize the plugin. This needs to be called before doing anything else.
+    pub fn init(&self) -> Result<()> {
+        if unsafe { (self.handle.as_ref().init)(self.as_ptr()) } {
+            Ok(())
+        } else {
+            anyhow::bail!("'clap_plugin::init()' returned false")
+        }
+    }
+
     /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
-    /// this extension. Returns `None` if it does not.
+    /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
+    /// [`init()`][Self::init()] before this may be called.
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
         let extension_ptr =
-            unsafe { (self.handle.as_ref().get_extension)(self.handle.as_ptr(), T::EXTENSION_ID) };
+            unsafe { (self.handle.as_ref().get_extension)(self.as_ptr(), T::EXTENSION_ID) };
 
         if extension_ptr.is_null() {
             None

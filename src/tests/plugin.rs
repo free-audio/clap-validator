@@ -71,6 +71,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     .create_plugin(plugin_id, host)
                     .context("Could not create the plugin instance")
                     .and_then(|plugin| {
+                        plugin.init().context("Error during initialization")?;
+
                         // Get the plugin's audio channel layout, if it supports the audio ports
                         // extension
                         let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
