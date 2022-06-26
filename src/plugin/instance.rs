@@ -16,10 +16,10 @@ pub struct ClapPlugin<'lib> {
     /// The CLAP plugin library this plugin instance was created from. This field is not used
     /// directly, but keeping a reference to the library here prevents the plugin instance from
     /// outliving the library.
-    library: &'lib ClapPluginLibrary,
+    _library: &'lib ClapPluginLibrary,
     /// The host instance for this plugin. Depending on the test, different instances may get their
     /// own host, or they can share a single host instance.
-    host: Pin<Arc<ClapHost>>,
+    _host: Pin<Arc<ClapHost>>,
 }
 
 impl Drop for ClapPlugin<'_> {
@@ -44,8 +44,8 @@ impl<'lib> ClapPlugin<'lib> {
     ) -> Self {
         ClapPlugin {
             handle,
-            library,
-            host,
+            _library: library,
+            _host: host,
         }
     }
 }

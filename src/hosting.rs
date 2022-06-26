@@ -43,23 +43,23 @@ impl ClapHost {
     }
 
     unsafe extern "C" fn get_extension(
-        host: *const clap_host,
-        extension_id: *const c_char,
+        _host: *const clap_host,
+        _extension_id: *const c_char,
     ) -> *const c_void {
-        eprintln!("TODO: Do something with clap_host::get_extension()");
+        eprintln!("TODO: Add hooks for clap_host::get_extension()");
 
         std::ptr::null()
     }
 
-    unsafe extern "C" fn request_restart(host: *const clap_host) {
-        eprintln!("TODO: Do something with clap_host::request_restart()");
+    unsafe extern "C" fn request_restart(_host: *const clap_host) {
+        eprintln!("TODO: Add hooks for clap_host::request_restart()");
     }
 
-    unsafe extern "C" fn request_process(host: *const clap_host) {
-        eprintln!("TODO: Do something with clap_host::request_process()");
+    unsafe extern "C" fn request_process(_host: *const clap_host) {
+        eprintln!("TODO: Add hooks for clap_host::request_process()");
     }
 
-    unsafe extern "C" fn request_callback(host: *const clap_host) {
-        eprintln!("TODO: Do something with clap_host::request_callback()");
+    unsafe extern "C" fn request_callback(_host: *const clap_host) {
+        eprintln!("TODO: Add hooks for clap_host::request_callback()");
     }
 }
