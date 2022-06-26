@@ -36,6 +36,9 @@ impl Drop for ClapPlugin<'_> {
     }
 }
 
+/// This allows methods from the CLAP plugin to be called directly independently of any
+/// abstractions. All of the thread guarentees are lost when interacting with the plugin this way,
+/// but that is not a problem as the function pointers are marked unsafe anyways.
 impl Deref for ClapPlugin<'_> {
     type Target = clap_plugin;
 
