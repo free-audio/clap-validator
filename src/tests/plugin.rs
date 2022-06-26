@@ -8,6 +8,7 @@ use clap::ValueEnum;
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
+use crate::plugin::ext::note_ports::{NotePort, NotePortConfig, NotePorts};
 use crate::plugin::library::PluginLibrary;
 
 /// The string representation for [`PluginTestCase::BasicAudioProcessing`].
@@ -82,9 +83,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             None => AudioPortConfig::default(),
                         };
 
-                        // TODO: Similarly query the note ports
+                        let note_port_config = match plugin.get_extension::<NotePorts>() {
+                            Some(note_ports) => note_ports
+                                .config()
+                                .context("Error while querying 'note_ports' IO configuration")?,
+                            None => NotePortConfig::default(),
+                        };
 
-                        Ok((plugin, audio_ports_config))
+                        Ok((plugin, audio_ports_config, note_port_config))
                     });
 
                 // TODO: Spawn an audio thread
