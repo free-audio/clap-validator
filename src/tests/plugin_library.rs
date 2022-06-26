@@ -12,42 +12,42 @@ use crate::plugin::library::ClapPluginLibrary;
 
 use super::{TestCase, TestResult, TestStatus};
 
-/// The string representation for [`PluginLibraryTestCase::PluginScanTime`].
-const TEST_PLUGIN_SCAN_TIME: &str = "plugin-scan-time";
+/// The string representation for [`PluginLibraryTestCase::ScanTime`].
+const TEST_SCAN_TIME: &str = "scan-time";
 
-const PLUGIN_SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
+const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 
 /// Tests for entire CLAP libraries. These are mostly to ensure good plugin scanning practices. See
 /// the module's heading for more information.
 pub enum PluginLibraryTestCase {
     /// Asserts whether the plugin takes longer than `PLUGIN_SCAN_TIME_LIMIT` to scan.
-    PluginScanTime,
+    ScanTime,
 }
 
 impl<'a> TestCase<'a> for PluginLibraryTestCase {
     /// The path to a CLAP plugin library.
     type TestArgs = &'a Path;
 
-    const ALL: &'static [Self] = &[PluginLibraryTestCase::PluginScanTime];
+    const ALL: &'static [Self] = &[PluginLibraryTestCase::ScanTime];
 
     fn from_str(string: &str) -> Option<Self> {
         match string {
-            TEST_PLUGIN_SCAN_TIME => Some(PluginLibraryTestCase::PluginScanTime),
+            TEST_SCAN_TIME => Some(PluginLibraryTestCase::ScanTime),
             _ => None,
         }
     }
 
     fn as_str(&self) -> &'static str {
         match self {
-            PluginLibraryTestCase::PluginScanTime => TEST_PLUGIN_SCAN_TIME,
+            PluginLibraryTestCase::ScanTime => TEST_SCAN_TIME,
         }
     }
 
     fn description(&self) -> String {
         match self {
-            PluginLibraryTestCase::PluginScanTime => format!(
+            PluginLibraryTestCase::ScanTime => format!(
                 "Tests whether the plugin can be scanned in under {} milliseconds.",
-                PLUGIN_SCAN_TIME_LIMIT.as_millis()
+                SCAN_TIME_LIMIT.as_millis()
             ),
         }
     }
@@ -72,7 +72,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
         let result = match &self {
-            PluginLibraryTestCase::PluginScanTime => {
+            PluginLibraryTestCase::ScanTime => {
                 let test_start = Instant::now();
 
                 {
@@ -114,7 +114,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
                 let test_end = Instant::now();
                 let init_duration = test_end - test_start;
-                if init_duration <= PLUGIN_SCAN_TIME_LIMIT {
+                if init_duration <= SCAN_TIME_LIMIT {
                     let millis = init_duration.as_millis();
                     TestStatus::Success {
                         notes: Some(format!(
