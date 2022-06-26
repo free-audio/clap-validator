@@ -54,12 +54,12 @@ impl AudioPorts<'_> {
         let mut config = AudioPortConfig::default();
 
         let audio_ports = unsafe { self.audio_ports.as_ref() };
-        let num_inputs = unsafe { (audio_ports.count)(&**self.plugin, true) };
-        let num_outputs = unsafe { (audio_ports.count)(&**self.plugin, false) };
+        let num_inputs = unsafe { (audio_ports.count)(self.plugin.as_ptr(), true) };
+        let num_outputs = unsafe { (audio_ports.count)(self.plugin.as_ptr(), false) };
 
         for i in 0..num_inputs {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (audio_ports.get)(&**self.plugin, 0, true, &mut info) };
+            let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), 0, true, &mut info) };
             if !success {
                 anyhow::bail!("Plugin returned an error when querying input port {i} ({num_inputs} total input ports)");
             }
@@ -72,7 +72,7 @@ impl AudioPorts<'_> {
 
         for i in 0..num_outputs {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (audio_ports.get)(&**self.plugin, 0, false, &mut info) };
+            let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), 0, false, &mut info) };
             if !success {
                 anyhow::bail!("Plugin returned an error when querying output port {i} ({num_outputs} total output ports)");
             }

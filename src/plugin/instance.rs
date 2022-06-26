@@ -77,4 +77,9 @@ impl<'lib> Plugin<'lib> {
             ))
         }
     }
+
+    /// Get the raw pointer to the `clap_plugin` instance.
+    pub fn as_ptr(&self) -> *const clap_plugin {
+        self.handle.as_ptr()
+    }
 }
