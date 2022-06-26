@@ -74,14 +74,17 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         // Get the plugin's audio channel layout, if it supports the audio ports
                         // extension
                         let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                            Some(audio_ports) => audio_ports.config()?,
+                            Some(audio_ports) => audio_ports
+                                .config()
+                                .context("Error while querying 'audio_ports' extension")?,
                             None => AudioPortConfig::default(),
                         };
+
+                        // TODO: Similarly query the note ports
 
                         Ok((plugin, audio_ports_config))
                     });
 
-                // TODO: Query the note ports just like we query the audio ports
                 // TODO: Spawn an audio thread
                 // TODO: Process audio in the audio thread and check the output
 
