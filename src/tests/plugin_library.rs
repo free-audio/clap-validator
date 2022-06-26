@@ -38,13 +38,13 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     }
 
     fn as_str(&self) -> &'static str {
-        match self {
+        match &self {
             PluginLibraryTestCase::ScanTime => TEST_SCAN_TIME,
         }
     }
 
     fn description(&self) -> String {
-        match self {
+        match &self {
             PluginLibraryTestCase::ScanTime => format!(
                 "Tests whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
