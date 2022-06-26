@@ -7,7 +7,7 @@ use clap::ValueEnum;
 
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
-use crate::plugin::ext::audio_ports::AudioPorts;
+use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::library::PluginLibrary;
 
 /// The string representation for [`PluginTestCase::BasicAudioProcessing`].
@@ -67,23 +67,25 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::BasicAudioProcessing => {
                 // The host doesn't need to do anything special for this test
                 let host = ClapHost::new();
-                let plugin = library
+                let process_result = library
                     .create_plugin(plugin_id, host)
-                    .context("Could not create the plugin instance");
+                    .context("Could not create the plugin instance")
+                    .and_then(|plugin| {
+                        // Get the plugin's audio channel layout, if it supports the audio ports
+                        // extension
+                        let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                            Some(audio_ports) => audio_ports.config()?,
+                            None => AudioPortConfig::default(),
+                        };
 
-                let audio_port_config = plugin.as_ref().and_then(|plugin| {
-                    let audio_ports = plugin.get_extension::<AudioPorts>();
+                        Ok((plugin, audio_ports_config))
+                    });
 
-                    // TODO: Query the audio port information
-
-                    Ok(())
-                });
-
-                // TODO: Query the audio and note ports with their default configuration
+                // TODO: Query the note ports just like we query the audio ports
                 // TODO: Spawn an audio thread
                 // TODO: Process audio in the audio thread and check the output
 
-                match plugin {
+                match process_result {
                     // Ok(_) => TestStatus::Success { notes: None },
                     Ok(_) => TestStatus::Skipped {
                         reason: Some(String::from("Not yet implemented")),

@@ -67,6 +67,7 @@ impl<'lib> Plugin<'lib> {
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
         let extension_ptr =
             unsafe { (self.handle.as_ref().get_extension)(self.handle.as_ptr(), T::EXTENSION_ID) };
+
         if extension_ptr.is_null() {
             None
         } else {
