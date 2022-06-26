@@ -1,12 +1,11 @@
 //! Abstractions for interacting with the `audio-ports` extension.
 
 use anyhow::Result;
-use std::os::raw::c_char;
-use std::ptr::NonNull;
-
 use clap_sys::ext::audio_ports::{
     clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS,
 };
+use std::os::raw::c_char;
+use std::ptr::NonNull;
 
 use crate::plugin::instance::Plugin;
 
@@ -61,7 +60,7 @@ impl AudioPorts<'_> {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), 0, true, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying input port {i} ({num_inputs} total input ports)");
+                anyhow::bail!("Plugin returned an error when querying input audio port {i} ({num_inputs} total input ports)");
             }
 
             // TODO: Test whether the channel count matches the port type
@@ -74,7 +73,7 @@ impl AudioPorts<'_> {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), 0, false, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying output port {i} ({num_outputs} total output ports)");
+                anyhow::bail!("Plugin returned an error when querying output audio port {i} ({num_outputs} total output ports)");
             }
 
             // TODO: Test whether the channel count matches the port type

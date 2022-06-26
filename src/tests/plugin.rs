@@ -78,7 +78,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
                             Some(audio_ports) => audio_ports
                                 .config()
-                                .context("Error while querying 'audio_ports' extension")?,
+                                .context("Error while querying 'audio_ports' IO configuration")?,
                             None => AudioPortConfig::default(),
                         };
 
