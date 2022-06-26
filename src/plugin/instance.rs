@@ -1,6 +1,7 @@
 //! Abstractions for single CLAP plugin instances.
 
 use clap_sys::plugin::clap_plugin;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::ptr::NonNull;
@@ -9,7 +10,9 @@ use std::sync::Arc;
 use super::library::ClapPluginLibrary;
 use crate::hosting::ClapHost;
 
-/// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped.
+/// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All
+/// functions here are callable only from the main thread. Use the
+/// [`audio_thread()`][Self::audio_thread()] method to spawn an audio thread.
 #[derive(Debug)]
 pub struct ClapPlugin<'lib> {
     handle: NonNull<clap_plugin>,
@@ -20,6 +23,11 @@ pub struct ClapPlugin<'lib> {
     /// The host instance for this plugin. Depending on the test, different instances may get their
     /// own host, or they can share a single host instance.
     _host: Pin<Arc<ClapHost>>,
+    /// To honor CLAP's thread safety guidelines, the thread this object was created from is
+    /// designated the 'main thread', and this object cannot be shared with other threads. The
+    /// [`audio_thread()`][Self::audio_thread()] method spawns an audio thread that is able to call
+    /// the plugin's audio thread functions.
+    _send_sync_marker: PhantomData<*const ()>,
 }
 
 impl Drop for ClapPlugin<'_> {
@@ -46,6 +54,7 @@ impl<'lib> ClapPlugin<'lib> {
             handle,
             _library: library,
             _host: host,
+            _send_sync_marker: PhantomData,
         }
     }
 }
