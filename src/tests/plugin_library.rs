@@ -8,7 +8,7 @@ use anyhow::Context;
 use clap::ValueEnum;
 use clap_sys::version::clap_version_is_compatible;
 
-use crate::plugin::library::ClapPluginLibrary;
+use crate::plugin::library::PluginLibrary;
 
 use super::{TestCase, TestResult, TestStatus};
 
@@ -78,7 +78,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                 {
                     // The library will be unloaded when this object is dropped, so that is part of
                     // the measurement
-                    let plugin_library = ClapPluginLibrary::load(library_path)
+                    let plugin_library = PluginLibrary::load(library_path)
                         .with_context(|| format!("Could not load '{}'", library_path.display()));
 
                     // This goes through all plugins and builds a data structure containing

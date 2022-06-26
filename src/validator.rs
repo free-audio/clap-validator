@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::plugin::library::ClapPluginLibrary;
+use crate::plugin::library::PluginLibrary;
 use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult};
 
 /// The results of running the validation test suite on one or more plugins.
@@ -134,7 +134,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
             .insert(PathBuf::from(&library_path), plugin_library_results);
 
         // And these are the per-plugin instance tests
-        let plugin_library = ClapPluginLibrary::load(library_path)
+        let plugin_library = PluginLibrary::load(library_path)
             .with_context(|| format!("Could not load '{}'", library_path.display()))?;
         let metadata = plugin_library.metadata().with_context(|| {
             format!(
@@ -213,7 +213,7 @@ pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
             test_case.run_in_process(&settings.path)
         }
         SingleTestType::Plugin => {
-            let plugin_library = ClapPluginLibrary::load(&settings.path)
+            let plugin_library = PluginLibrary::load(&settings.path)
                 .with_context(|| format!("Could not load '{}'", settings.path.display()))?;
             let test_case = PluginTestCase::from_str(&settings.name)
                 .with_context(|| format!("Unknown test name: {}", &settings.name))?;

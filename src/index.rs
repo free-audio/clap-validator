@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::plugin::library::{ClapPluginLibrary, ClapPluginLibraryMetadata};
+use crate::plugin::library::{PluginLibrary, PluginLibraryMetadata};
 
 /// The separator for path environment variables.
 #[cfg(unix)]
@@ -20,7 +20,7 @@ const PATH_SEPARATOR: char = ';';
 ///
 /// Uses a `BTreeMap` purely so the order is stable.
 #[derive(Debug, Serialize)]
-pub struct Index(pub BTreeMap<PathBuf, ClapPluginLibraryMetadata>);
+pub struct Index(pub BTreeMap<PathBuf, PluginLibraryMetadata>);
 
 /// Build an index of all CLAP plugins on this system. This finds all `.clap` files as specified in
 /// [entry.h](https://github.com/free-audio/clap/blob/main/include/clap/entry.h), and lists all
@@ -38,7 +38,7 @@ pub fn index() -> Index {
 
     for directory in directories {
         for clap_plugin_path in walk_clap_plugins(&directory) {
-            let metadata = ClapPluginLibrary::load(clap_plugin_path.path())
+            let metadata = PluginLibrary::load(clap_plugin_path.path())
                 .with_context(|| format!("Could not load '{}'", clap_plugin_path.path().display()))
                 .and_then(|plugin| {
                     plugin.metadata().with_context(|| {

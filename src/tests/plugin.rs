@@ -7,7 +7,7 @@ use clap::ValueEnum;
 
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
-use crate::plugin::library::ClapPluginLibrary;
+use crate::plugin::library::PluginLibrary;
 
 /// The string representation for [`PluginTestCase::BasicAudioProcessing`].
 const BASIC_AUDIO_PROCESSING: &str = "process-basic";
@@ -23,7 +23,7 @@ pub enum PluginTestCase {
 impl<'a> TestCase<'a> for PluginTestCase {
     /// A loaded CLAP plugin library and the ID of the plugin contained within that library that
     /// should be tested.
-    type TestArgs = (&'a ClapPluginLibrary, &'a str);
+    type TestArgs = (&'a PluginLibrary, &'a str);
 
     const ALL: &'static [Self] = &[PluginTestCase::BasicAudioProcessing];
 

@@ -11,14 +11,14 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use super::instance::ClapPlugin;
+use super::instance::Plugin;
 use crate::hosting::ClapHost;
 use crate::util;
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over
 /// all plugins exposed by the library and to initialize plugins.
 #[derive(Debug)]
-pub struct ClapPluginLibrary {
+pub struct PluginLibrary {
     /// The path to this plugin library.
     library_path: PathBuf,
     /// The plugin's library. Its entry point has already been initialized, and it will
@@ -28,16 +28,16 @@ pub struct ClapPluginLibrary {
 
 /// Metadata for a CLAP plugin library, which may contain multiple plugins.
 #[derive(Debug, Serialize)]
-pub struct ClapPluginLibraryMetadata {
+pub struct PluginLibraryMetadata {
     pub version: (u32, u32, u32),
-    pub plugins: Vec<ClapPluginMetadata>,
+    pub plugins: Vec<PluginMetadata>,
 }
 
 /// Metadata for a single plugin within a CLAP plugin library. See
 /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for a description
 /// of the fields.
 #[derive(Debug, Serialize)]
-pub struct ClapPluginMetadata {
+pub struct PluginMetadata {
     pub id: String,
     pub name: String,
     pub version: Option<String>,
@@ -48,20 +48,20 @@ pub struct ClapPluginMetadata {
     pub features: Vec<String>,
 }
 
-impl Drop for ClapPluginLibrary {
+impl Drop for PluginLibrary {
     fn drop(&mut self) {
-        // The `ClapPlugin` only exists if `init()` returned true, so we ned to deinitialize the
+        // The `Plugin` only exists if `init()` returned true, so we ned to deinitialize the
         // plugin here
         let entry_point = get_clap_entry_point(&self.library)
-            .expect("A ClapPlugin was constructed for a plugin with no entry point");
+            .expect("A Plugin was constructed for a plugin with no entry point");
         unsafe { (entry_point.deinit)() };
     }
 }
 
-impl ClapPluginLibrary {
+impl PluginLibrary {
     /// Load a CLAP plugin from a path to a `.clap` file or bundle. This will return an error if the
     /// plugin could not be loaded.
-    pub fn load(path: impl AsRef<Path>) -> Result<ClapPluginLibrary> {
+    pub fn load(path: impl AsRef<Path>) -> Result<PluginLibrary> {
         // NOTE: We'll always make sure `path` is either relative to the current directory or
         //       absolute. Otherwise the system libraries may be searched instead which would lead
         //       to unexpected behavior. Joining an absolute path to a relative directory gets you
@@ -92,7 +92,7 @@ impl ClapPluginLibrary {
             unsafe { libloading::Library::new(&path) }.context("Could not load the library")?;
 
         // The entry point needs to be initialized before it can be used. It will be deinitialized
-        // when the `ClapPlugin` object is dropped.
+        // when the `Plugin` object is dropped.
         let entry_point = get_clap_entry_point(&library)?;
         let path_cstring = CString::new(
             path.as_os_str()
@@ -104,7 +104,7 @@ impl ClapPluginLibrary {
             anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false");
         }
 
-        Ok(ClapPluginLibrary {
+        Ok(PluginLibrary {
             library_path: path,
             library,
         })
@@ -116,9 +116,9 @@ impl ClapPluginLibrary {
 
     /// Get the metadata for all plugins stored in this plugin library. Most plugin libraries
     /// contain a single plugin, but this may return metadata for zero or more plugins.
-    pub fn metadata(&self) -> Result<ClapPluginLibraryMetadata> {
+    pub fn metadata(&self) -> Result<PluginLibraryMetadata> {
         let entry_point = get_clap_entry_point(&self.library)
-            .expect("A ClapPlugin was constructed for a plugin with no entry point");
+            .expect("A Plugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID) }
             as *const clap_plugin_factory;
         // TODO: Should we log anything here? In theory not supporting the plugin factory is
@@ -127,7 +127,7 @@ impl ClapPluginLibrary {
             anyhow::bail!("The plugin does not support the 'clap_plugin_factory'");
         }
 
-        let mut metadata = ClapPluginLibraryMetadata {
+        let mut metadata = PluginLibraryMetadata {
             version: (
                 entry_point.clap_version.major,
                 entry_point.clap_version.minor,
@@ -149,7 +149,7 @@ impl ClapPluginLibrary {
                 option => option,
             };
 
-            metadata.plugins.push(ClapPluginMetadata {
+            metadata.plugins.push(PluginMetadata {
                 id: unsafe { util::cstr_ptr_to_string((*descriptor).id) }
                     .context("The plugin's 'id' pointer was null")?,
                 name: unsafe { util::cstr_ptr_to_string((*descriptor).name) }
@@ -181,9 +181,9 @@ impl ClapPluginLibrary {
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
     /// `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str, host: Pin<Arc<ClapHost>>) -> Result<ClapPlugin> {
+    pub fn create_plugin(&self, id: &str, host: Pin<Arc<ClapHost>>) -> Result<Plugin> {
         let entry_point = get_clap_entry_point(&self.library)
-            .expect("A ClapPlugin was constructed for a plugin with no entry point");
+            .expect("A Plugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID) }
             as *const clap_plugin_factory;
         if plugin_factory.is_null() {
@@ -201,7 +201,7 @@ impl ClapPluginLibrary {
         }
 
         // TODO: There's no *const NonNull equivalent, right?
-        Ok(ClapPlugin::new(
+        Ok(Plugin::new(
             NonNull::new(plugin as *mut _).unwrap(),
             self,
             host,
@@ -209,7 +209,7 @@ impl ClapPluginLibrary {
     }
 }
 
-impl ClapPluginLibraryMetadata {
+impl PluginLibraryMetadata {
     /// Get the CLAP version representation for this plugin library.
     pub fn clap_version(&self) -> clap_version {
         clap_version {
