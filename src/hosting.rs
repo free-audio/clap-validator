@@ -5,6 +5,7 @@ use clap_sys::version::CLAP_VERSION;
 use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::pin::Pin;
+use std::sync::Arc;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -17,8 +18,8 @@ pub struct ClapHost {
 impl ClapHost {
     /// Initialize a CLAP host. The `Pin` is necessary to prevent moving the object out of the
     /// `Box`, since that would break pointers to  the `ClapHost`.
-    pub fn new() -> Pin<Box<ClapHost>> {
-        Pin::new(Box::new(ClapHost {
+    pub fn new() -> Pin<Arc<ClapHost>> {
+        Pin::new(Arc::new(ClapHost {
             clap_host: clap_host {
                 clap_version: CLAP_VERSION,
                 host_data: std::ptr::null_mut(),
@@ -35,9 +36,9 @@ impl ClapHost {
     }
 
     /// Get the pointer to this host's vtable.
-    pub fn as_ptr(&self) -> *const clap_host {
+    pub fn as_ptr(self: &Pin<Arc<ClapHost>>) -> *const clap_host {
         // The value will not move, since this `ClapHost` can only be constructed as a
-        // `Pin<Box<ClapHost>>`
+        // `Pin<Arc<ClapHost>>`
         &self.clap_host
     }
 

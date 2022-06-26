@@ -9,6 +9,7 @@ use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::ptr::NonNull;
+use std::sync::Arc;
 
 use super::instance::ClapPlugin;
 use crate::hosting::ClapHost;
@@ -23,9 +24,6 @@ pub struct ClapPluginLibrary {
     /// The plugin's library. Its entry point has already been initialized, and it will
     /// autoamtically be deinitialized when this object gets dropped.
     library: libloading::Library,
-    /// The hosting side for this library. This can be used to see how the plugin interacts w ith
-    /// the host.
-    pub host: Pin<Box<ClapHost>>,
 }
 
 /// Metadata for a CLAP plugin library, which may contain multiple plugins.
@@ -109,8 +107,6 @@ impl ClapPluginLibrary {
         Ok(ClapPluginLibrary {
             library_path: path,
             library,
-            // All plugins created for this plugin library share the same host instance
-            host: ClapHost::new(),
         })
     }
 
@@ -181,10 +177,11 @@ impl ClapPluginLibrary {
         Ok(metadata)
     }
 
-    /// Try to create the plugin with the given ID. The plugin IDs supported by this plugin library
-    /// can be found by calling [`metadata()`][Self::metadata()]. The return plugin has not yet been
-    /// initialized, and `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str) -> Result<ClapPlugin> {
+    /// Try to create the plugin with the given ID, and using the provided host instance. The plugin
+    /// IDs supported by this plugin library can be found by calling
+    /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
+    /// `destroy()` will be called automatically when the object is dropped.
+    pub fn create_plugin(&self, id: &str, host: Pin<Arc<ClapHost>>) -> Result<ClapPlugin> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A ClapPlugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID) }
@@ -195,11 +192,7 @@ impl ClapPluginLibrary {
 
         let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
         let plugin = unsafe {
-            ((*plugin_factory).create_plugin)(
-                plugin_factory,
-                self.host.as_ptr(),
-                id_cstring.as_ptr(),
-            )
+            ((*plugin_factory).create_plugin)(plugin_factory, host.as_ptr(), id_cstring.as_ptr())
         };
         if plugin.is_null() {
             anyhow::bail!(
@@ -211,6 +204,7 @@ impl ClapPluginLibrary {
         Ok(ClapPlugin::new(
             NonNull::new(plugin as *mut _).unwrap(),
             self,
+            host,
         ))
     }
 }
