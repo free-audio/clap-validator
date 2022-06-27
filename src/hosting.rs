@@ -52,6 +52,10 @@ impl ClapHost {
     }
 
     unsafe extern "C" fn request_restart(_host: *const clap_host) {
+        // TODO: These functions should do thread checks. If any of these functions are called from
+        //       an incorrect thread, then there should be some way to retrieve a `Result<()>`
+        //       containing an `Err` with an explanation of what went wrong.
+
         eprintln!("TODO: Add hooks for clap_host::request_restart()");
     }
 
