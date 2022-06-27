@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap_sys::ext::audio_ports::{
     clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS,
 };
+use clap_sys::id::CLAP_INVALID_ID;
 use std::os::raw::c_char;
 use std::ptr::NonNull;
 
@@ -32,6 +33,8 @@ pub struct AudioPortConfig {
 pub struct AudioPort {
     /// The number of channels for an audio port.
     pub num_channels: u32,
+    /// The index if the output/input port this input/output port should be connected to.
+    pub in_place_pair_idx: Option<usize>,
 }
 
 impl<'a> Extension<&'a Plugin<'a>> for AudioPorts<'a> {
@@ -63,9 +66,21 @@ impl AudioPorts<'_> {
                 anyhow::bail!("Plugin returned an error when querying input audio port {i} ({num_inputs} total input ports)");
             }
 
+            let in_place_pair_idx = if info.in_place_pair == CLAP_INVALID_ID {
+                None
+            } else {
+                Some(info.in_place_pair as usize)
+            };
+            if let Some(in_place_pair_idx) = in_place_pair_idx {
+                if in_place_pair_idx >= num_outputs as usize {
+                    anyhow::bail!("Input port {i} has an in-place pair index for output port {in_place_pair_idx}, but there are only {num_outputs} output ports");
+                }
+            }
+
             // TODO: Test whether the channel count matches the port type
             config.inputs.push(AudioPort {
                 num_channels: info.channel_count,
+                in_place_pair_idx,
             });
         }
 
@@ -76,9 +91,21 @@ impl AudioPorts<'_> {
                 anyhow::bail!("Plugin returned an error when querying output audio port {i} ({num_outputs} total output ports)");
             }
 
+            let in_place_pair_idx = if info.in_place_pair == CLAP_INVALID_ID {
+                None
+            } else {
+                Some(info.in_place_pair as usize)
+            };
+            if let Some(in_place_pair_idx) = in_place_pair_idx {
+                if in_place_pair_idx >= num_outputs as usize {
+                    anyhow::bail!("Input port {i} has an in-place pair index for output port {in_place_pair_idx}, but there are only {num_outputs} output ports");
+                }
+            }
+
             // TODO: Test whether the channel count matches the port type
             config.inputs.push(AudioPort {
                 num_channels: info.channel_count,
+                in_place_pair_idx,
             });
         }
 
