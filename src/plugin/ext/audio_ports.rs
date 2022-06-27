@@ -1,10 +1,15 @@
 //! Abstractions for interacting with the `audio-ports` extension.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap_sys::ext::audio_ports::{
-    clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS,
+    clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS, CLAP_PORT_MONO,
+    CLAP_PORT_STEREO,
 };
+use clap_sys::ext::draft::ambisonic::CLAP_PORT_AMBISONIC;
+use clap_sys::ext::draft::cv::CLAP_PORT_CV;
+use clap_sys::ext::draft::surround::CLAP_PORT_SURROUND;
 use clap_sys::id::CLAP_INVALID_ID;
+use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr::NonNull;
 
@@ -51,7 +56,8 @@ impl<'a> Extension<&'a Plugin<'a>> for AudioPorts<'a> {
 }
 
 impl AudioPorts<'_> {
-    /// Get the audio port configuration for this plugin.
+    /// Get the audio port configuration for this plugin. This automatically performs a number of
+    /// consistency checks on the plugin's audio port configuration.
     pub fn config(&self) -> Result<AudioPortConfig> {
         let mut config = AudioPortConfig::default();
 
@@ -77,7 +83,8 @@ impl AudioPorts<'_> {
                 }
             }
 
-            // TODO: Test whether the channel count matches the port type
+            is_audio_port_type_consistent(&info).with_context(|| format!("Inconsistent channel count for output port {i} ({num_outputs} total output ports)"))?;
+
             config.inputs.push(AudioPort {
                 num_channels: info.channel_count,
                 in_place_pair_idx,
@@ -98,11 +105,12 @@ impl AudioPorts<'_> {
             };
             if let Some(in_place_pair_idx) = in_place_pair_idx {
                 if in_place_pair_idx >= num_outputs as usize {
-                    anyhow::bail!("Input port {i} has an in-place pair index for input port {in_place_pair_idx}, but there are only {num_inputs} input ports");
+                    anyhow::bail!("Output port {i} has an in-place pair index for input port {in_place_pair_idx}, but there are only {num_inputs} input ports");
                 }
             }
 
-            // TODO: Test whether the channel count matches the port type
+            is_audio_port_type_consistent(&info).with_context(|| format!("Inconsistent channel count for output port {i} ({num_outputs} total output ports)"))?;
+
             config.outputs.push(AudioPort {
                 num_channels: info.channel_count,
                 in_place_pair_idx,
@@ -110,5 +118,43 @@ impl AudioPorts<'_> {
         }
 
         Ok(config)
+    }
+}
+
+/// Check whether the number of channels matches an audio port's type string, if that is set.
+/// Returns an error if the port type is not consistent
+fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
+    if info.port_type.is_null() {
+        return Ok(());
+    }
+
+    let port_type = unsafe { CStr::from_ptr(info.port_type) };
+    if port_type == unsafe { CStr::from_ptr(CLAP_PORT_MONO) } {
+        if info.channel_count == 1 {
+            Ok(())
+        } else {
+            anyhow::bail!(
+                "Expected 1 channel, but the audio port has {} channels",
+                info.channel_count
+            );
+        }
+    } else if port_type == unsafe { CStr::from_ptr(CLAP_PORT_STEREO) } {
+        if info.channel_count == 2 {
+            Ok(())
+        } else {
+            anyhow::bail!(
+                "Expected 2 channels, but the audio port has {} channel(s)",
+                info.channel_count
+            );
+        }
+    } else if port_type == unsafe { CStr::from_ptr(CLAP_PORT_SURROUND) }
+        || port_type == unsafe { CStr::from_ptr(CLAP_PORT_CV) }
+        || port_type == unsafe { CStr::from_ptr(CLAP_PORT_AMBISONIC) }
+    {
+        // TODO: Test the channel counts by querying those extensions
+        Ok(())
+    } else {
+        eprintln!("TODO: Unknown audio port type '{port_type:?}'");
+        Ok(())
     }
 }
