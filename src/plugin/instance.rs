@@ -142,9 +142,9 @@ impl<'lib> Plugin<'lib> {
                     f(PluginAudioThread::new(this))
                 })
                 .join()
-                .expect("Audio thread paniced")
+                .expect("Audio thread panicked")
             })
-            .expect("Audio thread paniced")
+            .expect("Audio thread panicked")
         } else {
             f(PluginAudioThread::new(self))
         }
