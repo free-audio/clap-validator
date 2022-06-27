@@ -62,7 +62,7 @@ impl NotePorts<'_> {
 
         for i in 0..num_inputs {
             let mut info: clap_note_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), 0, true, &mut info) };
+            let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
             if !success {
                 anyhow::bail!("Plugin returned an error when querying input note port {i} ({num_inputs} total input ports)");
             }
@@ -89,7 +89,7 @@ impl NotePorts<'_> {
 
         for i in 0..num_outputs {
             let mut info: clap_note_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), 0, true, &mut info) };
+            let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
             if !success {
                 anyhow::bail!("Plugin returned an error when querying output note port {i} ({num_outputs} total output ports)");
             }
