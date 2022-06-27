@@ -9,8 +9,8 @@ pub mod audio_ports;
 pub mod note_ports;
 
 /// An abstraction for a CLAP plugin extension. `P` here is the plugin type. In practice, this is
-/// either `Plugin` or `PluginAudioThread`. Abstractions for main-thread functions will implement
-/// this trait for `Plugin`, and abstractions for audio-thread functions will implement this trait
+/// either `Plugin` or `PluginAudioThread`. Abstractions for main thread functions will implement
+/// this trait for `Plugin`, and abstractions for audio thread functions will implement this trait
 /// for `PluginAudioThread`.
 pub trait Extension<P> {
     /// The C-string ID for the extension.
@@ -20,6 +20,6 @@ pub trait Extension<P> {
     type Struct;
 
     /// Construct the extension for the plugin type `P`. This allows the abstraction to be limited
-    /// to only work with the main-thread `&Plugin` or the audio-thread `&PluginAudioThread`.
+    /// to only work with the main thread `&Plugin` or the audio thread `&PluginAudioThread`.
     fn new(plugin: P, extension_struct: NonNull<Self::Struct>) -> Self;
 }

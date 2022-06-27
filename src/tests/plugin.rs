@@ -75,8 +75,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     .and_then(|plugin| {
                         plugin.init().context("Error during initialization")?;
 
-                        // Get the plugin's audio channel layout, if it supports the audio ports
-                        // extension
+                        // Get the plugin's audio channel layout and note port configuration, if it
+                        // supports those extensions
                         let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
                             Some(audio_ports) => audio_ports
                                 .config()

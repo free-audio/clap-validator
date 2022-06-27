@@ -1,4 +1,4 @@
-//! Abstractions for single CLAP plugin instances.
+//! Abstractions for single CLAP plugin instances for main thread interactions.
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
@@ -7,7 +7,9 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use std::thread::ThreadId;
 
+use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
 use crate::hosting::ClapHost;
@@ -18,6 +20,14 @@ use crate::hosting::ClapHost;
 #[derive(Debug)]
 pub struct Plugin<'lib> {
     handle: NonNull<clap_plugin>,
+    /// The ID of the main thread. Or in other words, the ID of the thread this `Plugin` instance
+    /// was created from. This is useful when working with audio threads. We want the audio thread
+    /// to be separate from the main thread, but in some test cases it may be useful to process
+    /// multiple plugin instances in series from the same audio thread. Because of this,
+    /// [`Plugin::audio_thread()`] checks whether the function is called from the main thread or
+    /// not. If it is, then a new thread is spawned and the closure is run from that thread. If the
+    /// function is called from another thread, then the closure can be run directly.
+    main_thread_id: ThreadId,
     /// The CLAP plugin library this plugin instance was created from. This field is not used
     /// directly, but keeping a reference to the library here prevents the plugin instance from
     /// outliving the library.
@@ -30,6 +40,20 @@ pub struct Plugin<'lib> {
     /// [`audio_thread()`][Self::audio_thread()] method spawns an audio thread that is able to call
     /// the plugin's audio thread functions.
     _send_sync_marker: PhantomData<*const ()>,
+}
+
+/// An unsafe `Send` wrapper around [`Plugin`], needed to create the audio thread abstraction since
+/// we artifically imposed `!Send`+`!Sync` on `Plugin` using the phantomdata marker.
+struct PluginSendWrapper<'lib>(*const Plugin<'lib>);
+
+unsafe impl<'lib> Send for PluginSendWrapper<'lib> {}
+
+impl<'lib> Deref for PluginSendWrapper<'lib> {
+    type Target = *const Plugin<'lib>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl Drop for Plugin<'_> {
@@ -57,10 +81,16 @@ impl<'lib> Plugin<'lib> {
     ) -> Self {
         Plugin {
             handle,
+            main_thread_id: std::thread::current().id(),
             _library: library,
             _host: host,
             _send_sync_marker: PhantomData,
         }
+    }
+
+    /// Get the raw pointer to the `clap_plugin` instance.
+    pub fn as_ptr(&self) -> *const clap_plugin {
+        self.handle.as_ptr()
     }
 
     /// Initialize the plugin. This needs to be called before doing anything else.
@@ -89,8 +119,34 @@ impl<'lib> Plugin<'lib> {
         }
     }
 
-    /// Get the raw pointer to the `clap_plugin` instance.
-    pub fn as_ptr(&self) -> *const clap_plugin {
-        self.handle.as_ptr()
+    /// Execute some code for this plugin from an audio thread context. The closure receives a
+    /// [`PluginAudioThread`], which disallows calling main thread functions, and permits calling
+    /// audio thread functions. If this function is called from the main thread (the thread where
+    /// the plugin instance was created on), then this closure will be run from a new thread. If
+    /// this function is called from another thread, then the closure is run directly.
+    pub fn audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
+        &'a self,
+        f: F,
+    ) -> T {
+        if std::thread::current().id() == self.main_thread_id {
+            let unsafe_self_wrapper = PluginSendWrapper(self);
+
+            crossbeam::scope(|s| {
+                s.spawn(move |_| {
+                    // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
+                    //         `PluginAudioThread` to prevent them from being shared with other
+                    //         threads. But we'll need to temporarily lift that restriction in order
+                    //         to create this `PluginAudioThread`.
+                    let this = unsafe { &**unsafe_self_wrapper };
+
+                    f(PluginAudioThread::new(this))
+                })
+                .join()
+                .expect("Audio thread paniced")
+            })
+            .expect("Audio thread paniced")
+        } else {
+            f(PluginAudioThread::new(self))
+        }
     }
 }
