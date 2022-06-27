@@ -69,8 +69,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::BasicCombinedAudioProcessing => {
                 // The host doesn't need to do anything special for this test
                 let host = ClapHost::new();
-                let process_result = library
-                    .create_plugin(plugin_id, host)
+                let result = library
+                    .create_plugin(plugin_id, host.clone())
                     .context("Could not create the plugin instance")
                     .and_then(|plugin| {
                         plugin.init().context("Error during initialization")?;
@@ -97,7 +97,13 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 // TODO: Spawn an audio thread
                 // TODO: Process audio in the audio thread and check the output
 
-                match process_result {
+                // The `ClapHost` also contains built-in thread safety checks
+                let result = result.and_then(|_| {
+                    host.thread_safety_check()
+                        .context("Thread safety checks failed")
+                });
+
+                match result {
                     // Ok(_) => TestStatus::Success { notes: None },
                     Ok(_) => TestStatus::Skipped {
                         reason: Some(String::from("Not yet implemented")),
