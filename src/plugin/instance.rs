@@ -16,7 +16,7 @@ use crate::hosting::ClapHost;
 
 /// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All
 /// functions here are callable only from the main thread. Use the
-/// [`audio_thread()`][Self::audio_thread()] method to spawn an audio thread.
+/// [`on_audio_thread()`][Self::on_audio_thread()] method to spawn an audio thread.
 #[derive(Debug)]
 pub struct Plugin<'lib> {
     handle: NonNull<clap_plugin>,
@@ -24,7 +24,7 @@ pub struct Plugin<'lib> {
     /// was created from. This is useful when working with audio threads. We want the audio thread
     /// to be separate from the main thread, but in some test cases it may be useful to process
     /// multiple plugin instances in series from the same audio thread. Because of this,
-    /// [`Plugin::audio_thread()`] checks whether the function is called from the main thread or
+    /// [`Plugin::on_audio_thread()`] checks whether the function is called from the main thread or
     /// not. If it is, then a new thread is spawned and the closure is run from that thread. If the
     /// function is called from another thread, then the closure can be run directly.
     main_thread_id: ThreadId,
@@ -37,7 +37,7 @@ pub struct Plugin<'lib> {
     _host: Pin<Arc<ClapHost>>,
     /// To honor CLAP's thread safety guidelines, the thread this object was created from is
     /// designated the 'main thread', and this object cannot be shared with other threads. The
-    /// [`audio_thread()`][Self::audio_thread()] method spawns an audio thread that is able to call
+    /// [`on_audio_thread()`][Self::on_audio_thread()] method spawns an audio thread that is able to call
     /// the plugin's audio thread functions.
     _send_sync_marker: PhantomData<*const ()>,
 }
@@ -93,15 +93,6 @@ impl<'lib> Plugin<'lib> {
         self.handle.as_ptr()
     }
 
-    /// Initialize the plugin. This needs to be called before doing anything else.
-    pub fn init(&self) -> Result<()> {
-        if unsafe { (self.handle.as_ref().init)(self.as_ptr()) } {
-            Ok(())
-        } else {
-            anyhow::bail!("'clap_plugin::init()' returned false")
-        }
-    }
-
     /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
@@ -124,7 +115,7 @@ impl<'lib> Plugin<'lib> {
     /// audio thread functions. If this function is called from the main thread (the thread where
     /// the plugin instance was created on), then this closure will be run from a new thread. If
     /// this function is called from another thread, then the closure is run directly.
-    pub fn audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
+    pub fn on_audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
         &'a self,
         f: F,
     ) -> T {
@@ -148,5 +139,44 @@ impl<'lib> Plugin<'lib> {
         } else {
             f(PluginAudioThread::new(self))
         }
+    }
+
+    /// Initialize the plugin. This needs to be called before doing anything else.
+    pub fn init(&self) -> Result<()> {
+        if unsafe { (self.handle.as_ref().init)(self.as_ptr()) } {
+            Ok(())
+        } else {
+            anyhow::bail!("'clap_plugin::init()' returned false")
+        }
+    }
+
+    /// Activate the plugin. Returns an error if the plugin returned `false`. See
+    /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
+    /// preconditions.
+    pub fn activate(
+        &self,
+        sample_rate: f32,
+        min_buffer_size: usize,
+        max_buffer_size: usize,
+    ) -> Result<()> {
+        if unsafe {
+            (self.handle.as_ref().activate)(
+                self.as_ptr(),
+                sample_rate as f64,
+                min_buffer_size as u32,
+                max_buffer_size as u32,
+            )
+        } {
+            Ok(())
+        } else {
+            anyhow::bail!("'clap_plugin::activate()' returned false")
+        }
+    }
+
+    /// Deactivate the plugin. See
+    /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
+    /// preconditions.
+    pub fn deactivate(&self) {
+        unsafe { (self.handle.as_ref().deactivate)(self.as_ptr()) };
     }
 }

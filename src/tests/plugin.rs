@@ -1,9 +1,8 @@
 //! Tests for individual plugin instances.
 
-use std::process::Command;
-
-use anyhow::Context;
+use anyhow::{Context, Result};
 use clap::ValueEnum;
+use std::process::Command;
 
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
@@ -91,17 +90,33 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             None => NotePortConfig::default(),
                         };
 
+                        // TODO: Have a test case with weird, fractional sample rates, with very
+                        //       high sample rates, and with very low sample rates
+                        // TODO: Have a test case with a huge (but still some definition of
+                        //       reasoanble) maximum buffer size
+                        const SAMPLE_RATE: f32 = 44_100.0;
+                        const BUFFER_SIZE: usize = 512;
+                        plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
+
+                        plugin.on_audio_thread(|plugin| -> Result<()> {
+                            plugin.start_processing()?;
+
+                            // TODO: Process audio in the audio thread and check the output
+
+                            plugin.stop_processing();
+
+                            Ok(())
+                        })?;
+
+                        plugin.deactivate();
+
                         Ok((plugin, audio_ports_config, note_port_config))
+                    })
+                    // The `ClapHost` contains built-in thread safety checks
+                    .and_then(|_| {
+                        host.thread_safety_check()
+                            .context("Thread safety checks failed")
                     });
-
-                // TODO: Spawn an audio thread
-                // TODO: Process audio in the audio thread and check the output
-
-                // The `ClapHost` also contains built-in thread safety checks
-                let result = result.and_then(|_| {
-                    host.thread_safety_check()
-                        .context("Thread safety checks failed")
-                });
 
                 match result {
                     // Ok(_) => TestStatus::Success { notes: None },

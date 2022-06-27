@@ -1,5 +1,6 @@
 //! Abstractions for single CLAP plugin instances for audio thread interactions.
 
+use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -9,7 +10,7 @@ use super::ext::Extension;
 use super::instance::Plugin;
 
 /// An audio thread equivalent to [`Plugin`]. This version only allows audio thread functions to be
-/// called. It can be constructed using [`Plugin::audio_thread()`].
+/// called. It can be constructed using [`Plugin::on_audio_thread()`].
 #[derive(Debug)]
 pub struct PluginAudioThread<'a> {
     /// The plugin instance this audio thread belongs to. This is needed to ensure that the audio
@@ -48,6 +49,9 @@ impl<'a> PluginAudioThread<'a> {
     /// Get the _audio thread_ extension abstraction for the extension `T`, if the plugin supports
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
+    //
+    // TODO: Remove this unused attribute once we implement audio thread extensions:w
+    #[allow(unused)]
     pub fn get_extension<T: Extension<&'a Self>>(&'a self) -> Option<T> {
         let extension_ptr = unsafe { (self.plugin.get_extension)(self.as_ptr(), T::EXTENSION_ID) };
 
@@ -61,5 +65,21 @@ impl<'a> PluginAudioThread<'a> {
         }
     }
 
-    // TODO: Add abstraction functions
+    /// Prepare for audio processing. Returns an error if the plugin returned `false`. See
+    /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
+    /// preconditions.
+    pub fn start_processing(&self) -> Result<()> {
+        if unsafe { (self.plugin.start_processing)(self.as_ptr()) } {
+            Ok(())
+        } else {
+            anyhow::bail!("'clap_plugin::activate()' returned false")
+        }
+    }
+
+    /// Stop processing audio. See
+    /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
+    /// preconditions.
+    pub fn stop_processing(&self) {
+        unsafe { (self.plugin.stop_processing)(self.as_ptr()) };
+    }
 }
