@@ -8,7 +8,7 @@ use clap::ValueEnum;
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
-use crate::plugin::ext::note_ports::{NotePort, NotePortConfig, NotePorts};
+use crate::plugin::ext::note_ports::{NotePortConfig, NotePorts};
 use crate::plugin::library::PluginLibrary;
 
 /// The string representation for [`PluginTestCase::BasicCombinedAudioProcessing`].

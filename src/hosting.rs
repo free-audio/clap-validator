@@ -1,6 +1,6 @@
 //! Data structures and utilities for hosting plugins.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap_sys::host::clap_host;
 use clap_sys::version::CLAP_VERSION;
 use std::ffi::c_void;
@@ -72,6 +72,9 @@ impl ClapHost {
     /// Checks whether this is the main thread. If it is not, then an error indicating this can be
     /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
+    //
+    // TODO: Remove these unused attributes once we implement extensions
+    #[allow(unused)]
     pub fn assert_main_thread(&self, function_name: &str) {
         let mut thread_safety_error = self.thread_safety_error.lock().unwrap();
         let current_thread_id = std::thread::current().id();
@@ -94,6 +97,9 @@ impl ClapHost {
     /// Checks whether this is the audio thread. If it is not, then an error indicating this can be
     /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
+    //
+    // TODO: Remove these unused attributes once we implement extensions
+    #[allow(unused)]
     pub fn assert_audio_thread(&self, function_name: &str) {
         let mut thread_safety_error = self.thread_safety_error.lock().unwrap();
         let current_thread_id = std::thread::current().id();
