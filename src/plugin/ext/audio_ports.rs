@@ -98,12 +98,12 @@ impl AudioPorts<'_> {
             };
             if let Some(in_place_pair_idx) = in_place_pair_idx {
                 if in_place_pair_idx >= num_outputs as usize {
-                    anyhow::bail!("Input port {i} has an in-place pair index for output port {in_place_pair_idx}, but there are only {num_outputs} output ports");
+                    anyhow::bail!("Input port {i} has an in-place pair index for input port {in_place_pair_idx}, but there are only {num_inputs} input ports");
                 }
             }
 
             // TODO: Test whether the channel count matches the port type
-            config.inputs.push(AudioPort {
+            config.outputs.push(AudioPort {
                 num_channels: info.channel_count,
                 in_place_pair_idx,
             });
