@@ -156,8 +156,16 @@ impl<'a> ProcessData<'a> {
             steady_time: self.sample_pos as i64,
             frames_count: num_samples as u32,
             transport: &self.transport_info,
-            audio_inputs: inputs.as_ptr(),
-            audio_outputs: outputs.as_mut_ptr(),
+            audio_inputs: if inputs.is_empty() {
+                std::ptr::null()
+            } else {
+                inputs.as_ptr()
+            },
+            audio_outputs: if outputs.is_empty() {
+                std::ptr::null_mut()
+            } else {
+                outputs.as_mut_ptr()
+            },
             audio_inputs_count: inputs.len() as u32,
             audio_outputs_count: outputs.len() as u32,
             in_events: &self.input_events.in_events,
