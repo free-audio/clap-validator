@@ -100,6 +100,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
                         // This test only uses out-of-place processing
                         // TODO: Fill these buffers with white noise instead of silence
+                        log::debug!("TODO: This test does not yet generate random input data");
                         let (input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
                         // We'll check that the plugin hasn't modified the input buffers after the
                         // test
@@ -195,6 +196,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
                         // This test only uses out-of-place processing
                         // TODO: Fill these buffers with white noise instead of silence
+                        log::debug!("TODO: This test does not yet generate random input data");
                         let (input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
                         // We'll check that the plugin hasn't modified the input buffers after the
                         // test
