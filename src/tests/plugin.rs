@@ -6,12 +6,13 @@ use rand::Rng;
 use rand_pcg::Pcg32;
 use std::process::Command;
 
-use super::{new_prng, TestCase, TestResult, TestStatus};
+use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
 use crate::plugin::audio_thread::process::{AudioBuffers, OutOfPlaceAudioBuffers, ProcessData};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
 use crate::plugin::library::PluginLibrary;
+use crate::tests::rng::new_prng;
 
 const BASIC_AUDIO_PROCESSING: &str = "process-audio-basic";
 const BASIC_MIDI_PROCESSING: &str = "process-midi-basic";
