@@ -17,7 +17,7 @@ macro_rules! check_null_ptr {
 macro_rules! check_null_ptr_msg {
     ($msg:expr, $ret:expr, $ptr:expr $(, $ptrs:expr)* $(, )?) => {
         if $ptr.is_null() $(|| $ptrs.is_null())* {
-            eprintln!($msg);
+            ::log::debug!($msg);
             return $ret;
         }
     };

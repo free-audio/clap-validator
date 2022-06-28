@@ -143,7 +143,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
             )
         })?;
         if !clap_version_is_compatible(metadata.clap_version()) {
-            eprintln!(
+            log::debug!(
                 "'{}' uses an unsupported CLAP version ({}.{}.{}), skipping...",
                 library_path.display(),
                 metadata.version.0,

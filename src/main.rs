@@ -40,6 +40,20 @@ enum Commands {
 }
 
 fn main() -> ExitCode {
+    // For now logging everything to the terminal is fine. In the future it may be useful to have
+    // CLI options for things like the verbosity level.
+    simplelog::TermLogger::init(
+        simplelog::LevelFilter::Trace,
+        simplelog::ConfigBuilder::new()
+            .set_thread_mode(simplelog::ThreadLogMode::Both)
+            .set_location_level(simplelog::LevelFilter::Debug)
+            .build(),
+        simplelog::TerminalMode::Stderr,
+        simplelog::ColorChoice::Auto,
+    )
+    .expect("Could not initialize logger");
+    log_panics::init();
+
     let cli = Cli::parse();
 
     match &cli.command {
@@ -69,13 +83,13 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             }
-            Err(err) => eprintln!("Could not run the validator: {err:#}"),
+            Err(err) => log::error!("Could not run the validator: {err:#}"),
         },
         Commands::RunSingleTest(settings) => match validator::run_single_test(settings) {
             // The result has been serialized as JSON and written to a file so the main validator
             // process can read it
             Ok(()) => (),
-            Err(err) => eprintln!("Could not run test the case: {err:#}"),
+            Err(err) => log::error!("Could not run test the case: {err:#}"),
         },
         Commands::List { json } => {
             let plugin_index = index::index();

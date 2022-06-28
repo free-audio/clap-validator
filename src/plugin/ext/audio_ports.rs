@@ -213,7 +213,7 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
         // TODO: Test the channel counts by querying those extensions
         Ok(())
     } else {
-        eprintln!("TODO: Unknown audio port type '{port_type:?}'");
+        log::debug!("TODO: Unknown audio port type '{port_type:?}'");
         Ok(())
     }
 }

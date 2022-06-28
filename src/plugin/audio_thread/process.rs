@@ -338,7 +338,7 @@ impl EventQueue {
         match events.get(index as usize) {
             Some(event) => event.header_ptr(),
             None => {
-                eprintln!(
+                log::warn!(
                     "The plugin tried to get an event with index {index} ({} total events)",
                     events.len()
                 );
