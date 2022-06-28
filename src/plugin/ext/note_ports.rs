@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap_sys::ext::note_ports::{
     clap_note_dialect, clap_note_port_info, clap_plugin_note_ports, CLAP_EXT_NOTE_PORTS,
 };
+use std::collections::HashSet;
 use std::mem;
 use std::os::raw::c_char;
 use std::ptr::NonNull;
@@ -60,6 +61,10 @@ impl NotePorts<'_> {
         let num_inputs = unsafe { (note_ports.count)(self.plugin.as_ptr(), true) };
         let num_outputs = unsafe { (note_ports.count)(self.plugin.as_ptr(), false) };
 
+        // We don't need the port's stable IDs, but we'll still verify that they're unique
+        let mut input_stable_indices: HashSet<u32> = HashSet::new();
+        let mut output_stable_indices: HashSet<u32> = HashSet::new();
+
         for i in 0..num_inputs {
             let mut info: clap_note_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
@@ -76,6 +81,13 @@ impl NotePorts<'_> {
 
             if (info.supported_dialects & info.preferred_dialect) == 0 {
                 anyhow::bail!("Plugin prefers note dialect {:#b} for input note port {i} which is not contained within the supported note dialects field ({:#b})", info.preferred_dialect, info.supported_dialects);
+            }
+
+            if !input_stable_indices.insert(info.id) {
+                anyhow::bail!(
+                    "The stable ID of input note port {i} ({}) is a duplicate",
+                    info.id
+                );
             }
 
             config.inputs.push(NotePort {
@@ -103,6 +115,13 @@ impl NotePorts<'_> {
 
             if (info.supported_dialects & info.preferred_dialect) == 0 {
                 anyhow::bail!("Plugin prefers note dialect {:#b} for output note port {i} which is not contained within the supported note dialects field ({:#b})", info.preferred_dialect, info.supported_dialects);
+            }
+
+            if !output_stable_indices.insert(info.id) {
+                anyhow::bail!(
+                    "The stable ID of output note port {i} ({}) is a duplicate",
+                    info.id
+                );
             }
 
             config.outputs.push(NotePort {
