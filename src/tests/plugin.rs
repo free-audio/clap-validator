@@ -79,14 +79,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
                             Some(audio_ports) => audio_ports
                                 .config()
-                                .context("Error while querying 'audio_ports' IO configuration")?,
+                                .context("Error while querying 'audio-ports' IO configuration")?,
                             None => AudioPortConfig::default(),
                         };
 
                         let note_port_config = match plugin.get_extension::<NotePorts>() {
                             Some(note_ports) => note_ports
                                 .config()
-                                .context("Error while querying 'note_ports' IO configuration")?,
+                                .context("Error while querying 'note-ports' IO configuration")?,
                             None => NotePortConfig::default(),
                         };
 
