@@ -79,12 +79,17 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     .and_then(|plugin| {
                         plugin.init().context("Error during initialization")?;
 
-                        let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                            Some(audio_ports) => audio_ports
-                                .config()
-                                .context("Error while querying 'audio-ports' IO configuration")?,
-                            None => return Ok(TestStatus::Skipped { reason: Some(String::from("The plugin does not support the 'audio-ports' extension.")) }),
-                        };
+                        let audio_ports_config =
+                            match plugin.get_extension::<AudioPorts>() {
+                                Some(audio_ports) => audio_ports.config().context(
+                                    "Error while querying 'audio-ports' IO configuration",
+                                )?,
+                                None => return Ok(TestStatus::Skipped {
+                                    reason: Some(String::from(
+                                        "The plugin does not support the 'audio-ports' extension.",
+                                    )),
+                                }),
+                            };
 
                         // TODO: Move some of the boilerplate here to a function so we don't need to
                         //       repeat it for every test case
@@ -101,7 +106,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         // This test only uses out-of-place processing
                         // TODO: Fill these buffers with white noise instead of silence
                         log::debug!("TODO: This test does not yet generate random input data");
-                        let (input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
+                        let (input_buffers, mut output_buffers) =
+                            audio_ports_config.create_buffers(BUFFER_SIZE);
                         // We'll check that the plugin hasn't modified the input buffers after the
                         // test
                         let original_input_buffers = input_buffers.clone();
@@ -117,7 +123,6 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         );
 
                         plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
-
                         plugin.on_audio_thread(|plugin| -> Result<()> {
                             // NOTE: We intentionally do not disable denormals here
                             plugin.start_processing()?;
@@ -125,27 +130,15 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 .process(&mut process_data)
                                 .context("Error during audio processing")?;
                             plugin.stop_processing();
-
                             Ok(())
                         })?;
-
                         plugin.deactivate();
 
-                        if input_buffers != original_input_buffers {
-                            // TODO: This message could be more specific
-                            anyhow::bail!("The plugin has overwritten the input buffers during out-of-place processing");
-                        }
-                        for (port_idx, channel_slices) in output_buffers.iter().enumerate() {
-                            for (channel_idx, channel_slice) in channel_slices.iter().enumerate() {
-                                for (sample_idx, sample) in channel_slice.iter().enumerate() {
-                                    if !sample.is_finite() {
-                                        anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is {sample:?}");
-                                    } else if sample.is_subnormal() {
-                                        anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is subnormal ({sample:?})");
-                                    }
-                                }
-                            }
-                        }
+                        check_buffer_consistency(
+                            &input_buffers,
+                            &original_input_buffers,
+                            &output_buffers,
+                        )?;
 
                         // The `ClapHost` contains built-in thread safety checks
                         host.thread_safety_check()
@@ -181,12 +174,17 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             None => AudioPortConfig::default(),
                         };
                         // TODO: Send random notes and/or MIDI to the plugin
-                        let note_port_config = match plugin.get_extension::<NotePorts>() {
-                            Some(note_ports) => note_ports
-                                .config()
-                                .context("Error while querying 'note-ports' IO configuration")?,
-                            None => return Ok(TestStatus::Skipped { reason: Some(String::from("The plugin does not implement the 'note-ports' extension.")) }),
-                        };
+                        let note_port_config =
+                            match plugin.get_extension::<NotePorts>() {
+                                Some(note_ports) => note_ports.config().context(
+                                    "Error while querying 'note-ports' IO configuration",
+                                )?,
+                                None => return Ok(TestStatus::Skipped {
+                                    reason: Some(String::from(
+                                        "The plugin does not implement the 'note-ports' extension.",
+                                    )),
+                                }),
+                            };
 
                         const SAMPLE_RATE: f64 = 44_100.0;
                         const BUFFER_SIZE: usize = 512;
@@ -197,7 +195,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         // This test only uses out-of-place processing
                         // TODO: Fill these buffers with white noise instead of silence
                         log::debug!("TODO: This test does not yet generate random input data");
-                        let (input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
+                        let (input_buffers, mut output_buffers) =
+                            audio_ports_config.create_buffers(BUFFER_SIZE);
                         // We'll check that the plugin hasn't modified the input buffers after the
                         // test
                         let original_input_buffers = input_buffers.clone();
@@ -213,34 +212,21 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         );
 
                         plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
-
                         plugin.on_audio_thread(|plugin| -> Result<()> {
                             plugin.start_processing()?;
                             plugin
                                 .process(&mut process_data)
                                 .context("Error during audio processing")?;
                             plugin.stop_processing();
-
                             Ok(())
                         })?;
-
                         plugin.deactivate();
 
-                        if input_buffers != original_input_buffers {
-                            anyhow::bail!("The plugin has overwritten the input buffers during out-of-place processing");
-                        }
-                        for (port_idx, channel_slices) in output_buffers.iter().enumerate() {
-                            for (channel_idx, channel_slice) in channel_slices.iter().enumerate() {
-                                for (sample_idx, sample) in channel_slice.iter().enumerate() {
-                                    if !sample.is_finite() {
-                                        anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is {sample:?}");
-                                    } else if sample.is_subnormal() {
-                                        anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is subnormal ({sample:?})");
-                                    }
-                                }
-                            }
-                        }
-
+                        check_buffer_consistency(
+                            &input_buffers,
+                            &original_input_buffers,
+                            &output_buffers,
+                        )?;
                         host.thread_safety_check()
                             .context("Thread safety checks failed")?;
 
@@ -258,4 +244,31 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
         self.create_result(result)
     }
+}
+
+/// Check whether the output buffer doesn't contain any NaN, infinite, or denormal values, and that
+/// the input buffers have not been modified by the plugin.
+fn check_buffer_consistency(
+    input_buffers: &[Vec<Vec<f32>>],
+    original_input_buffers: &[Vec<Vec<f32>>],
+    output_buffers: &[Vec<Vec<f32>>],
+) -> Result<()> {
+    if input_buffers != original_input_buffers {
+        anyhow::bail!(
+            "The plugin has overwritten the input buffers during out-of-place processing"
+        );
+    }
+    for (port_idx, channel_slices) in output_buffers.iter().enumerate() {
+        for (channel_idx, channel_slice) in channel_slices.iter().enumerate() {
+            for (sample_idx, sample) in channel_slice.iter().enumerate() {
+                if !sample.is_finite() {
+                    anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is {sample:?}");
+                } else if sample.is_subnormal() {
+                    anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is subnormal ({sample:?})");
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
