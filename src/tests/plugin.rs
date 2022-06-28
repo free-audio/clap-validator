@@ -14,14 +14,14 @@ use crate::plugin::ext::note_ports::NotePorts;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::new_prng;
 
-const BASIC_AUDIO_PROCESSING: &str = "process-audio-basic";
-const BASIC_MIDI_PROCESSING: &str = "process-midi-basic";
+const BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-basic";
+const BASIC_OUT_OF_PLACE_MIDI_PROCESSING: &str = "process-midi-out-of-place-basic";
 
 /// The tests for individual CLAP plugins. See the module's heading for more information, and the
 /// `description` function below for a description of each test case.
 pub enum PluginTestCase {
-    BasicAudioProcessing,
-    BasicMidiProcessing,
+    BasicOutOfPlaceAudioProcessing,
+    BasicOutOfPlaceMidiProcessing,
 }
 
 impl<'a> TestCase<'a> for PluginTestCase {
@@ -30,29 +30,33 @@ impl<'a> TestCase<'a> for PluginTestCase {
     type TestArgs = (&'a PluginLibrary, &'a str);
 
     const ALL: &'static [Self] = &[
-        PluginTestCase::BasicAudioProcessing,
-        PluginTestCase::BasicMidiProcessing,
+        PluginTestCase::BasicOutOfPlaceAudioProcessing,
+        PluginTestCase::BasicOutOfPlaceMidiProcessing,
     ];
 
     fn from_str(string: &str) -> Option<Self> {
         match string {
-            BASIC_AUDIO_PROCESSING => Some(PluginTestCase::BasicAudioProcessing),
-            BASIC_MIDI_PROCESSING => Some(PluginTestCase::BasicMidiProcessing),
+            BASIC_OUT_OF_PLACE_AUDIO_PROCESSING => {
+                Some(PluginTestCase::BasicOutOfPlaceAudioProcessing)
+            }
+            BASIC_OUT_OF_PLACE_MIDI_PROCESSING => {
+                Some(PluginTestCase::BasicOutOfPlaceMidiProcessing)
+            }
             _ => None,
         }
     }
 
     fn as_str(&self) -> &'static str {
         match &self {
-            PluginTestCase::BasicAudioProcessing => BASIC_AUDIO_PROCESSING,
-            PluginTestCase::BasicMidiProcessing => BASIC_MIDI_PROCESSING,
+            PluginTestCase::BasicOutOfPlaceAudioProcessing => BASIC_OUT_OF_PLACE_AUDIO_PROCESSING,
+            PluginTestCase::BasicOutOfPlaceMidiProcessing => BASIC_OUT_OF_PLACE_MIDI_PROCESSING,
         }
     }
 
     fn description(&self) -> String {
         match &self {
-            PluginTestCase::BasicAudioProcessing => String::from("Processes random audio through the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values."),
-            PluginTestCase::BasicMidiProcessing => String::from("Sends audio and random note and MIDI events to the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values."),
+            PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from("Processes random audio through the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place audio processing."),
+            PluginTestCase::BasicOutOfPlaceMidiProcessing => String::from("Sends audio and random note and MIDI events to the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place audio processing."),
         }
     }
 
@@ -73,7 +77,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
         let result = match &self {
-            PluginTestCase::BasicAudioProcessing => {
+            PluginTestCase::BasicOutOfPlaceAudioProcessing => {
                 let mut prng = new_prng();
 
                 // The host doesn't need to do anything special for this test
@@ -158,7 +162,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     },
                 }
             }
-            PluginTestCase::BasicMidiProcessing => {
+            PluginTestCase::BasicOutOfPlaceMidiProcessing => {
                 // This test is very similar to `BasicAudioProcessing`, but it requires the
                 // `note-ports` extension, sends notes and/or MIDI to the plugin, and doesn't
                 // require the `audio-ports` extension
