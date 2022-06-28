@@ -12,15 +12,14 @@ use crate::plugin::library::PluginLibrary;
 
 use super::{TestCase, TestResult, TestStatus};
 
-/// The string representation for [`PluginLibraryTestCase::ScanTime`].
 const TEST_SCAN_TIME: &str = "scan-time";
 
 const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 
 /// Tests for entire CLAP libraries. These are mostly to ensure good plugin scanning practices. See
-/// the module's heading for more information.
+/// the module's heading for more information, and the `description` function below for a
+/// description of each test case.
 pub enum PluginLibraryTestCase {
-    /// Asserts whether the plugin takes longer than `PLUGIN_SCAN_TIME_LIMIT` to scan.
     ScanTime,
 }
 
