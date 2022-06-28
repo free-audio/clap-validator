@@ -217,3 +217,23 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
         Ok(())
     }
 }
+
+impl AudioPortConfig {
+    /// Create a pair of zero initialized `(input_buffers, output_buffers)` for this audio port
+    /// configuration. These can be bassed with
+    /// [`ProcessData`][super::audio_thread::process::ProcessData] to create a process data struct.
+    pub fn create_buffers(&self, buffer_size: usize) -> (Vec<Vec<Vec<f32>>>, Vec<Vec<Vec<f32>>>) {
+        let input_buffers: Vec<Vec<Vec<f32>>> = self
+            .inputs
+            .iter()
+            .map(|port_config| vec![vec![0.0; buffer_size]; port_config.num_channels as usize])
+            .collect();
+        let mut output_buffers: Vec<Vec<Vec<f32>>> = self
+            .outputs
+            .iter()
+            .map(|port_config| vec![vec![0.0; buffer_size]; port_config.num_channels as usize])
+            .collect();
+
+        (input_buffers, output_buffers)
+    }
+}

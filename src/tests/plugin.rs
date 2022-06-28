@@ -105,23 +105,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
                         // This test only uses out-of-place processing
                         // TODO: Fill these buffers with white noise instead of silence
-                        let input_buffers: Vec<Vec<Vec<f32>>> = audio_ports_config
-                            .inputs
-                            .iter()
-                            .map(|port_config| {
-                                vec![vec![0.0; BUFFER_SIZE]; port_config.num_channels as usize]
-                            })
-                            .collect();
+                        let (input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
                         // We'll check that the plugin hasn't modified the input buffers after the
                         // test
                         let original_input_buffers = input_buffers.clone();
-                        let mut output_buffers: Vec<Vec<Vec<f32>>> = audio_ports_config
-                            .outputs
-                            .iter()
-                            .map(|port_config| {
-                                vec![vec![0.0; BUFFER_SIZE]; port_config.num_channels as usize]
-                            })
-                            .collect();
                         let mut process_data = ProcessData::new(
                             AudioBuffers::OutOfPlace(
                                 OutOfPlaceAudioBuffers::new(&input_buffers, &mut output_buffers)
