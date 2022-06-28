@@ -1,13 +1,26 @@
 //! Data structures and functions surrounding audio processing.
 
 use anyhow::Result;
+use clap_sys::events::{
+    clap_event_header, clap_event_transport, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_TRANSPORT,
+    CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
+    CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_HAS_TIME_SIGNATURE, CLAP_TRANSPORT_IS_PLAYING,
+};
+use clap_sys::fixedpoint::{CLAP_BEATTIME_FACTOR, CLAP_SECTIME_FACTOR};
 
 /// The input and output data for a call to `clap_plugin::process()`.
 pub struct ProcessData<'a> {
     /// The input and output audio buffers.
-    buffers: AudioBuffers<'a>,
+    pub buffers: AudioBuffers<'a>,
+    /// The current transport information. This is populated when constructing this object, and the
+    /// transport can be advanced `N` samples using the
+    /// [`advance_transport()`][Self::advance_transport()] method.
+    transport_info: clap_event_transport,
+    /// The current sample position. This is used to recompute values in `transport_info`.
+    sample_pos: u32,
+    /// The current sample rate.
+    sample_rate: f64,
     // TODO: Events
-    // TODO: Transport information
     // TODO: Maybe do something with `steady_time`
 }
 
@@ -35,6 +48,72 @@ pub struct OutOfPlaceAudioBuffers<'a> {
 
     /// The number of samples for this buffer. This is consistent across all inner vectors.
     num_samples: usize,
+}
+
+impl<'a> ProcessData<'a> {
+    /// Initialize the process data using the given audio buffers. The transport information will be
+    /// initialized at the start of the project, and it can be moved using the
+    /// [`advance_transport()`][Self::advance_transport()] method.
+    //
+    // TODO: More transport info options. Missing fields, loop regions, flags, etc.
+    pub fn new(
+        buffers: AudioBuffers<'a>,
+        sample_rate: f64,
+        tempo: f32,
+        time_sig_numerator: u16,
+        time_sig_denominator: u16,
+    ) -> Self {
+        ProcessData {
+            buffers,
+            transport_info: clap_event_transport {
+                header: clap_event_header {
+                    size: std::mem::size_of::<clap_event_transport>() as u32,
+                    time: 0,
+                    space_id: CLAP_CORE_EVENT_SPACE_ID,
+                    type_: CLAP_EVENT_TRANSPORT,
+                    flags: 0,
+                },
+                flags: CLAP_TRANSPORT_HAS_TEMPO
+                    | CLAP_TRANSPORT_HAS_BEATS_TIMELINE
+                    | CLAP_TRANSPORT_HAS_SECONDS_TIMELINE
+                    | CLAP_TRANSPORT_HAS_TIME_SIGNATURE
+                    | CLAP_TRANSPORT_IS_PLAYING,
+                song_pos_beats: 0,
+                song_pos_seconds: 0,
+                tempo: tempo as f64,
+                tempo_inc: 0.0,
+                // These four currently aren't used
+                loop_start_beats: 0,
+                loop_end_beats: 0,
+                loop_start_seconds: 0,
+                loop_end_seconds: 0,
+                bar_start: 0,
+                bar_number: 0,
+                tsig_num: time_sig_numerator,
+                tsig_denom: time_sig_denominator,
+            },
+            sample_pos: 0,
+            sample_rate,
+        }
+    }
+
+    /// Get current the transport information.
+    pub fn transport_info(&self) -> clap_event_transport {
+        self.transport_info
+    }
+
+    /// Advance the transport by a certain number of samples
+    pub fn advance_transport(&mut self, samples: u32) {
+        self.sample_pos += samples;
+
+        self.transport_info.song_pos_beats = ((self.sample_pos as f64 / self.sample_rate / 60.0
+            * self.transport_info.tempo)
+            * CLAP_BEATTIME_FACTOR as f64)
+            .round() as i64;
+        self.transport_info.song_pos_seconds = ((self.sample_pos as f64 / self.sample_rate)
+            * CLAP_SECTIME_FACTOR as f64)
+            .round() as i64;
+    }
 }
 
 impl<'a> OutOfPlaceAudioBuffers<'a> {
