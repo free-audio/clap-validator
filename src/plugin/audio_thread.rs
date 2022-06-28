@@ -9,6 +9,8 @@ use std::ptr::NonNull;
 use super::ext::Extension;
 use super::instance::Plugin;
 
+pub mod process;
+
 /// An audio thread equivalent to [`Plugin`]. This version only allows audio thread functions to be
 /// called. It can be constructed using [`Plugin::on_audio_thread()`].
 #[derive(Debug)]
