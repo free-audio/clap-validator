@@ -33,7 +33,6 @@ pub struct ProcessData<'a> {
     sample_pos: u32,
     /// The current sample rate.
     sample_rate: f64,
-    // TODO: Events
     // TODO: Maybe do something with `steady_time`
 }
 
@@ -54,13 +53,13 @@ pub enum AudioBuffers<'a> {
 // TODO: This only does f32 for now, we'll also want to test f64 and mixed configurations later.
 pub struct OutOfPlaceAudioBuffers<'a> {
     // These are all indexed by `[port_idx][channel_idx][sample_idx]`
-    inputs: &'a [Vec<Vec<f32>>],
-    outputs: &'a mut [Vec<Vec<f32>>],
+    _inputs: &'a [Vec<Vec<f32>>],
+    _outputs: &'a mut [Vec<Vec<f32>>],
 
     // These are point to `inputs` and `outputs` because `clap_audio_buffer` needs to contain a
     // `*const *const f32`
-    input_channel_pointers: Vec<Vec<*const f32>>,
-    output_channel_pointers: Vec<Vec<*const f32>>,
+    _input_channel_pointers: Vec<Vec<*const f32>>,
+    _output_channel_pointers: Vec<Vec<*const f32>>,
     clap_inputs: Vec<clap_audio_buffer>,
     clap_outputs: Vec<clap_audio_buffer>,
 
@@ -270,10 +269,10 @@ impl<'a> OutOfPlaceAudioBuffers<'a> {
             .collect();
 
         Ok(Self {
-            inputs,
-            outputs,
-            input_channel_pointers,
-            output_channel_pointers,
+            _inputs: inputs,
+            _outputs: outputs,
+            _input_channel_pointers: input_channel_pointers,
+            _output_channel_pointers: output_channel_pointers,
             clap_inputs,
             clap_outputs,
 
@@ -340,6 +339,7 @@ impl EventQueue {
         let this = &*((*list).ctx as *const Self);
 
         let events = this.events.lock().unwrap();
+        #[allow(clippy::significant_drop_in_scrutinee)]
         match events.get(index as usize) {
             Some(event) => event.header_ptr(),
             None => {

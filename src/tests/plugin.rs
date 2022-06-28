@@ -91,6 +91,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             None => NotePortConfig::default(),
                         };
 
+                        // TODO: Move some of the boilerplate here to a function so we don't need to
+                        //       repeat it for every test case
                         // TODO: Have a test case with weird, fractional sample rates, with very
                         //       high sample rates, and with very low sample rates
                         // TODO: Have a test case with a huge (but still some definition of
@@ -110,6 +112,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 vec![vec![0.0; BUFFER_SIZE]; port_config.num_channels as usize]
                             })
                             .collect();
+                        // We'll check that the plugin hasn't modified the input buffers after the
+                        // test
+                        let original_input_buffers = input_buffers.clone();
                         let mut output_buffers: Vec<Vec<Vec<f32>>> = audio_ports_config
                             .outputs
                             .iter()
@@ -143,10 +148,23 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
                         plugin.deactivate();
 
-                        // TODO: Check whether the input is unchanged
-                        // TODO: Check the output for denormals, subnormal numbers, and
+                        if input_buffers != original_input_buffers {
+                            // TODO: This message could be more specific
+                            anyhow::bail!("The plugin has overwritten the input buffers during out-of-place processing");
+                        }
+                        for (port_idx, channel_slices) in output_buffers.iter().enumerate() {
+                            for (channel_idx, channel_slice) in channel_slices.iter().enumerate() {
+                                for (sample_idx, sample) in channel_slice.iter().enumerate() {
+                                    if !sample.is_finite() {
+                                        anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is {sample:?}");
+                                    } else if sample.is_subnormal() {
+                                        anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is subnormal ({sample:?})");
+                                    }
+                                }
+                            }
+                        }
 
-                        Ok((plugin, audio_ports_config, note_port_config))
+                        Ok(())
                     })
                     // The `ClapHost` contains built-in thread safety checks
                     .and_then(|_| {
