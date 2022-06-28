@@ -130,7 +130,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             TIME_SIG_DENOMINATOR,
                         );
 
-                        plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
+                        plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
                         plugin.on_audio_thread(|plugin| -> Result<()> {
                             // NOTE: We intentionally do not disable denormals here
                             plugin.start_processing()?;
@@ -222,7 +222,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         // TODO: Send random notes and/or MIDI to the plugin
                         log::debug!("TODO: This test does not yet generate random notes/MIDI");
 
-                        plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
+                        plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
                         plugin.on_audio_thread(|plugin| -> Result<()> {
                             plugin.start_processing()?;
                             plugin
