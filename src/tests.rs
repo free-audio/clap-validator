@@ -10,6 +10,7 @@
 //! be converted to and from a string representation.
 
 use anyhow::{Context, Result};
+use rand_pcg::Pcg32;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
@@ -169,4 +170,9 @@ impl TestStatus {
             TestStatus::Crashed { .. } | TestStatus::Failed { .. } => true,
         }
     }
+}
+
+/// Create a new pseudo-random number generator with a fixed seed.
+pub fn new_prng() -> Pcg32 {
+    Pcg32::new(1337, 420)
 }

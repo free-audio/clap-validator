@@ -2,9 +2,11 @@
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
+use rand::Rng;
+use rand_pcg::Pcg32;
 use std::process::Command;
 
-use super::{TestCase, TestResult, TestStatus};
+use super::{new_prng, TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
 use crate::plugin::audio_thread::process::{AudioBuffers, OutOfPlaceAudioBuffers, ProcessData};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
@@ -71,6 +73,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
     fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
         let result = match &self {
             PluginTestCase::BasicAudioProcessing => {
+                let mut prng = new_prng();
+
                 // The host doesn't need to do anything special for this test
                 let host = ClapHost::new();
                 let result = library
@@ -91,8 +95,6 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 }),
                             };
 
-                        // TODO: Move some of the boilerplate here to a function so we don't need to
-                        //       repeat it for every test case
                         // TODO: Have a test case with weird, fractional sample rates, with very
                         //       high sample rates, and with very low sample rates
                         // TODO: Have a test case with a huge (but still some definition of
@@ -104,13 +106,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         const TIME_SIG_DENOMINATOR: u16 = 4;
 
                         // This test only uses out-of-place processing
-                        // TODO: Fill these buffers with white noise instead of silence
-                        log::debug!("TODO: This test does not yet generate random input data");
-                        let (input_buffers, mut output_buffers) =
+                        let (mut input_buffers, mut output_buffers) =
                             audio_ports_config.create_buffers(BUFFER_SIZE);
+                        randomize_audio_buffers(&mut prng, &mut input_buffers);
+                        randomize_audio_buffers(&mut prng, &mut output_buffers);
                         // We'll check that the plugin hasn't modified the input buffers after the
                         // test
                         let original_input_buffers = input_buffers.clone();
+
                         let mut process_data = ProcessData::new(
                             AudioBuffers::OutOfPlace(
                                 OutOfPlaceAudioBuffers::new(&input_buffers, &mut output_buffers)
@@ -158,6 +161,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 // This test is very similar to `BasicAudioProcessing`, but it requires the
                 // `note-ports` extension, sends notes and/or MIDI to the plugin, and doesn't
                 // require the `audio-ports` extension
+                let mut prng = new_prng();
+
                 let host = ClapHost::new();
                 let result = library
                     .create_plugin(plugin_id, host.clone())
@@ -173,7 +178,6 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 .context("Error while querying 'audio-ports' IO configuration")?,
                             None => AudioPortConfig::default(),
                         };
-                        // TODO: Send random notes and/or MIDI to the plugin
                         let note_port_config =
                             match plugin.get_extension::<NotePorts>() {
                                 Some(note_ports) => note_ports.config().context(
@@ -193,13 +197,12 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         const TIME_SIG_DENOMINATOR: u16 = 4;
 
                         // This test only uses out-of-place processing
-                        // TODO: Fill these buffers with white noise instead of silence
-                        log::debug!("TODO: This test does not yet generate random input data");
-                        let (input_buffers, mut output_buffers) =
+                        let (mut input_buffers, mut output_buffers) =
                             audio_ports_config.create_buffers(BUFFER_SIZE);
-                        // We'll check that the plugin hasn't modified the input buffers after the
-                        // test
+                        randomize_audio_buffers(&mut prng, &mut input_buffers);
+                        randomize_audio_buffers(&mut prng, &mut output_buffers);
                         let original_input_buffers = input_buffers.clone();
+
                         let mut process_data = ProcessData::new(
                             AudioBuffers::OutOfPlace(
                                 OutOfPlaceAudioBuffers::new(&input_buffers, &mut output_buffers)
@@ -210,6 +213,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             TIME_SIG_NUMERATOR,
                             TIME_SIG_DENOMINATOR,
                         );
+
+                        // TODO: Send random notes and/or MIDI to the plugin
+                        log::debug!("TODO: This test does not yet generate random notes/MIDI");
 
                         plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
                         plugin.on_audio_thread(|plugin| -> Result<()> {
@@ -243,6 +249,20 @@ impl<'a> TestCase<'a> for PluginTestCase {
         };
 
         self.create_result(result)
+    }
+}
+
+/// Set each sample in the buffers to a random value in `[-1, 1]`. Denormals are snapped to zero.
+fn randomize_audio_buffers(prng: &mut Pcg32, buffers: &mut [Vec<Vec<f32>>]) {
+    for channel_slices in buffers {
+        for channel_slice in channel_slices {
+            for sample in channel_slice {
+                *sample = prng.gen_range(-1.0..=1.0);
+                if sample.is_subnormal() {
+                    *sample = 0.0;
+                }
+            }
+        }
     }
 }
 
