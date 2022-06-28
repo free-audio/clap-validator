@@ -68,6 +68,11 @@ pub struct OutOfPlaceAudioBuffers<'a> {
     num_samples: usize,
 }
 
+// SAFETY: Sharing these pointers with other threads is safe as they refer to the borrowed input and
+//         output slices. The pointers thus cannot be invalidated.
+unsafe impl Send for OutOfPlaceAudioBuffers<'_> {}
+unsafe impl Sync for OutOfPlaceAudioBuffers<'_> {}
+
 /// An event queue that can be used as either an input queue or an output queue. This is always
 /// allocated through a `Pin<Arc<EventQueue>>` so the pointers are stable.
 //
@@ -101,7 +106,7 @@ impl<'a> ProcessData<'a> {
     pub fn new(
         buffers: AudioBuffers<'a>,
         sample_rate: f64,
-        tempo: f32,
+        tempo: f64,
         time_sig_numerator: u16,
         time_sig_denominator: u16,
     ) -> Self {
@@ -124,7 +129,7 @@ impl<'a> ProcessData<'a> {
                     | CLAP_TRANSPORT_IS_PLAYING,
                 song_pos_beats: 0,
                 song_pos_seconds: 0,
-                tempo: tempo as f64,
+                tempo,
                 tempo_inc: 0.0,
                 // These four currently aren't used
                 loop_start_beats: 0,
@@ -144,7 +149,7 @@ impl<'a> ProcessData<'a> {
     /// Construct the CLAP process data, and evaluate a closure with it. The `clap_process_data`
     /// contains raw pointers to this struct's data, so the closure is there to prevent dangling
     /// pointers.
-    pub fn with_process_data<T, F: FnOnce(clap_process) -> T>(&mut self, f: F) -> T {
+    pub fn with_clap_process_data<T, F: FnOnce(clap_process) -> T>(&mut self, f: F) -> T {
         let num_samples = self.buffers.len();
         let (inputs, outputs) = self.buffers.io_buffers();
 

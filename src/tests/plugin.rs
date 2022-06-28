@@ -6,6 +6,7 @@ use std::process::Command;
 
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
+use crate::plugin::audio_thread::process::{AudioBuffers, OutOfPlaceAudioBuffers, ProcessData};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::{NotePortConfig, NotePorts};
 use crate::plugin::library::PluginLibrary;
@@ -94,21 +95,56 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         //       high sample rates, and with very low sample rates
                         // TODO: Have a test case with a huge (but still some definition of
                         //       reasoanble) maximum buffer size
-                        const SAMPLE_RATE: f32 = 44_100.0;
+                        const SAMPLE_RATE: f64 = 44_100.0;
                         const BUFFER_SIZE: usize = 512;
+                        const TEMPO: f64 = 110.0;
+                        const TIME_SIG_NUMERATOR: u16 = 4;
+                        const TIME_SIG_DENOMINATOR: u16 = 4;
+
+                        // This test only uses out-of-place processing
+                        // TODO: Fill these buffers with white noise instead of silence
+                        let input_buffers: Vec<Vec<Vec<f32>>> = audio_ports_config
+                            .inputs
+                            .iter()
+                            .map(|port_config| {
+                                vec![vec![0.0; BUFFER_SIZE]; port_config.num_channels as usize]
+                            })
+                            .collect();
+                        let mut output_buffers: Vec<Vec<Vec<f32>>> = audio_ports_config
+                            .outputs
+                            .iter()
+                            .map(|port_config| {
+                                vec![vec![0.0; BUFFER_SIZE]; port_config.num_channels as usize]
+                            })
+                            .collect();
+                        let mut process_data = ProcessData::new(
+                            AudioBuffers::OutOfPlace(
+                                OutOfPlaceAudioBuffers::new(&input_buffers, &mut output_buffers)
+                                    .unwrap(),
+                            ),
+                            SAMPLE_RATE,
+                            TEMPO,
+                            TIME_SIG_NUMERATOR,
+                            TIME_SIG_DENOMINATOR,
+                        );
+
                         plugin.activate(SAMPLE_RATE, 0, BUFFER_SIZE)?;
 
                         plugin.on_audio_thread(|plugin| -> Result<()> {
+                            // NOTE: We intentionally do not disable denormals here
                             plugin.start_processing()?;
-
-                            // TODO: Process audio in the audio thread and check the output
-
+                            plugin
+                                .process(&mut process_data)
+                                .context("Error during audio processing")?;
                             plugin.stop_processing();
 
                             Ok(())
                         })?;
 
                         plugin.deactivate();
+
+                        // TODO: Check whether the input is unchanged
+                        // TODO: Check the output for denormals, subnormal numbers, and
 
                         Ok((plugin, audio_ports_config, note_port_config))
                     })

@@ -2,10 +2,15 @@
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
+use clap_sys::process::{
+    CLAP_PROCESS_CONTINUE, CLAP_PROCESS_CONTINUE_IF_NOT_QUIET, CLAP_PROCESS_ERROR,
+    CLAP_PROCESS_TAIL,
+};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
+use self::process::ProcessData;
 use super::ext::Extension;
 use super::instance::Plugin;
 
@@ -22,6 +27,16 @@ pub struct PluginAudioThread<'a> {
     /// To honor CLAP's thread safety guidelines, this audio thread abstraction cannot be shared
     /// with or sent to other threads.
     _send_sync_marker: PhantomData<*const ()>,
+}
+
+/// The equivalent of `clap_process_status`, minus the `CLAP_PROCESS_ERROR` value as this is already
+/// treated as an error by `PluginAudioThread::process()`.
+#[derive(Debug)]
+pub enum ProcessStatus {
+    Continue,
+    ContinueIfNotQuiet,
+    Tail,
+    Sleep,
 }
 
 /// This allows methods from the CLAP plugin to be called directly independently of any
@@ -75,6 +90,28 @@ impl<'a> PluginAudioThread<'a> {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::activate()' returned false")
+        }
+    }
+
+    /// Process audio. If the plugin returned either `CLAP_PROCESS_ERROR` or an unknown process
+    /// status code, then this will return an error. See
+    /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
+    /// preconditions.
+    pub fn process(&self, process_data: &mut ProcessData) -> Result<ProcessStatus> {
+        let result = process_data.with_clap_process_data(|clap_process_data| unsafe {
+            (self.plugin.process)(self.as_ptr(), &clap_process_data)
+        });
+
+        match result {
+            CLAP_PROCESS_ERROR => anyhow::bail!(
+                "The plugin returned 'CLAP_PROCESS_ERROR' from 'clap_plugin::process()'"
+            ),
+            CLAP_PROCESS_CONTINUE => Ok(ProcessStatus::Continue),
+            CLAP_PROCESS_CONTINUE_IF_NOT_QUIET => Ok(ProcessStatus::ContinueIfNotQuiet),
+            CLAP_PROCESS_TAIL => Ok(ProcessStatus::Tail),
+            result => anyhow::bail!(
+                "The plugin returned an unknown 'clap_process_status' value {result} from 'clap_plugin::process()'"
+            ),
         }
     }
 

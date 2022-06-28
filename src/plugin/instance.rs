@@ -155,14 +155,14 @@ impl<'lib> Plugin<'lib> {
     /// preconditions.
     pub fn activate(
         &self,
-        sample_rate: f32,
+        sample_rate: f64,
         min_buffer_size: usize,
         max_buffer_size: usize,
     ) -> Result<()> {
         if unsafe {
             (self.handle.as_ref().activate)(
                 self.as_ptr(),
-                sample_rate as f64,
+                sample_rate,
                 min_buffer_size as u32,
                 max_buffer_size as u32,
             )
