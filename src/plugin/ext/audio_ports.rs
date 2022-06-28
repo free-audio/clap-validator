@@ -9,7 +9,7 @@ use clap_sys::ext::draft::ambisonic::CLAP_PORT_AMBISONIC;
 use clap_sys::ext::draft::cv::CLAP_PORT_CV;
 use clap_sys::ext::draft::surround::CLAP_PORT_SURROUND;
 use clap_sys::id::CLAP_INVALID_ID;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr::NonNull;
@@ -71,13 +71,11 @@ impl AudioPorts<'_> {
         // Audio ports have a stable ID attribute that can be used to connect input and output ports
         // so the host can do in-place processing. This uses stable IDs rather than the indices in
         // the list. To make it easier for us, we'll translate those stable IDs to vector indices.
-        // These two vectors contain a `(stable_idx, in_place_pair_stable_idx)` pair for each port.
-        // If the `in_place_pair_stable_idx` is `CLAP_INVALID_ID`, then the port does not have an
-        // in-place pair.
-        let mut input_stable_index_pairs: Vec<(u32, u32)> = Vec::new();
-        let mut output_stable_index_pairs: Vec<(u32, u32)> = Vec::new();
-        // FIXME: Can input and output ports have overlapping stable indices?
-        let mut stable_indices: HashSet<u32> = HashSet::new();
+        // These two hashmaps are keyed by the port's stable ID, and the value is a pair containing
+        // the port's index in the input/output port vector, and the stable ID of its in-place pair
+        // port.
+        let mut input_stable_index_pairs: HashMap<u32, (usize, u32)> = HashMap::new();
+        let mut output_stable_index_pairs: HashMap<u32, (usize, u32)> = HashMap::new();
 
         for i in 0..num_inputs {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
@@ -89,13 +87,13 @@ impl AudioPorts<'_> {
             is_audio_port_type_consistent(&info).with_context(|| format!("Inconsistent channel count for output port {i} ({num_outputs} total output ports)"))?;
 
             // We'll convert these stable IDs to vector indices later
-            input_stable_index_pairs.push((info.id, info.in_place_pair));
-            if !stable_indices.insert(info.id) {
+            if input_stable_index_pairs.contains_key(&info.id) {
                 anyhow::bail!(
-                    "The stable ID of input port {i} ({}) is a duplicate",
+                    "The stable ID of input audio port {i} ({}) is a duplicate",
                     info.id
                 );
             }
+            input_stable_index_pairs.insert(info.id, (i as usize, info.in_place_pair));
 
             config.inputs.push(AudioPort {
                 num_channels: info.channel_count,
@@ -114,13 +112,13 @@ impl AudioPorts<'_> {
 
             is_audio_port_type_consistent(&info).with_context(|| format!("Inconsistent channel count for output port {i} ({num_outputs} total output ports)"))?;
 
-            output_stable_index_pairs.push((info.id, info.in_place_pair));
-            if !stable_indices.insert(info.id) {
+            if output_stable_index_pairs.contains_key(&info.id) {
                 anyhow::bail!(
-                    "The stable ID of output port {i} ({}) is a duplicate",
+                    "The stable ID of output audio port {i} ({}) is a duplicate",
                     info.id
                 );
             }
+            output_stable_index_pairs.insert(info.id, (i as usize, info.in_place_pair));
 
             config.outputs.push(AudioPort {
                 num_channels: info.channel_count,
@@ -128,25 +126,23 @@ impl AudioPorts<'_> {
             });
         }
 
-        // Now we need to conver the stable in-place pair indices to vector indices
-        for (input_port_idx, (input_stable_id, pair_stable_id)) in input_stable_index_pairs
+        // Now we need to convert the stable in-place pair indices to vector indices
+        for (input_stable_id, (input_port_idx, pair_stable_id)) in input_stable_index_pairs
             .iter()
-            .enumerate()
             .filter(|(_, (_, pair_stable_id))| *pair_stable_id != CLAP_INVALID_ID)
         {
             match output_stable_index_pairs
                 .iter()
-                .enumerate()
-                .find(|(_, (output_stable_id, _))| output_stable_id == pair_stable_id)
+                .find(|(output_stable_id, (_, _))| *output_stable_id == pair_stable_id)
             {
                 // This relation should be symmetrical
-                Some((pair_output_port_idx, (_, output_pair_stable_id)))
+                Some((_, (pair_output_port_idx, output_pair_stable_id)))
                     if output_pair_stable_id == input_stable_id =>
                 {
-                    config.inputs[input_port_idx].in_place_pair_idx = Some(pair_output_port_idx);
-                    config.inputs[pair_output_port_idx].in_place_pair_idx = Some(input_port_idx);
+                    config.inputs[*input_port_idx].in_place_pair_idx = Some(*pair_output_port_idx);
+                    config.inputs[*pair_output_port_idx].in_place_pair_idx = Some(*input_port_idx);
                 }
-                Some((pair_output_port_idx, (output_stable_id, output_pair_stable_id))) => {
+                Some((output_stable_id, (pair_output_port_idx, output_pair_stable_id))) => {
                     anyhow::bail!("Input port {input_port_idx} with stable ID {input_stable_id} is connected to output port {pair_output_port_idx} with stable ID {output_stable_id} through an in-place pair, but the relation is not symmetrical. \
                                    The output port reports to have an in-place pair with stable ID {output_pair_stable_id}.")
                 }
@@ -156,25 +152,23 @@ impl AudioPorts<'_> {
 
         // This needs to be repeated for output ports that are connected to input ports in case an
         // output port has a stable ID pair but the corresponding input port does not
-        for (output_port_idx, (output_stable_id, pair_stable_id)) in output_stable_index_pairs
+        for (output_stable_id, (output_port_idx, pair_stable_id)) in output_stable_index_pairs
             .iter()
-            .enumerate()
             .filter(|(_, (_, pair_stable_id))| *pair_stable_id != CLAP_INVALID_ID)
         {
             match input_stable_index_pairs
                 .iter()
-                .enumerate()
-                .find(|(_, (input_stable_id, _))| input_stable_id == pair_stable_id)
+                .find(|(input_stable_id, (_, _))| *input_stable_id == pair_stable_id)
             {
-                Some((pair_input_port_idx, (_, input_pair_stable_id)))
+                Some((_, (pair_input_port_idx, input_pair_stable_id)))
                     if input_pair_stable_id == output_stable_id =>
                 {
                     // We should have already done this. If this is not the case, then this is an
                     // error in the validator
-                    assert_eq!(config.inputs[output_port_idx].in_place_pair_idx, Some(pair_input_port_idx));
-                    assert_eq!(config.inputs[pair_input_port_idx].in_place_pair_idx, Some(output_port_idx));
+                    assert_eq!(config.inputs[*output_port_idx].in_place_pair_idx, Some(*pair_input_port_idx));
+                    assert_eq!(config.inputs[*pair_input_port_idx].in_place_pair_idx, Some(*output_port_idx));
                 }
-                Some((pair_input_port_idx, (input_stable_id, input_pair_stable_id))) => {
+                Some((input_stable_id, (pair_input_port_idx, input_pair_stable_id))) => {
                     anyhow::bail!("Output port {output_port_idx} with stable ID {output_stable_id} is connected to input port {pair_input_port_idx} with stable ID {input_stable_id} through an in-place pair, but the relation is not symmetrical. \
                                    The input port reports to have an in-place pair with stable ID {input_pair_stable_id}.")
                 }
