@@ -89,7 +89,7 @@ impl<'a> PluginAudioThread<'a> {
         if unsafe { (self.plugin.start_processing)(self.as_ptr()) } {
             Ok(())
         } else {
-            anyhow::bail!("'clap_plugin::activate()' returned false")
+            anyhow::bail!("'clap_plugin::start_processing()' returned false")
         }
     }
 
