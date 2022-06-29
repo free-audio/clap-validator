@@ -4,18 +4,19 @@
 use anyhow::{Context, Result};
 use clap::{Args, ValueEnum};
 use clap_sys::version::clap_version_is_compatible;
-use indicatif::{MultiProgress, ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::plugin::library::PluginLibrary;
-use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult};
+use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult, TestStatus};
 
-/// The results of running the validation test suite on one or more plugins.
+/// The results of running the validation test suite on one or more plugins. Use the
+/// [`tally()`][Self::tally()] method to compute the number of successful and failed tests.
 ///
-/// Uses a `BTreeMap`s purely so the order is stable.
+/// Uses `BTreeMap`s purely so the order is stable.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ValidationResult {
@@ -26,6 +27,16 @@ pub struct ValidationResult {
     /// A map indexed by plugin IDs containing the results of running the per-plugin tests on one or
     /// more plugins.
     pub plugin_tests: BTreeMap<String, Vec<TestResult>>,
+}
+
+/// Statistics for the validator.
+pub struct ValidationTally {
+    /// The number of passed test cases.
+    pub num_passed: u32,
+    /// The number of failed or crashed test cases.
+    pub num_failed: u32,
+    /// The number of skipped test cases.
+    pub num_skipped: u32,
 }
 
 /// Options for the validator.
@@ -283,4 +294,39 @@ pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
             settings.output_file.display()
         )
     })
+}
+
+impl ValidationResult {
+    /// Count the number of passing, failing, and skipped tests.
+    pub fn tally(&self) -> ValidationTally {
+        let mut num_passed = 0;
+        let mut num_failed = 0;
+        let mut num_skipped = 0;
+        for test in self
+            .plugin_library_tests
+            .iter()
+            .map(|(_, test)| test)
+            .chain(self.plugin_tests.iter().map(|(_, test)| test))
+            .flatten()
+        {
+            match test.status {
+                TestStatus::Success { .. } => num_passed += 1,
+                TestStatus::Crashed { .. } | TestStatus::Failed { .. } => num_failed += 1,
+                TestStatus::Skipped { .. } => num_skipped += 1,
+            }
+        }
+
+        ValidationTally {
+            num_passed,
+            num_failed,
+            num_skipped,
+        }
+    }
+}
+
+impl ValidationTally {
+    /// Get the total number of tests run.
+    pub fn total(&self) -> u32 {
+        self.num_passed + self.num_failed + self.num_skipped
+    }
 }

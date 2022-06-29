@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
+use console::style;
 use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
+
+use crate::tests::TestResult;
 
 mod hosting;
 mod index;
@@ -59,27 +62,66 @@ fn main() -> ExitCode {
     match &cli.command {
         Commands::Validate(settings) => match validator::validate(settings) {
             Ok(result) => {
-                // If any of the tests failed, this process should exiti with a failure code
-                let failed = result
-                    .plugin_library_tests
-                    .iter()
-                    .any(|(_, tests)| tests.iter().any(|test| test.status.failed()))
-                    || result
-                        .plugin_tests
-                        .iter()
-                        .any(|(_, tests)| tests.iter().any(|test| test.status.failed()));
-
+                let tally = result.tally();
                 if settings.json {
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&result).expect("Could not format JSON")
                     );
                 } else {
-                    // TODO: Pretty printing
-                    dbg!(result);
+                    let print_test = |test: TestResult| {
+                        // TODO: We may want to wrap this for the terminal
+                        println!("   - {}: {}", test.name, test.description);
+
+                        let status_text = match test.status {
+                            tests::TestStatus::Success { .. } => style("PASSED").green(),
+                            tests::TestStatus::Crashed { .. } => style("CRASHED").red().bold(),
+                            tests::TestStatus::Failed { .. } => style("FAILED").red(),
+                            tests::TestStatus::Skipped { .. } => style("SKIPPED"),
+                        };
+                        match test.status.reason() {
+                            Some(reason) => println!("     {}: {}", status_text, reason),
+                            None => println!("     {}", status_text),
+                        }
+                    };
+
+                    println!("Plugin library tests:");
+                    for (library_path, tests) in result.plugin_library_tests {
+                        println!();
+                        println!(" - {}", library_path.display());
+
+                        for test in tests {
+                            println!();
+                            print_test(test);
+                        }
+                    }
+
+                    println!();
+                    println!("Plugin tests:");
+                    for (plugin_id, tests) in result.plugin_tests {
+                        println!();
+                        println!(" - {}", plugin_id);
+
+                        for test in tests {
+                            println!();
+                            print_test(test);
+                        }
+                    }
+
+                    let num_tests = tally.total();
+                    println!();
+                    println!(
+                        "{} {} run, {} passed, {} failed, {} skipped",
+                        num_tests,
+                        if num_tests == 1 { "test" } else { "tests" },
+                        tally.num_passed,
+                        tally.num_failed,
+                        tally.num_skipped
+                    )
                 }
 
-                if failed {
+                // If any of the tests failed, this process should exiti with a failure code
+                if tally.num_failed > 0 {
                     return ExitCode::FAILURE;
                 }
             }
@@ -100,12 +142,10 @@ fn main() -> ExitCode {
                     serde_json::to_string_pretty(&plugin_index).expect("Could not format JSON")
                 );
             } else {
-                let mut first = true;
-                for (plugin_path, metadata) in plugin_index.0 {
-                    if !first {
+                for (i, (plugin_path, metadata)) in plugin_index.0.into_iter().enumerate() {
+                    if i > 0 {
                         println!();
                     }
-                    first = false;
 
                     println!(
                         "{}: (CLAP {}.{}.{}, contains {} {})",

@@ -1,7 +1,7 @@
 //! Utilities and data structures for indexing plugins.
 
 use anyhow::{Context, Result};
-use indicatif::{ProgressBar, ProgressIterator};
+use indicatif::ProgressBar;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
