@@ -69,9 +69,14 @@ fn main() -> ExitCode {
                         serde_json::to_string_pretty(&result).expect("Could not format JSON")
                     );
                 } else {
+                    let wrapping_options =
+                        textwrap::Options::with_termwidth().subsequent_indent("       ");
+                    let print_wrapped = |text: String| {
+                        println!("{}", textwrap::fill(&text, wrapping_options.clone()))
+                    };
                     let print_test = |test: TestResult| {
                         // TODO: We may want to wrap this for the terminal
-                        println!("   - {}: {}", test.name, test.description);
+                        print_wrapped(format!("   - {}: {}", test.name, test.description));
 
                         let status_text = match test.status {
                             tests::TestStatus::Success { .. } => style("PASSED").green(),
@@ -79,10 +84,11 @@ fn main() -> ExitCode {
                             tests::TestStatus::Failed { .. } => style("FAILED").red(),
                             tests::TestStatus::Skipped { .. } => style("SKIPPED"),
                         };
-                        match test.status.reason() {
-                            Some(reason) => println!("     {}: {}", status_text, reason),
-                            None => println!("     {}", status_text),
-                        }
+                        let test_result = match test.status.reason() {
+                            Some(reason) => format!("     {}: {}", status_text, reason),
+                            None => format!("     {}", status_text),
+                        };
+                        print_wrapped(test_result);
                     };
 
                     println!("Plugin library tests:");
