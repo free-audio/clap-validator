@@ -70,6 +70,11 @@ pub struct ValidatorSettings {
     /// This can be useful if the plugin's output is being obscured by the progress bar.
     #[clap(value_parser, long)]
     pub hide_progress: bool,
+    /// Only show failed tests.
+    ///
+    /// This affects both the human readable and the JSON output.
+    #[clap(value_parser, long)]
+    pub only_failed: bool,
     /// Run the tests within this process.
     ///
     /// Tests are normally run in separate processes in case the plugin crashes. Another benefit

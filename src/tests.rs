@@ -163,6 +163,14 @@ pub trait TestCase<'a>: Sized + 'static {
 }
 
 impl TestStatus {
+    /// Returns `true` if this status should be considered as a failure.
+    pub fn failed(&self) -> bool {
+        match self {
+            TestStatus::Success { .. } | TestStatus::Skipped { .. } => false,
+            TestStatus::Crashed { .. } | TestStatus::Failed { .. } => true,
+        }
+    }
+
     /// Get the textual explanation for the test status, if available.
     pub fn reason(&self) -> Option<&str> {
         match self {

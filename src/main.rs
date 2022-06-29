@@ -61,8 +61,46 @@ fn main() -> ExitCode {
 
     match &cli.command {
         Commands::Validate(settings) => match validator::validate(settings) {
-            Ok(result) => {
+            Ok(mut result) => {
                 let tally = result.tally();
+
+                // Filtering out tests should be done after we did the tally for consistency's sake
+                if settings.only_failed {
+                    // The `.drain_filter()` methods have not been stabilized yet, so to make things
+                    // easy for us we'll just inefficiently rebuild the data structures
+                    result.plugin_library_tests = result
+                        .plugin_library_tests
+                        .into_iter()
+                        .filter_map(|(library_path, tests)| {
+                            let tests: Vec<_> = tests
+                                .into_iter()
+                                .filter(|test| test.status.failed())
+                                .collect();
+                            if tests.is_empty() {
+                                None
+                            } else {
+                                Some((library_path, tests))
+                            }
+                        })
+                        .collect();
+
+                    result.plugin_tests = result
+                        .plugin_tests
+                        .into_iter()
+                        .filter_map(|(plugin_id, tests)| {
+                            let tests: Vec<_> = tests
+                                .into_iter()
+                                .filter(|test| test.status.failed())
+                                .collect();
+                            if tests.is_empty() {
+                                None
+                            } else {
+                                Some((plugin_id, tests))
+                            }
+                        })
+                        .collect();
+                }
+
                 if settings.json {
                     println!(
                         "{}",
@@ -91,31 +129,37 @@ fn main() -> ExitCode {
                         print_wrapped(test_result);
                     };
 
-                    println!("Plugin library tests:");
-                    for (library_path, tests) in result.plugin_library_tests {
-                        println!();
-                        println!(" - {}", library_path.display());
-
-                        for test in tests {
+                    if !result.plugin_library_tests.is_empty() {
+                        println!("Plugin library tests:");
+                        for (library_path, tests) in result.plugin_library_tests {
                             println!();
-                            print_test(test);
+                            println!(" - {}", library_path.display());
+
+                            for test in tests {
+                                println!();
+                                print_test(test);
+                            }
                         }
+
+                        println!();
                     }
 
-                    println!();
-                    println!("Plugin tests:");
-                    for (plugin_id, tests) in result.plugin_tests {
-                        println!();
-                        println!(" - {}", plugin_id);
-
-                        for test in tests {
+                    if !result.plugin_tests.is_empty() {
+                        println!("Plugin tests:");
+                        for (plugin_id, tests) in result.plugin_tests {
                             println!();
-                            print_test(test);
+                            println!(" - {}", plugin_id);
+
+                            for test in tests {
+                                println!();
+                                print_test(test);
+                            }
                         }
+
+                        println!();
                     }
 
                     let num_tests = tally.total();
-                    println!();
                     println!(
                         "{} {} run, {} passed, {} failed, {} skipped",
                         num_tests,
