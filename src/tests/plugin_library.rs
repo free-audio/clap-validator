@@ -70,7 +70,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     }
 
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
-        let result = match &self {
+        let status = match &self {
             PluginLibraryTestCase::ScanTime => {
                 let test_start = Instant::now();
 
@@ -137,6 +137,6 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             }
         };
 
-        self.create_result(result)
+        self.create_result(status)
     }
 }

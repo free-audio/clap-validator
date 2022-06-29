@@ -76,7 +76,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
     }
 
     fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
-        let result = match &self {
+        let status = match &self {
             PluginTestCase::BasicOutOfPlaceAudioProcessing => {
                 let mut prng = new_prng();
 
@@ -253,7 +253,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             }
         };
 
-        self.create_result(result)
+        self.create_result(status)
     }
 }
 

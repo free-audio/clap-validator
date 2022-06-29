@@ -63,11 +63,11 @@ fn main() -> ExitCode {
                 let failed = result
                     .plugin_library_tests
                     .iter()
-                    .any(|(_, tests)| tests.iter().any(|test| test.result.failed()))
+                    .any(|(_, tests)| tests.iter().any(|test| test.status.failed()))
                     || result
                         .plugin_tests
                         .iter()
-                        .any(|(_, tests)| tests.iter().any(|test| test.result.failed()));
+                        .any(|(_, tests)| tests.iter().any(|test| test.status.failed()));
 
                 if settings.json {
                     println!(

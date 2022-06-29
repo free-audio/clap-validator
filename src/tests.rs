@@ -31,7 +31,7 @@ pub struct TestResult {
     /// A description of what this test case has tested.
     pub description: String,
     /// The outcome of the test.
-    pub result: TestStatus,
+    pub status: TestStatus,
 }
 
 /// The result of running a test. Skipped and failed test may optionally include an explanation for
@@ -73,11 +73,11 @@ pub trait TestCase<'a>: Sized + 'static {
     fn description(&self) -> String;
 
     /// Create a [`TestResult`] for this test case.
-    fn create_result(&self, result: TestStatus) -> TestResult {
+    fn create_result(&self, status: TestStatus) -> TestResult {
         TestResult {
             name: self.as_str().to_string(),
             description: self.description(),
-            result,
+            status,
         }
     }
 
@@ -141,7 +141,7 @@ pub trait TestCase<'a>: Sized + 'static {
             return Ok(TestResult {
                 name: self.as_str().to_string(),
                 description: self.description(),
-                result: TestStatus::Crashed {
+                status: TestStatus::Crashed {
                     reason: exit_status.to_string(),
                 },
             });
