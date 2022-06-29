@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use clap::{Args, ValueEnum};
 use clap_sys::version::clap_version_is_compatible;
+use indicatif::{MultiProgress, ProgressBar, ProgressIterator, ProgressStyle};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
@@ -107,7 +108,33 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     // TODO: We now gather all the results and print everything in one go at the end. This is the
     //       only way to do JSON, but for the human readable version printing things as we go could
     //       be nice.
+
+    let multi_progress = MultiProgress::new();
+
+    let progress_style =
+        ProgressStyle::default_bar().template("[{elapsed_precise}] {bar} {pos}/{len} {msg}");
+    let library_progress = multi_progress
+        .add(ProgressBar::new(settings.paths.len() as u64).with_style(progress_style.clone()));
+    // The length of this progress bar depends on the plugin library. All of the below progress bars
+    // will be reset multiple times during the validation process
+    let plugin_progress =
+        multi_progress.add(ProgressBar::new(0).with_style(progress_style.clone()));
+    // This progress bar is used for both plugin library and plugin instance tests to slightly
+    // reduce clutter. After getting the plugin's metadata, the length is set increased by
+    // `num_plugins * PluginTestCase::ALL.len()`.
+    let test_progress = multi_progress.add(
+        ProgressBar::new(PluginLibraryTestCase::ALL.len() as u64)
+            .with_style(progress_style.clone()),
+    );
+
+    // NOTE: These multi-progress bars only work when another thread is drawing them, because reasons...
+    //       https://github.com/console-rs/indicatif/issues/33
+    std::thread::spawn(move || multi_progress.join());
+
     for library_path in &settings.paths {
+        library_progress.inc(1);
+        library_progress.set_message(format!("Validating '{}'", library_path.display()));
+
         // We distinguish between two separate classes of tests: tests for an entire plugin library,
         // and tests for a single plugin contained witin that library. The former group of tests are
         // run first and they only receive the path to the plugin library as their argument, while
@@ -116,7 +143,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
         // mode makes a bit more sense. Otherwise we would be measuring plugin scanning time on
         // libraries that may still be loaded in the process.
         let mut plugin_library_results = Vec::new();
+        test_progress.reset();
+        test_progress.set_length(PluginLibraryTestCase::ALL.len() as u64);
         for test in PluginLibraryTestCase::ALL {
+            test_progress.inc(1);
+            test_progress.set_message(format!("Running plugin library test '{}'", test.as_str()));
             match &settings.test_filter {
                 Some(test_filter) if !test.as_str().contains(test_filter) => continue,
                 _ => (),
@@ -154,7 +185,16 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
             continue;
         }
 
+        plugin_progress.reset();
+        plugin_progress.set_length(metadata.plugins.len() as u64);
+        // We only now know how many tests will be run for this plugin library
+        test_progress.inc_length((PluginTestCase::ALL.len() * metadata.plugins.len()) as u64);
         for plugin_metadata in metadata.plugins {
+            plugin_progress.inc(1);
+            plugin_progress.set_message(format!(
+                "Validating {} ({})",
+                plugin_metadata.name, plugin_metadata.id
+            ));
             if results.plugin_tests.contains_key(&plugin_metadata.id) {
                 anyhow::bail!(
                     "Duplicate plugin ID in validation results: '{}' ({}) has already been validated",
@@ -166,12 +206,17 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
             // It's possible to filter by plugin ID in case you want to validate a single plugin
             // from a plugin library containing multiple plugins
             match &settings.plugin_id {
-                Some(plugin_id) if &plugin_metadata.id != plugin_id => continue,
+                Some(plugin_id) if &plugin_metadata.id != plugin_id => {
+                    test_progress.inc(PluginTestCase::ALL.len() as u64);
+                    continue;
+                }
                 _ => (),
             }
 
             let mut plugin_test_results = Vec::new();
             for test in PluginTestCase::ALL {
+                test_progress.inc(1);
+                test_progress.set_message(format!("Running plugin test '{}'", test.as_str()));
                 match &settings.test_filter {
                     Some(test_filter) if !test.as_str().contains(test_filter) => continue,
                     _ => (),

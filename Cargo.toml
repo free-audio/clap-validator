@@ -14,7 +14,9 @@ anyhow = "1.0.58"
 clap = { version = "3.2.6", features = ["derive"] }
 # TODO: Switch back to the crates.rs version once the debug prints are merged
 clap-sys = { git = "https://github.com/robbert-vdh/clap-sys.git", branch = "feature/debug-derives" }
+console = { version = "0.15.0", default_features = false }
 crossbeam = "0.8.1"
+indicatif = { version = "0.16.2", default_features = false }
 libloading = "0.7.3"
 log = "0.4"
 log-panics = "2.0"

@@ -1,6 +1,7 @@
 //! Utilities and data structures for indexing plugins.
 
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressIterator};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -36,11 +37,14 @@ pub fn index() -> Index {
         }
     };
 
+    let spinner = ProgressBar::new_spinner();
     for directory in directories {
         for clap_plugin_path in walk_clap_plugins(&directory) {
+            spinner.tick();
             let metadata = PluginLibrary::load(clap_plugin_path.path())
                 .with_context(|| format!("Could not load '{}'", clap_plugin_path.path().display()))
                 .and_then(|plugin| {
+                    std::thread::sleep_ms(100);
                     plugin.metadata().with_context(|| {
                         format!(
                             "Could not fetch plugin metadata for '{}'",
