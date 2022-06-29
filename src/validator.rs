@@ -122,14 +122,12 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     // This progress bar is used for both plugin library and plugin instance tests to slightly
     // reduce clutter. After getting the plugin's metadata, the length is set increased by
     // `num_plugins * PluginTestCase::ALL.len()`.
-    let test_progress = multi_progress.add(
-        ProgressBar::new(PluginLibraryTestCase::ALL.len() as u64)
-            .with_style(progress_style.clone()),
-    );
+    let test_progress = multi_progress
+        .add(ProgressBar::new(PluginLibraryTestCase::ALL.len() as u64).with_style(progress_style));
 
     // NOTE: These multi-progress bars only work when another thread is drawing them, because reasons...
     //       https://github.com/console-rs/indicatif/issues/33
-    std::thread::spawn(move || multi_progress.join());
+    let progress_bar_thread = std::thread::spawn(move || multi_progress.join_and_clear());
 
     for library_path in &settings.paths {
         library_progress.inc(1);
@@ -237,6 +235,14 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                 .insert(plugin_metadata.id, plugin_test_results);
         }
     }
+
+    test_progress.finish_and_clear();
+    plugin_progress.finish_and_clear();
+    library_progress.finish_and_clear();
+    progress_bar_thread
+        .join()
+        .expect("Progress bar thread panicked")
+        .context("Drawing the progress bar failed")?;
 
     if let Some(plugin_id) = &settings.plugin_id {
         if results.plugin_tests.is_empty() {

@@ -61,6 +61,8 @@ pub fn index() -> Index {
         }
     }
 
+    spinner.finish_and_clear();
+
     index
 }
 
