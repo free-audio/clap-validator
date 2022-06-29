@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use console::style;
+use colored::Colorize;
 use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
 
@@ -117,10 +117,10 @@ fn main() -> ExitCode {
                         print_wrapped(format!("   - {}: {}", test.name, test.description));
 
                         let status_text = match test.status {
-                            tests::TestStatus::Success { .. } => style("PASSED").green(),
-                            tests::TestStatus::Crashed { .. } => style("CRASHED").red().bold(),
-                            tests::TestStatus::Failed { .. } => style("FAILED").red(),
-                            tests::TestStatus::Skipped { .. } => style("SKIPPED"),
+                            tests::TestStatus::Success { .. } => "PASSED".green(),
+                            tests::TestStatus::Crashed { .. } => "CRASHED".red().bold(),
+                            tests::TestStatus::Failed { .. } => "FAILED".red(),
+                            tests::TestStatus::Skipped { .. } => "SKIPPED".into(),
                         };
                         let test_result = match test.status.reason() {
                             Some(reason) => format!("     {}: {}", status_text, reason),
