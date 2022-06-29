@@ -7,10 +7,11 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::events::{
-    clap_event_header, clap_event_transport, clap_input_events, clap_output_events,
-    CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_TRANSPORT, CLAP_TRANSPORT_HAS_BEATS_TIMELINE,
-    CLAP_TRANSPORT_HAS_SECONDS_TIMELINE, CLAP_TRANSPORT_HAS_TEMPO,
-    CLAP_TRANSPORT_HAS_TIME_SIGNATURE, CLAP_TRANSPORT_IS_PLAYING,
+    clap_event_header, clap_event_note, clap_event_transport, clap_input_events,
+    clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END,
+    CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_EVENT_TRANSPORT,
+    CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
+    CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_HAS_TIME_SIGNATURE, CLAP_TRANSPORT_IS_PLAYING,
 };
 use clap_sys::fixedpoint::{CLAP_BEATTIME_FACTOR, CLAP_SECTIME_FACTOR};
 use clap_sys::process::clap_process;
@@ -91,6 +92,8 @@ pub struct EventQueue {
 /// correct at the cost of more wasteful memory usage.
 #[repr(align(8))]
 pub enum Event {
+    /// `CLAP_EVENT_NOTE_ON`, `CLAP_EVENT_NOTE_OFF`, `CLAP_EVENT_NOTE_CHOKE`, or `CLAP_EVENT_NOTE_END`.
+    ClapNoteEvent(clap_event_note),
     /// An unhandled event type. This is only used when the plugin outputs an event we don't handle
     /// or recognize.
     Unknown(clap_event_header),
@@ -180,7 +183,8 @@ impl<'a> ProcessData<'a> {
         self.transport_info
     }
 
-    /// Advance the transport by a certain number of samples
+    /// Advance the transport by a certain number of samples. Make sure to also call
+    /// [`clear_events()`][Self::clear_events()].
     pub fn advance_transport(&mut self, samples: u32) {
         self.sample_pos += samples;
 
@@ -191,6 +195,13 @@ impl<'a> ProcessData<'a> {
         self.transport_info.song_pos_seconds = ((self.sample_pos as f64 / self.sample_rate)
             * CLAP_SECTIME_FACTOR as f64)
             .round() as i64;
+    }
+
+    /// Clear the event queues. Make sure to also call
+    /// [`advance_transport()`][Self::advance_transport()].
+    pub fn clear_events(&mut self) {
+        self.input_events.events.lock().unwrap().clear();
+        self.output_events.events.lock().unwrap().clear();
     }
 }
 
@@ -383,13 +394,22 @@ impl Event {
             anyhow::bail!("Null pointer provided for 'clap_event_header'");
         }
 
-        // TODO: Implement some events for things we'll send the plugin
-        Ok(Event::Unknown(*ptr))
+        match ((*ptr).space_id, ((*ptr).type_)) {
+            (
+                CLAP_CORE_EVENT_SPACE_ID,
+                CLAP_EVENT_NOTE_ON
+                | CLAP_EVENT_NOTE_OFF
+                | CLAP_EVENT_NOTE_CHOKE
+                | CLAP_EVENT_NOTE_END,
+            ) => Ok(Event::ClapNoteEvent(*(ptr as *const clap_event_note))),
+            (_, _) => Ok(Event::Unknown(*ptr)),
+        }
     }
 
     /// Get a pointer to the event's header
     pub fn header_ptr(&self) -> *const clap_event_header {
         match &self {
+            Event::ClapNoteEvent(event) => &event.header,
             Event::Unknown(header) => header,
         }
     }

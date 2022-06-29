@@ -21,7 +21,7 @@ pub struct NotePorts<'a> {
 }
 
 /// The note port configuration for a plugin.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NotePortConfig {
     /// Configuration for the plugin's input note ports.
     pub inputs: Vec<NotePort>,
@@ -30,7 +30,7 @@ pub struct NotePortConfig {
 }
 
 /// The configuration for a single note port.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NotePort {
     /// The preferred dialect for this note port.
     pub prefered_dialect: clap_note_dialect,
