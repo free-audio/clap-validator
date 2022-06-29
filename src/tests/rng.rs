@@ -5,7 +5,9 @@ use clap_sys::events::{
     clap_event_header, clap_event_note, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_OFF,
     CLAP_EVENT_NOTE_ON,
 };
-use clap_sys::ext::note_ports::CLAP_NOTE_DIALECT_CLAP;
+use clap_sys::ext::note_ports::{
+    CLAP_NOTE_DIALECT_CLAP, CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
+};
 use rand::Rng;
 use rand_pcg::Pcg32;
 
@@ -82,7 +84,10 @@ impl NoteGenerator {
             .contains(&CLAP_NOTE_DIALECT_CLAP);
         let supports_midi_events = self.config.inputs[note_port_idx]
             .supported_dialects
-            .contains(&CLAP_NOTE_DIALECT_CLAP);
+            .contains(&CLAP_NOTE_DIALECT_MIDI)
+            || self.config.inputs[note_port_idx]
+                .supported_dialects
+                .contains(&CLAP_NOTE_DIALECT_MIDI_MPE);
         let possible_events =
             NoteEventType::supported_types(supports_clap_note_events, supports_midi_events)
                 .with_context(|| format!("Note input port {note_port_idx} supports neither CLAP note events nor MIDI. This is technically allowed, but few hosts will be able to interact with the plugin."))?;
