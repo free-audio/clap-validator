@@ -44,7 +44,6 @@ pub fn index() -> Index {
             let metadata = PluginLibrary::load(clap_plugin_path.path())
                 .with_context(|| format!("Could not load '{}'", clap_plugin_path.path().display()))
                 .and_then(|plugin| {
-                    std::thread::sleep_ms(100);
                     plugin.metadata().with_context(|| {
                         format!(
                             "Could not fetch plugin metadata for '{}'",
