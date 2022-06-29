@@ -2,8 +2,9 @@
 
 use anyhow::{Context, Result};
 use clap_sys::events::{
-    clap_event_header, clap_event_note, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_OFF,
-    CLAP_EVENT_NOTE_ON,
+    clap_event_header, clap_event_note, clap_event_note_expression, CLAP_CORE_EVENT_SPACE_ID,
+    CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_NOTE_EXPRESSION_PRESSURE,
+    CLAP_NOTE_EXPRESSION_TUNING, CLAP_NOTE_EXPRESSION_VOLUME,
 };
 use clap_sys::ext::note_ports::{
     CLAP_NOTE_DIALECT_CLAP, CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
@@ -38,6 +39,8 @@ struct Note {
     pub key: i16,
     pub channel: i16,
     pub note_id: i32,
+    /// Whether the note has been choked, we can only send this event once per note.
+    pub choked: bool,
 }
 
 /// The different kinds of events we can generate. The event type chosen depends on the plugin.
@@ -57,17 +60,6 @@ enum NoteEventType {
 }
 
 impl NoteGenerator {
-    /// Create a new random note generator based on a plugin's note port configuration.
-    pub fn new(config: NotePortConfig) -> Self {
-        let num_inputs = config.inputs.len();
-
-        NoteGenerator {
-            config,
-            active_notes: vec![Vec::new(); num_inputs],
-            next_note_id: 0,
-        }
-    }
-
     /// Generate a random note event for one of the plugin's note ports depending on the port's
     /// capabilities. Returns an error if the plugin doesn't have any note ports or if the note
     /// ports don't support either MIDI or CLAP note events.
@@ -105,6 +97,7 @@ impl NoteGenerator {
                         key,
                         channel,
                         note_id,
+                        choked: false,
                     };
                     if self.active_notes[note_port_idx].contains(&note) {
                         continue;
@@ -112,9 +105,8 @@ impl NoteGenerator {
                     self.active_notes[note_port_idx].push(note);
                     self.next_note_id = self.next_note_id.wrapping_add(1);
 
-                    // TODO: Generate the note event, do the same thing for the other events
                     let velocity = prng.gen_range(0.0..=1.0);
-                    return Ok(Event::ClapNoteEvent(clap_event_note {
+                    return Ok(Event::ClapNote(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
@@ -138,9 +130,8 @@ impl NoteGenerator {
                     let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
                     let note = self.active_notes[note_port_idx].remove(note_idx);
 
-                    // TODO: Generate the note event, do the same thing for the other events
                     let velocity = prng.gen_range(0.0..=1.0);
-                    return Ok(Event::ClapNoteEvent(clap_event_note {
+                    return Ok(Event::ClapNote(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
@@ -155,9 +146,69 @@ impl NoteGenerator {
                         velocity,
                     }));
                 }
-                // TODO: Implement the rest of these events
-                NoteEventType::ClapNoteChoke => todo!(),
-                NoteEventType::ClapNoteExpression => todo!(),
+                NoteEventType::ClapNoteChoke => {
+                    if self.active_notes[note_port_idx].is_empty() {
+                        continue;
+                    }
+
+                    // A note can only be choked once
+                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                    let note = &mut self.active_notes[note_port_idx][note_idx];
+                    if note.choked {
+                        continue;
+                    }
+                    note.choked = true;
+
+                    // Does a velocity make any sense here? Probably not.
+                    let velocity = prng.gen_range(0.0..=1.0);
+                    return Ok(Event::ClapNote(clap_event_note {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_NOTE_CHOKE,
+                            flags: 0,
+                        },
+                        note_id: note.note_id,
+                        port_index: note_port_idx as i16,
+                        channel: note.channel,
+                        key: note.key,
+                        velocity,
+                    }));
+                }
+                NoteEventType::ClapNoteExpression => {
+                    if self.active_notes[note_port_idx].is_empty() {
+                        continue;
+                    }
+
+                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                    let note = &self.active_notes[note_port_idx][note_idx];
+
+                    let expression_id =
+                        prng.gen_range(CLAP_NOTE_EXPRESSION_VOLUME..=CLAP_NOTE_EXPRESSION_PRESSURE);
+                    let value_range = match expression_id {
+                        CLAP_NOTE_EXPRESSION_VOLUME => 0.0..=4.0,
+                        CLAP_NOTE_EXPRESSION_TUNING => -128.0..=128.0,
+                        _ => 0.0..=1.0,
+                    };
+                    let value = prng.gen_range(value_range);
+
+                    return Ok(Event::ClapNoteExpression(clap_event_note_expression {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_NOTE_CHOKE,
+                            flags: 0,
+                        },
+                        expression_id,
+                        note_id: note.note_id,
+                        port_index: note_port_idx as i16,
+                        channel: note.channel,
+                        key: note.key,
+                        value,
+                    }));
+                }
                 NoteEventType::MidiNoteOn => todo!(),
                 NoteEventType::MidiNoteOff => todo!(),
                 NoteEventType::MidiChannelPressure => todo!(),
@@ -169,6 +220,17 @@ impl NoteGenerator {
         }
 
         panic!("Unable to generate a random note event after 1024 tries, this is a bug in the validator");
+    }
+
+    /// Create a new random note generator based on a plugin's note port configuration.
+    pub fn new(config: NotePortConfig) -> Self {
+        let num_inputs = config.inputs.len();
+
+        NoteGenerator {
+            config,
+            active_notes: vec![Vec::new(); num_inputs],
+            next_note_id: 0,
+        }
     }
 }
 
