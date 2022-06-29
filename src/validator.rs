@@ -65,6 +65,11 @@ pub struct ValidatorSettings {
     /// This can be useful for validating noisy plugins.
     #[clap(value_parser, long)]
     pub hide_output: bool,
+    /// Don't show the progress bar.
+    ///
+    /// This can be useful if the plugin's output is being obscured by the progress bar.
+    #[clap(value_parser, long)]
+    pub hide_progress: bool,
     /// Run the tests within this process.
     ///
     /// Tests are normally run in separate processes in case the plugin crashes. Another benefit
@@ -138,7 +143,18 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 
     // NOTE: These multi-progress bars only work when another thread is drawing them, because reasons...
     //       https://github.com/console-rs/indicatif/issues/33
-    let progress_bar_thread = std::thread::spawn(move || multi_progress.join_and_clear());
+    let hide_progress = settings.hide_progress;
+    let progress_bar_thread = std::thread::spawn(move || {
+        // The progress bar may obscure the plugin's output, in which case being able to not show
+        // the progress bar at all may be useful
+        if hide_progress {
+            Ok(())
+        } else {
+            multi_progress
+                .join_and_clear()
+                .context("Drawing the progress bar failed")
+        }
+    });
 
     for library_path in &settings.paths {
         library_progress.inc(1);
@@ -252,8 +268,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     library_progress.finish_and_clear();
     progress_bar_thread
         .join()
-        .expect("Progress bar thread panicked")
-        .context("Drawing the progress bar failed")?;
+        .expect("Progress bar thread panicked")?;
 
     if let Some(plugin_id) = &settings.plugin_id {
         if results.plugin_tests.is_empty() {
