@@ -2,13 +2,15 @@
 
 use anyhow::{Context, Result};
 use clap_sys::events::{
-    clap_event_header, clap_event_note, clap_event_note_expression, CLAP_CORE_EVENT_SPACE_ID,
-    CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_NOTE_EXPRESSION_PRESSURE,
-    CLAP_NOTE_EXPRESSION_TUNING, CLAP_NOTE_EXPRESSION_VOLUME,
+    clap_event_header, clap_event_midi, clap_event_note, clap_event_note_expression,
+    CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_OFF,
+    CLAP_EVENT_NOTE_ON, CLAP_NOTE_EXPRESSION_PRESSURE, CLAP_NOTE_EXPRESSION_TUNING,
+    CLAP_NOTE_EXPRESSION_VOLUME,
 };
 use clap_sys::ext::note_ports::{
     CLAP_NOTE_DIALECT_CLAP, CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
 };
+use midi_consts::channel_event as midi;
 use rand::Rng;
 use rand_pcg::Pcg32;
 
@@ -60,6 +62,17 @@ enum NoteEventType {
 }
 
 impl NoteGenerator {
+    /// Create a new random note generator based on a plugin's note port configuration.
+    pub fn new(config: NotePortConfig) -> Self {
+        let num_inputs = config.inputs.len();
+
+        NoteGenerator {
+            config,
+            active_notes: vec![Vec::new(); num_inputs],
+            next_note_id: 0,
+        }
+    }
+
     /// Generate a random note event for one of the plugin's note ports depending on the port's
     /// capabilities. Returns an error if the plugin doesn't have any note ports or if the note
     /// ports don't support either MIDI or CLAP note events.
@@ -209,28 +222,156 @@ impl NoteGenerator {
                         value,
                     }));
                 }
-                NoteEventType::MidiNoteOn => todo!(),
-                NoteEventType::MidiNoteOff => todo!(),
-                NoteEventType::MidiChannelPressure => todo!(),
-                NoteEventType::MidiPolyKeyPressure => todo!(),
-                NoteEventType::MidiPitchBend => todo!(),
-                NoteEventType::MidiCc => todo!(),
-                NoteEventType::MidiProgramChange => todo!(),
+                NoteEventType::MidiNoteOn => {
+                    let key = prng.gen_range(0..128);
+                    let channel = prng.gen_range(0..16);
+                    let note_id = self.next_note_id;
+                    let note = Note {
+                        key,
+                        channel,
+                        note_id,
+                        choked: false,
+                    };
+                    if self.active_notes[note_port_idx].contains(&note) {
+                        continue;
+                    }
+                    self.active_notes[note_port_idx].push(note);
+                    self.next_note_id = self.next_note_id.wrapping_add(1);
+
+                    let velocity = prng.gen_range(0.0..=1.0);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [
+                            midi::NOTE_ON | channel as u8,
+                            key as u8,
+                            (velocity * 127.0f32).round().clamp(0.0, 127.0) as u8,
+                        ],
+                    }));
+                }
+                NoteEventType::MidiNoteOff => {
+                    if self.active_notes[note_port_idx].is_empty() {
+                        continue;
+                    }
+
+                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                    let note = self.active_notes[note_port_idx].remove(note_idx);
+
+                    let velocity = prng.gen_range(0.0..=1.0);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [
+                            midi::NOTE_OFF | note.channel as u8,
+                            note.key as u8,
+                            (velocity * 127.0f32).round().clamp(0.0, 127.0) as u8,
+                        ],
+                    }));
+                }
+                NoteEventType::MidiChannelPressure => {
+                    let channel = prng.gen_range(0..16);
+                    let pressure = prng.gen_range(0..128);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [midi::CHANNEL_KEY_PRESSURE | channel, pressure, 0],
+                    }));
+                }
+                NoteEventType::MidiPolyKeyPressure => {
+                    if self.active_notes[note_port_idx].is_empty() {
+                        continue;
+                    }
+
+                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                    let note = &self.active_notes[note_port_idx][note_idx];
+
+                    let pressure = prng.gen_range(0..128);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [
+                            midi::POLYPHONIC_KEY_PRESSURE | note.channel as u8,
+                            note.key as u8,
+                            pressure,
+                        ],
+                    }));
+                }
+                NoteEventType::MidiPitchBend => {
+                    // May as well just generate the two bytes directly instead of doing fancy things
+                    let channel = prng.gen_range(0..16);
+                    let byte1 = prng.gen_range(0..128);
+                    let byte2 = prng.gen_range(0..128);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [midi::PITCH_BEND_CHANGE | channel, byte1, byte2],
+                    }));
+                }
+                NoteEventType::MidiCc => {
+                    let channel = prng.gen_range(0..16);
+                    let cc = prng.gen_range(0..128);
+                    let value = prng.gen_range(0..128);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [midi::CONTROL_CHANGE | channel, cc, value],
+                    }));
+                }
+                NoteEventType::MidiProgramChange => {
+                    let channel = prng.gen_range(0..16);
+                    let program_number = prng.gen_range(0..128);
+                    return Ok(Event::Midi(clap_event_midi {
+                        header: clap_event_header {
+                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            time: time_offset,
+                            space_id: CLAP_CORE_EVENT_SPACE_ID,
+                            type_: CLAP_EVENT_MIDI,
+                            flags: 0,
+                        },
+                        port_index: note_port_idx as u16,
+                        data: [midi::PROGRAM_CHANGE | channel, program_number, 0],
+                    }));
+                }
             }
         }
 
         panic!("Unable to generate a random note event after 1024 tries, this is a bug in the validator");
-    }
-
-    /// Create a new random note generator based on a plugin's note port configuration.
-    pub fn new(config: NotePortConfig) -> Self {
-        let num_inputs = config.inputs.len();
-
-        NoteGenerator {
-            config,
-            active_notes: vec![Vec::new(); num_inputs],
-            next_note_id: 0,
-        }
     }
 }
 

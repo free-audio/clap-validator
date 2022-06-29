@@ -7,10 +7,11 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::events::{
-    clap_event_header, clap_event_note, clap_event_note_expression, clap_event_transport,
-    clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_CHOKE,
-    CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_EXPRESSION, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
-    CLAP_EVENT_TRANSPORT, CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
+    clap_event_header, clap_event_midi, clap_event_note, clap_event_note_expression,
+    clap_event_transport, clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID,
+    CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_EXPRESSION,
+    CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_EVENT_TRANSPORT,
+    CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
     CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_HAS_TIME_SIGNATURE, CLAP_TRANSPORT_IS_PLAYING,
 };
 use clap_sys::fixedpoint::{CLAP_BEATTIME_FACTOR, CLAP_SECTIME_FACTOR};
@@ -96,6 +97,8 @@ pub enum Event {
     ClapNote(clap_event_note),
     /// `CLAP_EVENT_NOTE_EXPRESSION`.
     ClapNoteExpression(clap_event_note_expression),
+    /// `CLAP_EVENT_MIDI`.
+    Midi(clap_event_midi),
     /// An unhandled event type. This is only used when the plugin outputs an event we don't handle
     /// or recognize.
     Unknown(clap_event_header),
@@ -407,6 +410,9 @@ impl Event {
             (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_EXPRESSION) => Ok(
                 Event::ClapNoteExpression(*(ptr as *const clap_event_note_expression)),
             ),
+            (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI) => {
+                Ok(Event::Midi(*(ptr as *const clap_event_midi)))
+            }
             (_, _) => Ok(Event::Unknown(*ptr)),
         }
     }
@@ -416,6 +422,7 @@ impl Event {
         match &self {
             Event::ClapNote(event) => &event.header,
             Event::ClapNoteExpression(event) => &event.header,
+            Event::Midi(event) => &event.header,
             Event::Unknown(header) => header,
         }
     }

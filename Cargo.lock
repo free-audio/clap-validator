@@ -103,6 +103,7 @@ dependencies = [
  "libloading",
  "log",
  "log-panics",
+ "midi-consts",
  "rand",
  "rand_pcg",
  "serde",
@@ -329,6 +330,12 @@ checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "midi-consts"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f2dd5c7f8aaf48a76e389068ab25ed80bdbc226b887f9013844c415698c9952"
 
 [[package]]
 name = "num_threads"
