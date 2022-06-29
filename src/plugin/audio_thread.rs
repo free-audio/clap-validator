@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
 use clap_sys::process::{
     CLAP_PROCESS_CONTINUE, CLAP_PROCESS_CONTINUE_IF_NOT_QUIET, CLAP_PROCESS_ERROR,
-    CLAP_PROCESS_TAIL,
+    CLAP_PROCESS_SLEEP, CLAP_PROCESS_TAIL,
 };
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -109,6 +109,7 @@ impl<'a> PluginAudioThread<'a> {
             CLAP_PROCESS_CONTINUE => Ok(ProcessStatus::Continue),
             CLAP_PROCESS_CONTINUE_IF_NOT_QUIET => Ok(ProcessStatus::ContinueIfNotQuiet),
             CLAP_PROCESS_TAIL => Ok(ProcessStatus::Tail),
+            CLAP_PROCESS_SLEEP => Ok(ProcessStatus::Sleep),
             result => anyhow::bail!(
                 "The plugin returned an unknown 'clap_process_status' value {result} from 'clap_plugin::process()'"
             ),
