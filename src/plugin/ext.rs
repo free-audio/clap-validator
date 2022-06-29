@@ -2,7 +2,7 @@
 //! `FooAudioThread` struct. The former contains functions that can be called from the main thread,
 //! while the latter contains functions that can be called from the audio thread.
 
-use std::os::raw::c_char;
+use std::ffi::CStr;
 use std::ptr::NonNull;
 
 pub mod audio_ports;
@@ -14,7 +14,7 @@ pub mod note_ports;
 /// for `PluginAudioThread`.
 pub trait Extension<P> {
     /// The C-string ID for the extension.
-    const EXTENSION_ID: *const c_char;
+    const EXTENSION_ID: &'static CStr;
 
     /// The type of the C-struct for the extension.
     type Struct;

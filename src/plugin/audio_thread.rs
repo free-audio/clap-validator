@@ -70,7 +70,8 @@ impl<'a> PluginAudioThread<'a> {
     // TODO: Remove this unused attribute once we implement audio thread extensions:w
     #[allow(unused)]
     pub fn get_extension<T: Extension<&'a Self>>(&'a self) -> Option<T> {
-        let extension_ptr = unsafe { (self.plugin.get_extension)(self.as_ptr(), T::EXTENSION_ID) };
+        let extension_ptr =
+            unsafe { (self.plugin.get_extension)(self.as_ptr(), T::EXTENSION_ID.as_ptr()) };
 
         if extension_ptr.is_null() {
             None

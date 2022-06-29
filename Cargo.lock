@@ -66,7 +66,7 @@ dependencies = [
 [[package]]
 name = "clap-sys"
 version = "0.2.0"
-source = "git+https://github.com/robbert-vdh/clap-sys.git?branch=feature/debug-derives#9bb47a44d0e1405a52471d33483e9c62ab60f75a"
+source = "git+https://github.com/glowcoil/clap-sys.git?rev=a283eb9fb8febe5a3706d396e0b8c12f021625af#a283eb9fb8febe5a3706d396e0b8c12f021625af"
 
 [[package]]
 name = "clap_derive"

@@ -11,7 +11,6 @@ use clap_sys::ext::draft::surround::CLAP_PORT_SURROUND;
 use clap_sys::id::CLAP_INVALID_ID;
 use std::collections::HashMap;
 use std::ffi::CStr;
-use std::os::raw::c_char;
 use std::ptr::NonNull;
 
 use crate::plugin::instance::Plugin;
@@ -45,7 +44,7 @@ pub struct AudioPort {
 }
 
 impl<'a> Extension<&'a Plugin<'a>> for AudioPorts<'a> {
-    const EXTENSION_ID: *const c_char = CLAP_EXT_AUDIO_PORTS;
+    const EXTENSION_ID: &'static CStr = CLAP_EXT_AUDIO_PORTS;
 
     type Struct = clap_plugin_audio_ports;
 
@@ -188,7 +187,7 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
     }
 
     let port_type = unsafe { CStr::from_ptr(info.port_type) };
-    if port_type == unsafe { CStr::from_ptr(CLAP_PORT_MONO) } {
+    if port_type == CLAP_PORT_MONO {
         if info.channel_count == 1 {
             Ok(())
         } else {
@@ -197,7 +196,7 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
                 info.channel_count
             );
         }
-    } else if port_type == unsafe { CStr::from_ptr(CLAP_PORT_STEREO) } {
+    } else if port_type == CLAP_PORT_STEREO {
         if info.channel_count == 2 {
             Ok(())
         } else {
@@ -206,9 +205,9 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
                 info.channel_count
             );
         }
-    } else if port_type == unsafe { CStr::from_ptr(CLAP_PORT_SURROUND) }
-        || port_type == unsafe { CStr::from_ptr(CLAP_PORT_CV) }
-        || port_type == unsafe { CStr::from_ptr(CLAP_PORT_AMBISONIC) }
+    } else if port_type == CLAP_PORT_SURROUND
+        || port_type == CLAP_PORT_CV
+        || port_type == CLAP_PORT_AMBISONIC
     {
         // TODO: Test the channel counts by querying those extensions
         Ok(())

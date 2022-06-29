@@ -119,7 +119,7 @@ impl PluginLibrary {
     pub fn metadata(&self) -> Result<PluginLibraryMetadata> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
-        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID) }
+        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
             as *const clap_plugin_factory;
         // TODO: Should we log anything here? In theory not supporting the plugin factory is
         //       perfectly legal, but it's a bit weird
@@ -184,7 +184,7 @@ impl PluginLibrary {
     pub fn create_plugin(&self, id: &str, host: Pin<Arc<ClapHost>>) -> Result<Plugin> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
-        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID) }
+        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
             as *const clap_plugin_factory;
         if plugin_factory.is_null() {
             anyhow::bail!("The plugin does not support the 'clap_plugin_factory'");

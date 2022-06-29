@@ -5,8 +5,8 @@ use clap_sys::ext::note_ports::{
     clap_note_dialect, clap_note_port_info, clap_plugin_note_ports, CLAP_EXT_NOTE_PORTS,
 };
 use std::collections::HashSet;
+use std::ffi::CStr;
 use std::mem;
-use std::os::raw::c_char;
 use std::ptr::NonNull;
 
 use crate::plugin::instance::Plugin;
@@ -39,7 +39,7 @@ pub struct NotePort {
 }
 
 impl<'a> Extension<&'a Plugin<'a>> for NotePorts<'a> {
-    const EXTENSION_ID: *const c_char = CLAP_EXT_NOTE_PORTS;
+    const EXTENSION_ID: &'static CStr = CLAP_EXT_NOTE_PORTS;
 
     type Struct = clap_plugin_note_ports;
 

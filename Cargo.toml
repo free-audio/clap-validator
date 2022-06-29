@@ -12,8 +12,8 @@ repository = "https://github.com/robbert-vdh/clapval"
 anyhow = "1.0.58"
 # All the claps!
 clap = { version = "3.2.6", features = ["derive"] }
-# TODO: Switch back to the crates.rs version once the debug prints are merged
-clap-sys = { git = "https://github.com/robbert-vdh/clap-sys.git", branch = "feature/debug-derives" }
+# TODO: Switch back to the crates.rs version once the debug prints are in a released version
+clap-sys = { git = "https://github.com/glowcoil/clap-sys.git", rev = "a283eb9fb8febe5a3706d396e0b8c12f021625af" }
 colored = "2.0.0"
 crossbeam = "0.8.1"
 libloading = "0.7.3"

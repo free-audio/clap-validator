@@ -97,8 +97,9 @@ impl<'lib> Plugin<'lib> {
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
-        let extension_ptr =
-            unsafe { (self.handle.as_ref().get_extension)(self.as_ptr(), T::EXTENSION_ID) };
+        let extension_ptr = unsafe {
+            (self.handle.as_ref().get_extension)(self.as_ptr(), T::EXTENSION_ID.as_ptr())
+        };
 
         if extension_ptr.is_null() {
             None
