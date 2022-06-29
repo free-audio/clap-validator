@@ -159,6 +159,9 @@ impl<'lib> Plugin<'lib> {
         min_buffer_size: usize,
         max_buffer_size: usize,
     ) -> Result<()> {
+        // Apparently 0 is invalid here
+        assert!(min_buffer_size >= 1);
+
         if unsafe {
             (self.handle.as_ref().activate)(
                 self.as_ptr(),
