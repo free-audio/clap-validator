@@ -28,15 +28,28 @@ pub struct ProcessData<'a> {
     pub input_events: Pin<Arc<EventQueue>>,
     /// The output events.
     pub output_events: Pin<Arc<EventQueue>>,
+
+    config: ProcessConfig,
     /// The current transport information. This is populated when constructing this object, and the
     /// transport can be advanced `N` samples using the
     /// [`advance_transport()`][Self::advance_transport()] method.
     transport_info: clap_event_transport,
     /// The current sample position. This is used to recompute values in `transport_info`.
     sample_pos: u32,
-    /// The current sample rate.
-    sample_rate: f64,
     // TODO: Maybe do something with `steady_time`
+}
+
+/// The general context information for a process call.
+#[derive(Debug, Clone, Copy)]
+pub struct ProcessConfig {
+    /// The current sample rate.
+    pub sample_rate: f64,
+    // The current tempo in beats per minute.
+    pub tempo: f64,
+    // The time signature's numerator.
+    pub time_sig_numerator: u16,
+    // The time signature's denominator.
+    pub time_sig_denominator: u16,
 }
 
 /// Audio buffers for [`ProcessData`]. CLAP allows hosts to do both in-place and out-of-place
@@ -115,17 +128,13 @@ impl<'a> ProcessData<'a> {
     /// [`advance_transport()`][Self::advance_transport()] method.
     //
     // TODO: More transport info options. Missing fields, loop regions, flags, etc.
-    pub fn new(
-        buffers: AudioBuffers<'a>,
-        sample_rate: f64,
-        tempo: f64,
-        time_sig_numerator: u16,
-        time_sig_denominator: u16,
-    ) -> Self {
+    pub fn new(buffers: AudioBuffers<'a>, config: ProcessConfig) -> Self {
         ProcessData {
             buffers,
             input_events: EventQueue::new(),
             output_events: EventQueue::new(),
+
+            config,
             transport_info: clap_event_transport {
                 header: clap_event_header {
                     size: std::mem::size_of::<clap_event_transport>() as u32,
@@ -141,7 +150,7 @@ impl<'a> ProcessData<'a> {
                     | CLAP_TRANSPORT_IS_PLAYING,
                 song_pos_beats: 0,
                 song_pos_seconds: 0,
-                tempo,
+                tempo: config.tempo,
                 tempo_inc: 0.0,
                 // These four currently aren't used
                 loop_start_beats: 0,
@@ -150,11 +159,10 @@ impl<'a> ProcessData<'a> {
                 loop_end_seconds: 0,
                 bar_start: 0,
                 bar_number: 0,
-                tsig_num: time_sig_numerator,
-                tsig_denom: time_sig_denominator,
+                tsig_num: config.time_sig_numerator,
+                tsig_denom: config.time_sig_denominator,
             },
             sample_pos: 0,
-            sample_rate,
         }
     }
 
@@ -199,11 +207,11 @@ impl<'a> ProcessData<'a> {
     pub fn advance_transport(&mut self, samples: u32) {
         self.sample_pos += samples;
 
-        self.transport_info.song_pos_beats = ((self.sample_pos as f64 / self.sample_rate / 60.0
-            * self.transport_info.tempo)
-            * CLAP_BEATTIME_FACTOR as f64)
-            .round() as i64;
-        self.transport_info.song_pos_seconds = ((self.sample_pos as f64 / self.sample_rate)
+        self.transport_info.song_pos_beats =
+            ((self.sample_pos as f64 / self.config.sample_rate / 60.0 * self.transport_info.tempo)
+                * CLAP_BEATTIME_FACTOR as f64)
+                .round() as i64;
+        self.transport_info.song_pos_seconds = ((self.sample_pos as f64 / self.config.sample_rate)
             * CLAP_SECTIME_FACTOR as f64)
             .round() as i64;
     }

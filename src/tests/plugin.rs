@@ -6,9 +6,12 @@ use std::process::Command;
 
 use super::{TestCase, TestResult, TestStatus};
 use crate::hosting::ClapHost;
-use crate::plugin::audio_thread::process::{AudioBuffers, OutOfPlaceAudioBuffers, ProcessData};
+use crate::plugin::audio_thread::process::{
+    AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
+};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
+use crate::plugin::instance::Plugin;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, NoteGenerator};
 
@@ -80,20 +83,20 @@ impl<'a> TestCase<'a> for PluginTestCase {
     }
 
     fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
-        let status =
-            match self {
-                PluginTestCase::BasicOutOfPlaceAudioProcessing => {
-                    let mut prng = new_prng();
+        let status = match self {
+            PluginTestCase::BasicOutOfPlaceAudioProcessing => {
+                let mut prng = new_prng();
 
-                    // The host doesn't need to do anything special for this test
-                    let host = ClapHost::new();
-                    let result = library
-                        .create_plugin(plugin_id, host.clone())
-                        .context("Could not create the plugin instance")
-                        .and_then(|plugin| {
-                            plugin.init().context("Error during initialization")?;
+                // The host doesn't need to do anything special for this test
+                let host = ClapHost::new();
+                let result = library
+                    .create_plugin(plugin_id, host.clone())
+                    .context("Could not create the plugin instance")
+                    .and_then(|plugin| {
+                        plugin.init().context("Error during initialization")?;
 
-                            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                        let audio_ports_config =
+                            match plugin.get_extension::<AudioPorts>() {
                                 Some(audio_ports) => audio_ports.config().context(
                                     "Error while querying 'audio-ports' IO configuration",
                                 )?,
@@ -104,104 +107,68 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 }),
                             };
 
-                            const SAMPLE_RATE: f64 = 44_100.0;
-                            const BUFFER_SIZE: usize = 512;
-                            const TEMPO: f64 = 110.0;
-                            const TIME_SIG_NUMERATOR: u16 = 4;
-                            const TIME_SIG_DENOMINATOR: u16 = 4;
+                        // This test only uses out-of-place processing
+                        let process_config = ProcessConfig {
+                            sample_rate: 44_100.0,
+                            tempo: 110.0,
+                            time_sig_numerator: 4,
+                            time_sig_denominator: 4,
+                        };
+                        let (mut input_buffers, mut output_buffers) =
+                            audio_ports_config.create_buffers(512);
+                        let audio_buffers = AudioBuffers::OutOfPlace(
+                            OutOfPlaceAudioBuffers::new(&mut input_buffers, &mut output_buffers)
+                                .unwrap(),
+                        );
 
-                            // This test only uses out-of-place processing
-                            let (mut input_buffers, mut output_buffers) =
-                                audio_ports_config.create_buffers(BUFFER_SIZE);
-                            let mut process_data = ProcessData::new(
-                                AudioBuffers::OutOfPlace(
-                                    OutOfPlaceAudioBuffers::new(
-                                        &mut input_buffers,
-                                        &mut output_buffers,
-                                    )
-                                    .unwrap(),
-                                ),
-                                SAMPLE_RATE,
-                                TEMPO,
-                                TIME_SIG_NUMERATOR,
-                                TIME_SIG_DENOMINATOR,
-                            );
-
-                            plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
-
-                            plugin.on_audio_thread(|plugin| -> Result<()> {
-                                plugin.start_processing()?;
-
-                                // This test is repeated a couple times
-                                // NOTE: We intentionally do not disable denormals here
-                                for iteration in 0..5 {
-                                    // We'll check that the plugin hasn't modified the input buffers after the
-                                    // test
-                                    process_data.buffers.randomize(&mut prng);
-                                    let original_input_buffers =
-                                        process_data.buffers.inputs_ref().to_owned();
-
-                                    plugin
-                                        .process(&mut process_data)
-                                        .context("Error during audio processing")?;
-                                    check_out_of_place_output_consistency(
-                                        &process_data,
-                                        &original_input_buffers,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed during processing cycle {} out of 5",
-                                            iteration + 1
-                                        )
-                                    })?;
-
-                                    process_data.clear_events();
-                                    process_data.advance_transport(BUFFER_SIZE as u32);
-                                }
-
-                                plugin.stop_processing();
+                        run_out_of_place_audio_processing_test(
+                            &plugin,
+                            audio_buffers,
+                            process_config,
+                            |process_data| {
+                                process_data.buffers.randomize(&mut prng);
 
                                 Ok(())
-                            })?;
+                            },
+                        )?;
 
-                            plugin.deactivate();
+                        // The `ClapHost` contains built-in thread safety checks
+                        host.thread_safety_check()
+                            .context("Thread safety checks failed")?;
 
-                            // The `ClapHost` contains built-in thread safety checks
-                            host.thread_safety_check()
-                                .context("Thread safety checks failed")?;
+                        Ok(TestStatus::Success { notes: None })
+                    });
 
-                            Ok(TestStatus::Success { notes: None })
-                        });
-
-                    match result {
-                        Ok(status) => status,
-                        Err(err) => TestStatus::Failed {
-                            reason: Some(format!("{err:#}")),
-                        },
-                    }
+                match result {
+                    Ok(status) => status,
+                    Err(err) => TestStatus::Failed {
+                        reason: Some(format!("{err:#}")),
+                    },
                 }
-                PluginTestCase::BasicOutOfPlaceNoteProcessing => {
-                    // This test is very similar to `BasicAudioProcessing`, but it requires the
-                    // `note-ports` extension, sends notes and/or MIDI to the plugin, and doesn't
-                    // require the `audio-ports` extension
-                    let mut prng = new_prng();
+            }
+            PluginTestCase::BasicOutOfPlaceNoteProcessing => {
+                // This test is very similar to `BasicAudioProcessing`, but it requires the
+                // `note-ports` extension, sends notes and/or MIDI to the plugin, and doesn't
+                // require the `audio-ports` extension
+                let mut prng = new_prng();
 
-                    let host = ClapHost::new();
-                    let result = library
-                        .create_plugin(plugin_id, host.clone())
-                        .context("Could not create the plugin instance")
-                        .and_then(|plugin| {
-                            plugin.init().context("Error during initialization")?;
+                let host = ClapHost::new();
+                let result = library
+                    .create_plugin(plugin_id, host.clone())
+                    .context("Could not create the plugin instance")
+                    .and_then(|plugin| {
+                        plugin.init().context("Error during initialization")?;
 
-                            // You can have note/MIDI-only plugins, so not having any audio ports is
-                            // perfectly fine here
-                            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                                Some(audio_ports) => audio_ports.config().context(
-                                    "Error while querying 'audio-ports' IO configuration",
-                                )?,
-                                None => AudioPortConfig::default(),
-                            };
-                            let note_port_config = match plugin.get_extension::<NotePorts>() {
+                        // You can have note/MIDI-only plugins, so not having any audio ports is
+                        // perfectly fine here
+                        let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                            Some(audio_ports) => audio_ports
+                                .config()
+                                .context("Error while querying 'audio-ports' IO configuration")?,
+                            None => AudioPortConfig::default(),
+                        };
+                        let note_port_config =
+                            match plugin.get_extension::<NotePorts>() {
                                 Some(note_ports) => note_ports.config().context(
                                     "Error while querying 'note-ports' IO configuration",
                                 )?,
@@ -212,102 +179,74 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 }),
                             };
 
-                            const SAMPLE_RATE: f64 = 44_100.0;
-                            const BUFFER_SIZE: usize = 512;
-                            const TEMPO: f64 = 110.0;
-                            const TIME_SIG_NUMERATOR: u16 = 4;
-                            const TIME_SIG_DENOMINATOR: u16 = 4;
+                        const BUFFER_SIZE: usize = 512;
+                        let process_config = ProcessConfig {
+                            sample_rate: 44_100.0,
+                            tempo: 110.0,
+                            time_sig_numerator: 4,
+                            time_sig_denominator: 4,
+                        };
+                        let (mut input_buffers, mut output_buffers) =
+                            audio_ports_config.create_buffers(BUFFER_SIZE);
+                        let audio_buffers = AudioBuffers::OutOfPlace(
+                            OutOfPlaceAudioBuffers::new(&mut input_buffers, &mut output_buffers)
+                                .unwrap(),
+                        );
 
-                            // This test only uses out-of-place processing
-                            let (mut input_buffers, mut output_buffers) =
-                                audio_ports_config.create_buffers(BUFFER_SIZE);
-                            let mut process_data = ProcessData::new(
-                                AudioBuffers::OutOfPlace(
-                                    OutOfPlaceAudioBuffers::new(
-                                        &mut input_buffers,
-                                        &mut output_buffers,
-                                    )
-                                    .unwrap(),
-                                ),
-                                SAMPLE_RATE,
-                                TEMPO,
-                                TIME_SIG_NUMERATOR,
-                                TIME_SIG_DENOMINATOR,
-                            );
+                        // We'll fill the input event queue with (consistent) random CLAP note
+                        // and/or MIDI events depending on what's supported by the plugin
+                        // supports
+                        let mut note_event_rng = NoteGenerator::new(note_port_config);
 
-                            // We'll fill the input event queue with (consistent) random CLAP note
-                            // and/or MIDI events depending on what's supported by the plugin
-                            // supports
-                            let mut note_event_rng = NoteGenerator::new(note_port_config);
-
-                            plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
-                            plugin.on_audio_thread(|plugin| -> Result<()> {
-                                plugin.start_processing()?;
-                                for iteration in 0..5 {
-                                    note_event_rng.fill_event_queue(
-                                        &mut prng,
-                                        &process_data.input_events,
-                                        BUFFER_SIZE as u32,
-                                    )?;
-                                    process_data.buffers.randomize(&mut prng);
-                                    let original_input_buffers =
-                                        process_data.buffers.inputs_ref().to_owned();
-
-                                    plugin
-                                        .process(&mut process_data)
-                                        .context("Error during audio processing")?;
-                                    check_out_of_place_output_consistency(
-                                        &process_data,
-                                        &original_input_buffers,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed during processing cycle {} out of 5",
-                                            iteration + 1
-                                        )
-                                    })?;
-
-                                    process_data.clear_events();
-                                    process_data.advance_transport(BUFFER_SIZE as u32);
-                                }
-                                plugin.stop_processing();
+                        run_out_of_place_audio_processing_test(
+                            &plugin,
+                            audio_buffers,
+                            process_config,
+                            |process_data| {
+                                note_event_rng.fill_event_queue(
+                                    &mut prng,
+                                    &process_data.input_events,
+                                    BUFFER_SIZE as u32,
+                                )?;
+                                process_data.buffers.randomize(&mut prng);
 
                                 Ok(())
-                            })?;
-                            plugin.deactivate();
+                            },
+                        )?;
 
-                            host.thread_safety_check()
-                                .context("Thread safety checks failed")?;
+                        host.thread_safety_check()
+                            .context("Thread safety checks failed")?;
 
-                            Ok(TestStatus::Success { notes: None })
-                        });
+                        Ok(TestStatus::Success { notes: None })
+                    });
 
-                    match result {
-                        Ok(status) => status,
-                        Err(err) => TestStatus::Failed {
-                            reason: Some(format!("{err:#}")),
-                        },
-                    }
+                match result {
+                    Ok(status) => status,
+                    Err(err) => TestStatus::Failed {
+                        reason: Some(format!("{err:#}")),
+                    },
                 }
-                PluginTestCase::InconsistentNoteProcessing => {
-                    // This is the same test as `BasicOutOfPlaceNoteProcessing`, but without
-                    // requiring matched note on/off pairs and similar invariants
-                    let mut prng = new_prng();
+            }
+            PluginTestCase::InconsistentNoteProcessing => {
+                // This is the same test as `BasicOutOfPlaceNoteProcessing`, but without
+                // requiring matched note on/off pairs and similar invariants
+                let mut prng = new_prng();
 
-                    let host = ClapHost::new();
-                    let result = library
-                        .create_plugin(plugin_id, host.clone())
-                        .context("Could not create the plugin instance")
-                        .and_then(|plugin| {
-                            plugin.init().context("Error during initialization")?;
+                let host = ClapHost::new();
+                let result = library
+                    .create_plugin(plugin_id, host.clone())
+                    .context("Could not create the plugin instance")
+                    .and_then(|plugin| {
+                        plugin.init().context("Error during initialization")?;
 
-                            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                                Some(audio_ports) => audio_ports.config().context(
-                                    "Error while querying 'audio-ports' IO configuration",
-                                )?,
-                                None => AudioPortConfig::default(),
-                            };
-                            let note_port_config = match plugin.get_extension::<NotePorts>() {
+                        let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                            Some(audio_ports) => audio_ports
+                                .config()
+                                .context("Error while querying 'audio-ports' IO configuration")?,
+                            None => AudioPortConfig::default(),
+                        };
+                        let note_port_config =
+                            match plugin.get_extension::<NotePorts>() {
                                 Some(note_ports) => note_ports.config().context(
                                     "Error while querying 'note-ports' IO configuration",
                                 )?,
@@ -318,86 +257,111 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 }),
                             };
 
-                            const SAMPLE_RATE: f64 = 44_100.0;
-                            const BUFFER_SIZE: usize = 512;
-                            const TEMPO: f64 = 110.0;
-                            const TIME_SIG_NUMERATOR: u16 = 4;
-                            const TIME_SIG_DENOMINATOR: u16 = 4;
+                        const BUFFER_SIZE: usize = 512;
+                        let process_config = ProcessConfig {
+                            sample_rate: 44_100.0,
+                            tempo: 110.0,
+                            time_sig_numerator: 4,
+                            time_sig_denominator: 4,
+                        };
+                        let (mut input_buffers, mut output_buffers) =
+                            audio_ports_config.create_buffers(BUFFER_SIZE);
+                        // TODO: Use in-place processing for this test
+                        let audio_buffers = AudioBuffers::OutOfPlace(
+                            OutOfPlaceAudioBuffers::new(&mut input_buffers, &mut output_buffers)
+                                .unwrap(),
+                        );
 
-                            // TODO: Use in-place processing for this test
-                            let (mut input_buffers, mut output_buffers) =
-                                audio_ports_config.create_buffers(BUFFER_SIZE);
-                            let mut process_data = ProcessData::new(
-                                AudioBuffers::OutOfPlace(
-                                    OutOfPlaceAudioBuffers::new(
-                                        &mut input_buffers,
-                                        &mut output_buffers,
-                                    )
-                                    .unwrap(),
-                                ),
-                                SAMPLE_RATE,
-                                TEMPO,
-                                TIME_SIG_NUMERATOR,
-                                TIME_SIG_DENOMINATOR,
-                            );
+                        // This RNG (Random Note Generator) allows generates mismatching events
+                        let mut note_event_rng =
+                            NoteGenerator::new(note_port_config).with_inconsistent_events();
 
-                            // This RNG (Random Note Generator) allows generates mismatching events
-                            let mut note_event_rng =
-                                NoteGenerator::new(note_port_config).with_inconsistent_events();
-
-                            plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
-                            plugin.on_audio_thread(|plugin| -> Result<()> {
-                                plugin.start_processing()?;
-                                for iteration in 0..5 {
-                                    note_event_rng.fill_event_queue(
-                                        &mut prng,
-                                        &process_data.input_events,
-                                        BUFFER_SIZE as u32,
-                                    )?;
-                                    process_data.buffers.randomize(&mut prng);
-                                    let original_input_buffers =
-                                        process_data.buffers.inputs_ref().to_owned();
-
-                                    plugin
-                                        .process(&mut process_data)
-                                        .context("Error during audio processing")?;
-                                    check_out_of_place_output_consistency(
-                                        &process_data,
-                                        &original_input_buffers,
-                                    )
-                                    .with_context(|| {
-                                        format!(
-                                            "Failed during processing cycle {} out of 5",
-                                            iteration + 1
-                                        )
-                                    })?;
-
-                                    process_data.clear_events();
-                                    process_data.advance_transport(BUFFER_SIZE as u32);
-                                }
-                                plugin.stop_processing();
+                        run_out_of_place_audio_processing_test(
+                            &plugin,
+                            audio_buffers,
+                            process_config,
+                            |process_data| {
+                                note_event_rng.fill_event_queue(
+                                    &mut prng,
+                                    &process_data.input_events,
+                                    BUFFER_SIZE as u32,
+                                )?;
+                                process_data.buffers.randomize(&mut prng);
 
                                 Ok(())
-                            })?;
-                            plugin.deactivate();
+                            },
+                        )?;
 
-                            host.thread_safety_check()
-                                .context("Thread safety checks failed")?;
+                        host.thread_safety_check()
+                            .context("Thread safety checks failed")?;
 
-                            Ok(TestStatus::Success { notes: None })
-                        });
+                        Ok(TestStatus::Success { notes: None })
+                    });
 
-                    match result {
-                        Ok(status) => status,
-                        Err(err) => TestStatus::Failed {
-                            reason: Some(format!("{err:#}")),
-                        },
-                    }
+                match result {
+                    Ok(status) => status,
+                    Err(err) => TestStatus::Failed {
+                        reason: Some(format!("{err:#}")),
+                    },
                 }
-            };
+            }
+        };
 
         self.create_result(status)
     }
+}
+
+/// Run the standard audio processing test for a **deactivated** plugin. This calls the process
+/// function five times, and checks the output for consistency each time.
+///
+/// The `Preprocess` closure is called before each processing cycle to allow the process data to be
+/// modified for the next process cycle.
+fn run_out_of_place_audio_processing_test<Preprocess>(
+    plugin: &Plugin,
+    audio_buffers: AudioBuffers,
+    process_config: ProcessConfig,
+    mut preprocess: Preprocess,
+) -> Result<()>
+where
+    Preprocess: FnMut(&mut ProcessData) -> Result<()> + Send,
+{
+    let buffer_size = audio_buffers.len();
+    let mut process_data = ProcessData::new(audio_buffers, process_config);
+
+    plugin.activate(process_config.sample_rate, 1, buffer_size)?;
+
+    plugin.on_audio_thread(|plugin| -> Result<()> {
+        plugin.start_processing()?;
+
+        // This test is repeated a couple times
+        // NOTE: We intentionally do not disable denormals here
+        for iteration in 0..5 {
+            preprocess(&mut process_data)?;
+
+            // We'll check that the plugin hasn't modified the input buffers after the
+            // test
+            let original_input_buffers = process_data.buffers.inputs_ref().to_owned();
+
+            plugin
+                .process(&mut process_data)
+                .context("Error during audio processing")?;
+            check_out_of_place_output_consistency(&process_data, &original_input_buffers)
+                .with_context(|| {
+                    format!("Failed during processing cycle {} out of 5", iteration + 1)
+                })?;
+
+            process_data.clear_events();
+            process_data.advance_transport(buffer_size as u32);
+        }
+
+        plugin.stop_processing();
+
+        Ok(())
+    })?;
+
+    plugin.deactivate();
+
+    Ok(())
 }
 
 /// The process for consistency. This verifies that the output buffer doesn't contain any NaN,
