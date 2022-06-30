@@ -10,7 +10,7 @@ use crate::plugin::audio_thread::process::{AudioBuffers, OutOfPlaceAudioBuffers,
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
 use crate::plugin::library::PluginLibrary;
-use crate::tests::rng::new_prng;
+use crate::tests::rng::{new_prng, NoteGenerator};
 
 const BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-basic";
 const BASIC_OUT_OF_PLACE_MIDI_PROCESSING: &str = "process-midi-out-of-place-basic";
@@ -231,13 +231,20 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 TIME_SIG_DENOMINATOR,
                             );
 
-                            // TODO: Send random notes and/or MIDI to the plugin
-                            log::debug!("TODO: This test does not yet generate random notes/MIDI");
+                            // We'll fill the input event queue with (consistent) random CLAP note
+                            // and/or MIDI events depending on what's supported by the plugin
+                            // supports
+                            let mut note_event_rng = NoteGenerator::new(note_port_config);
 
                             plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
                             plugin.on_audio_thread(|plugin| -> Result<()> {
                                 plugin.start_processing()?;
                                 for iteration in 0..5 {
+                                    note_event_rng.fill_event_queue(
+                                        &mut prng,
+                                        &process_data.input_events,
+                                        BUFFER_SIZE as u32,
+                                    )?;
                                     process_data.buffers.randomize(&mut prng);
                                     let original_input_buffers =
                                         process_data.buffers.inputs_ref().to_owned();

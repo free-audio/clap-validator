@@ -81,6 +81,7 @@ unsafe impl Sync for OutOfPlaceAudioBuffers<'_> {}
 /// allocated through a `Pin<Arc<EventQueue>>` so the pointers are stable.
 //
 // NOTE: This is marked as non-exhaustive to prevent this from being constructed directly
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct EventQueue {
     /// The vtable for the read-only variant of the event queue.
@@ -94,6 +95,7 @@ pub struct EventQueue {
 
 /// An event sent to or from the plugin. This uses an enum to make the implementation simple and
 /// correct at the cost of more wasteful memory usage.
+#[derive(Debug)]
 #[repr(align(8))]
 pub enum Event {
     /// `CLAP_EVENT_NOTE_ON`, `CLAP_EVENT_NOTE_OFF`, `CLAP_EVENT_NOTE_CHOKE`, or `CLAP_EVENT_NOTE_END`.
