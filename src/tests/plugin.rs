@@ -150,6 +150,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                             iteration + 1
                                         )
                                     })?;
+
+                                    process_data.clear_events();
+                                    process_data.advance_transport(BUFFER_SIZE as u32);
                                 }
 
                                 plugin.stop_processing();
@@ -253,6 +256,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                             iteration + 1
                                         )
                                     })?;
+
+                                    process_data.clear_events();
+                                    process_data.advance_transport(BUFFER_SIZE as u32);
                                 }
                                 plugin.stop_processing();
 
