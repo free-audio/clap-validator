@@ -178,6 +178,13 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                     )),
                                 }),
                             };
+                        if note_port_config.inputs.is_empty() {
+                            return Ok(TestStatus::Skipped {
+                                reason: Some(String::from(
+                                    "The plugin implements the 'note-ports' extension but it does not have any input note ports.",
+                                )),
+                            });
+                        }
 
                         const BUFFER_SIZE: usize = 512;
                         let process_config = ProcessConfig {
@@ -256,6 +263,13 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                     )),
                                 }),
                             };
+                        if note_port_config.inputs.is_empty() {
+                            return Ok(TestStatus::Skipped {
+                                reason: Some(String::from(
+                                    "The plugin implements the 'note-ports' extension but it does not have any input note ports.",
+                                )),
+                            });
+                        }
 
                         const BUFFER_SIZE: usize = 512;
                         let process_config = ProcessConfig {

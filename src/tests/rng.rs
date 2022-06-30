@@ -125,7 +125,7 @@ impl NoteGenerator {
     /// ports don't support either MIDI or CLAP note events.
     pub fn generate(&mut self, prng: &mut Pcg32, time_offset: u32) -> Result<Event> {
         if self.config.inputs.is_empty() {
-            anyhow::bail!("Cannot generate note events for a plugin with no input note ports");
+            anyhow::bail!("Cannot generate note events for a plugin with no input note ports.");
         }
 
         // We'll ignore the prefered note dialect and pick from all of the supported note dialects.
