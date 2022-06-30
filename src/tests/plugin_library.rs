@@ -37,13 +37,13 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     }
 
     fn as_str(&self) -> &'static str {
-        match &self {
+        match self {
             PluginLibraryTestCase::ScanTime => TEST_SCAN_TIME,
         }
     }
 
     fn description(&self) -> String {
-        match &self {
+        match self {
             PluginLibraryTestCase::ScanTime => format!(
                 "Tests whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
@@ -70,7 +70,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     }
 
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
-        let status = match &self {
+        let status = match self {
             PluginLibraryTestCase::ScanTime => {
                 let test_start = Instant::now();
 

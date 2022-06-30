@@ -1,9 +1,5 @@
 //! Data structures and functions surrounding audio processing.
 
-use std::ffi::c_void;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::events::{
@@ -16,6 +12,11 @@ use clap_sys::events::{
 };
 use clap_sys::fixedpoint::{CLAP_BEATTIME_FACTOR, CLAP_SECTIME_FACTOR};
 use clap_sys::process::clap_process;
+use rand::Rng;
+use rand_pcg::Pcg32;
+use std::ffi::c_void;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 use crate::util::check_null_ptr;
 
@@ -54,9 +55,11 @@ pub enum AudioBuffers<'a> {
 //
 // TODO: This only does f32 for now, we'll also want to test f64 and mixed configurations later.
 pub struct OutOfPlaceAudioBuffers<'a> {
-    // These are all indexed by `[port_idx][channel_idx][sample_idx]`
-    _inputs: &'a [Vec<Vec<f32>>],
-    _outputs: &'a mut [Vec<Vec<f32>>],
+    // These are all indexed by `[port_idx][channel_idx][sample_idx]`. The inputs also need to be
+    // mutable because reborrwing them from here is the only way to modify them without
+    // reinitializing the pointers.
+    inputs: &'a mut [Vec<Vec<f32>>],
+    outputs: &'a mut [Vec<Vec<f32>>],
 
     // These are point to `inputs` and `outputs` because `clap_audio_buffer` needs to contain a
     // `*const *const f32`
@@ -213,7 +216,7 @@ impl<'a> ProcessData<'a> {
 impl AudioBuffers<'_> {
     /// The number of samples in the buffer.
     pub fn len(&self) -> usize {
-        match &self {
+        match self {
             AudioBuffers::OutOfPlace(buffers) => buffers.len(),
         }
     }
@@ -225,13 +228,35 @@ impl AudioBuffers<'_> {
             AudioBuffers::OutOfPlace(buffers) => buffers.io_buffers(),
         }
     }
+
+    /// Get a reference to the buffer's inputs.
+    pub fn inputs_ref(&self) -> &[Vec<Vec<f32>>] {
+        match self {
+            AudioBuffers::OutOfPlace(buffers) => buffers.inputs,
+        }
+    }
+
+    /// Get a reference to the buffer's outputs.
+    pub fn outputs_ref(&self) -> &[Vec<Vec<f32>>] {
+        match self {
+            AudioBuffers::OutOfPlace(buffers) => buffers.outputs,
+        }
+    }
+
+    /// Fill the input and output buffers with white noise. The values are distributed between `[-1,
+    /// 1]`, and denormals are snapped to zero.
+    pub fn randomize(&mut self, prng: &mut Pcg32) {
+        match self {
+            AudioBuffers::OutOfPlace(buffers) => buffers.randomize(prng),
+        }
+    }
 }
 
 impl<'a> OutOfPlaceAudioBuffers<'a> {
     /// Construct the out of place audio buffers. This allocates the channel pointers that are
     /// handed to the plugin in the process function. The function will return an error if the
     /// sample count doesn't match between all input and outputs vectors.
-    pub fn new(inputs: &'a [Vec<Vec<f32>>], outputs: &'a mut [Vec<Vec<f32>>]) -> Result<Self> {
+    pub fn new(inputs: &'a mut [Vec<Vec<f32>>], outputs: &'a mut [Vec<Vec<f32>>]) -> Result<Self> {
         // We need to make sure all inputs and outputs have the same number of channels. Since zero
         // channel ports are technically legal and it's also possible to not have any inputs we
         // can't just start with the first input.
@@ -293,8 +318,8 @@ impl<'a> OutOfPlaceAudioBuffers<'a> {
             .collect();
 
         Ok(Self {
-            _inputs: inputs,
-            _outputs: outputs,
+            inputs,
+            outputs,
             _input_channel_pointers: input_channel_pointers,
             _output_channel_pointers: output_channel_pointers,
             clap_inputs,
@@ -313,6 +338,13 @@ impl<'a> OutOfPlaceAudioBuffers<'a> {
     /// data.
     pub fn io_buffers(&mut self) -> (&[clap_audio_buffer], &mut [clap_audio_buffer]) {
         (&self.clap_inputs, &mut self.clap_outputs)
+    }
+
+    /// Fill the input and output buffers with white noise. The values are distributed between `[-1,
+    /// 1]`, and denormals are snapped to zero.
+    pub fn randomize(&mut self, prng: &mut Pcg32) {
+        randomize_audio_buffers(prng, self.inputs);
+        randomize_audio_buffers(prng, self.outputs);
     }
 }
 
@@ -419,11 +451,25 @@ impl Event {
 
     /// Get a pointer to the event's header
     pub fn header_ptr(&self) -> *const clap_event_header {
-        match &self {
+        match self {
             Event::ClapNote(event) => &event.header,
             Event::ClapNoteExpression(event) => &event.header,
             Event::Midi(event) => &event.header,
             Event::Unknown(header) => header,
+        }
+    }
+}
+
+/// Set each sample in the buffers to a random value in `[-1, 1]`. Denormals are snapped to zero.
+fn randomize_audio_buffers(prng: &mut Pcg32, buffers: &mut [Vec<Vec<f32>>]) {
+    for channel_slices in buffers {
+        for channel_slice in channel_slices {
+            for sample in channel_slice {
+                *sample = prng.gen_range(-1.0..=1.0);
+                if sample.is_subnormal() {
+                    *sample = 0.0;
+                }
+            }
         }
     }
 }
