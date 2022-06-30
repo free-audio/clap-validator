@@ -69,29 +69,7 @@ version = "0.2.0"
 source = "git+https://github.com/glowcoil/clap-sys.git?rev=a283eb9fb8febe5a3706d396e0b8c12f021625af#a283eb9fb8febe5a3706d396e0b8c12f021625af"
 
 [[package]]
-name = "clap_derive"
-version = "3.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed6db9e867166a43a53f7199b5e4d1f522a1e5bd626654be263c999ce59df39a"
-dependencies = [
- "heck",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "clap_lex"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87eba3c8c7f42ef17f6c659fc7416d0f4758cd3e58861ee63c5fa4a4dde649e4"
-dependencies = [
- "os_str_bytes",
-]
-
-[[package]]
-name = "clapval"
+name = "clap-validator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -112,6 +90,28 @@ dependencies = [
  "tempfile",
  "textwrap",
  "walkdir",
+]
+
+[[package]]
+name = "clap_derive"
+version = "3.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed6db9e867166a43a53f7199b5e4d1f522a1e5bd626654be263c999ce59df39a"
+dependencies = [
+ "heck",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87eba3c8c7f42ef17f6c659fc7416d0f4758cd3e58861ee63c5fa4a4dde649e4"
+dependencies = [
+ "os_str_bytes",
 ]
 
 [[package]]

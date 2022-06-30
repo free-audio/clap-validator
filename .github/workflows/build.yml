@@ -64,17 +64,17 @@ jobs:
 
       - name: Determine the build archive name
         run: |
-          echo "ARCHIVE_NAME=clapval-$(git describe --always)-${{ matrix.name }}" >> "$GITHUB_ENV"
+          echo "ARCHIVE_NAME=clap-validator-$(git describe --always)-${{ matrix.name }}" >> "$GITHUB_ENV"
 
       # GitHub _very helpfully_ strips out the executable bit. Thanks GitHub, very cool.
       - name: Create tarball
         if: startsWith(matrix.os, 'ubuntu') || (startsWith(matrix.os, 'macos') && !matrix.cross-target)
         run: |
-          tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/release/clapval
+          tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/release/clap-validator
       - name: Create tarball
         if: startsWith(matrix.os, 'macos') && matrix.cross-target
         run: |
-          tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/${{ matrix.cross-target }}/release/clapval
+          tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/${{ matrix.cross-target }}/release/clap-validator
       - uses: actions/upload-artifact@v2
         if: "!startsWith(matrix.os, 'windows')"
         with:
@@ -85,4 +85,4 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         with:
           name: ${{ env.ARCHIVE_NAME }}
-          path: target/release/clapval.exe
+          path: target/release/clap-validator.exe

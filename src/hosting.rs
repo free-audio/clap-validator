@@ -38,9 +38,9 @@ impl ClapHost {
             clap_host: clap_host {
                 clap_version: CLAP_VERSION,
                 host_data: std::ptr::null_mut(),
-                name: b"clapval\0".as_ptr() as *const c_char,
+                name: b"clap-validator\0".as_ptr() as *const c_char,
                 vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
-                url: b"https://github.com/robbert-vdh/clapval\0".as_ptr() as *const c_char,
+                url: b"https://github.com/robbert-vdh/clap-validator\0".as_ptr() as *const c_char,
                 version: b"0.1.0\0".as_ptr() as *const c_char,
                 get_extension: Self::get_extension,
                 request_restart: Self::request_restart,

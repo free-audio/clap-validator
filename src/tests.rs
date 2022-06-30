@@ -81,7 +81,7 @@ pub trait TestCase<'a>: Sized + 'static {
         }
     }
 
-    /// Set the arguments for `clapval run-single-test` to run this test with the specified
+    /// Set the arguments for `clap-validator run-single-test` to run this test with the specified
     /// arguments. This way the [`run_out_of_process()`][Self::run_out_of_process()] method can be
     /// defined in a way that works for all `TestCase`s.
     fn set_out_of_process_args(&self, command: &mut Command, args: Self::TestArgs);
@@ -102,9 +102,9 @@ pub trait TestCase<'a>: Sized + 'static {
     /// In the event that this is called for a plugin ID that does not exist within the plugin
     /// library, then the test will also be marked as failed.
     ///
-    /// This will only return an error if the actual `clapval` process call failed.
+    /// This will only return an error if the actual `clap-validator` process call failed.
     fn run_out_of_process(&self, args: Self::TestArgs, hide_output: bool) -> Result<TestResult> {
-        // The idea here is that we'll invoke the same clapval binary with a special hidden command
+        // The idea here is that we'll invoke the same clap-validator binary with a special hidden command
         // that runs a single test. This is the reason why test cases must be convertible to and
         // from strings. If everything goes correctly, then the child process will write the results
         // as JSON to the specified file path. This is intentionaly not done through STDIO since the
@@ -117,9 +117,9 @@ pub trait TestCase<'a>: Sized + 'static {
             .tempfile()
             .context("Could not create a temporary file path")?
             .into_temp_path();
-        let clapval_binary =
+        let clap_validator_binary =
             std::env::current_exe().context("Could not find the path to the current executable")?;
-        let mut command = Command::new(clapval_binary);
+        let mut command = Command::new(clap_validator_binary);
 
         command
             .arg("run-single-test")
@@ -132,11 +132,11 @@ pub trait TestCase<'a>: Sized + 'static {
 
         let exit_status = command
             .spawn()
-            .context("Could not call clapval for out-of-process validation")?
+            .context("Could not call clap-validator for out-of-process validation")?
             // The docs make it seem like this can only fail if the process isn't running, but if
             // spawn succeeds then this can never fail:
             .wait()
-            .context("Error while waiting on clapval to finish running the test")?;
+            .context("Error while waiting on clap-validator to finish running the test")?;
         if !exit_status.success() {
             return Ok(TestResult {
                 name: self.as_str().to_string(),
