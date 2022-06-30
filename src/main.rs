@@ -120,7 +120,7 @@ fn main() -> ExitCode {
                             tests::TestStatus::Success { .. } => "PASSED".green(),
                             tests::TestStatus::Crashed { .. } => "CRASHED".red().bold(),
                             tests::TestStatus::Failed { .. } => "FAILED".red(),
-                            tests::TestStatus::Skipped { .. } => "SKIPPED".into(),
+                            tests::TestStatus::Skipped { .. } => "SKIPPED".yellow(),
                         };
                         let test_result = match test.status.reason() {
                             Some(reason) => format!("     {}: {}", status_text, reason),
