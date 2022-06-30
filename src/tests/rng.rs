@@ -27,7 +27,13 @@ pub fn new_prng() -> Pcg32 {
 /// capabilities stored in a [`NotePortConfig`]
 #[derive(Debug, Clone)]
 pub struct NoteGenerator {
+    /// The note ports to generate random events for.
     config: NotePortConfig,
+    /// Only generate consistent events. This prevents things like note off events for notes that
+    /// aren't playing, double note on events, and generating note expressions for notes that aren't
+    /// active.
+    only_consistent_events: bool,
+
     /// Contains the currently playing notes per-port. We'll be nice and not send overlapping notes
     /// or note-offs without a corresponding note-on.
     ///
@@ -64,20 +70,29 @@ enum NoteEventType {
 }
 
 impl NoteGenerator {
-    /// Create a new random note generator based on a plugin's note port configuration.
+    /// Create a new random note generator based on a plugin's note port configuration. By default
+    /// these events are consistent, meaning that there are no things like note offs before a note
+    /// on, duplicate note ons, or note expressions for notes that don't exist.
     pub fn new(config: NotePortConfig) -> Self {
         let num_inputs = config.inputs.len();
 
         NoteGenerator {
             config,
+            only_consistent_events: true,
+
             active_notes: vec![Vec::new(); num_inputs],
             next_note_id: 0,
         }
     }
 
-    /// Clear and fill an event queue with random events for the next `num_samples` samples. These
-    /// events are consistent, meaning that there are no things like note offs before a note on,
-    /// duplicate note ons, or note expressions for notes that don't exist.
+    /// Allow inconsistent events, like note off events without a corresponding note on and note
+    /// expression events for notes that aren't currently playing.
+    pub fn with_inconsistent_events(mut self) -> Self {
+        self.only_consistent_events = false;
+        self
+    }
+
+    /// Clear and fill an event queue with random events for the next `num_samples` samples.
     ///
     /// Returns an error if generating random events failed. This can happen if the plugin doesn't
     /// support any note event types.
@@ -135,20 +150,31 @@ impl NoteGenerator {
             let event_type = prng.sample(rand::distributions::Slice::new(possible_events).unwrap());
             match event_type {
                 NoteEventType::ClapNoteOn => {
-                    let key = prng.gen_range(0..128);
-                    let channel = prng.gen_range(0..16);
-                    let note_id = self.next_note_id;
-                    let note = Note {
-                        key,
-                        channel,
-                        note_id,
-                        choked: false,
+                    let note = if self.only_consistent_events {
+                        let key = prng.gen_range(0..128);
+                        let channel = prng.gen_range(0..16);
+                        let note_id = self.next_note_id;
+                        let note = Note {
+                            key,
+                            channel,
+                            note_id,
+                            choked: false,
+                        };
+                        if self.active_notes[note_port_idx].contains(&note) {
+                            continue;
+                        }
+                        self.active_notes[note_port_idx].push(note);
+                        self.next_note_id = self.next_note_id.wrapping_add(1);
+
+                        note
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
                     };
-                    if self.active_notes[note_port_idx].contains(&note) {
-                        continue;
-                    }
-                    self.active_notes[note_port_idx].push(note);
-                    self.next_note_id = self.next_note_id.wrapping_add(1);
 
                     let velocity = prng.gen_range(0.0..=1.0);
                     return Ok(Event::ClapNote(clap_event_note {
@@ -160,20 +186,29 @@ impl NoteGenerator {
                             // TODO: There's a live flag here, should we also randomize this?
                             flags: 0,
                         },
-                        note_id,
+                        note_id: note.note_id,
                         port_index: note_port_idx as i16,
-                        channel,
-                        key,
+                        channel: note.channel,
+                        key: note.key,
                         velocity,
                     }));
                 }
                 NoteEventType::ClapNoteOff => {
-                    if self.active_notes[note_port_idx].is_empty() {
-                        continue;
-                    }
+                    let note = if self.only_consistent_events {
+                        if self.active_notes[note_port_idx].is_empty() {
+                            continue;
+                        }
 
-                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
-                    let note = self.active_notes[note_port_idx].remove(note_idx);
+                        let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                        self.active_notes[note_port_idx].remove(note_idx)
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
+                    };
 
                     let velocity = prng.gen_range(0.0..=1.0);
                     return Ok(Event::ClapNote(clap_event_note {
@@ -192,17 +227,28 @@ impl NoteGenerator {
                     }));
                 }
                 NoteEventType::ClapNoteChoke => {
-                    if self.active_notes[note_port_idx].is_empty() {
-                        continue;
-                    }
+                    let note = if self.only_consistent_events {
+                        if self.active_notes[note_port_idx].is_empty() {
+                            continue;
+                        }
 
-                    // A note can only be choked once
-                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
-                    let note = &mut self.active_notes[note_port_idx][note_idx];
-                    if note.choked {
-                        continue;
-                    }
-                    note.choked = true;
+                        // A note can only be choked once
+                        let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                        let note = &mut self.active_notes[note_port_idx][note_idx];
+                        if note.choked {
+                            continue;
+                        }
+                        note.choked = true;
+
+                        *note
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
+                    };
 
                     // Does a velocity make any sense here? Probably not.
                     let velocity = prng.gen_range(0.0..=1.0);
@@ -222,12 +268,21 @@ impl NoteGenerator {
                     }));
                 }
                 NoteEventType::ClapNoteExpression => {
-                    if self.active_notes[note_port_idx].is_empty() {
-                        continue;
-                    }
+                    let note = if self.only_consistent_events {
+                        if self.active_notes[note_port_idx].is_empty() {
+                            continue;
+                        }
 
-                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
-                    let note = &self.active_notes[note_port_idx][note_idx];
+                        let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                        self.active_notes[note_port_idx][note_idx]
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
+                    };
 
                     let expression_id =
                         prng.gen_range(CLAP_NOTE_EXPRESSION_VOLUME..=CLAP_NOTE_EXPRESSION_PRESSURE);
@@ -255,20 +310,31 @@ impl NoteGenerator {
                     }));
                 }
                 NoteEventType::MidiNoteOn => {
-                    let key = prng.gen_range(0..128);
-                    let channel = prng.gen_range(0..16);
-                    let note_id = self.next_note_id;
-                    let note = Note {
-                        key,
-                        channel,
-                        note_id,
-                        choked: false,
+                    let note = if self.only_consistent_events {
+                        let key = prng.gen_range(0..128);
+                        let channel = prng.gen_range(0..16);
+                        let note_id = self.next_note_id;
+                        let note = Note {
+                            key,
+                            channel,
+                            note_id,
+                            choked: false,
+                        };
+                        if self.active_notes[note_port_idx].contains(&note) {
+                            continue;
+                        }
+                        self.active_notes[note_port_idx].push(note);
+                        self.next_note_id = self.next_note_id.wrapping_add(1);
+
+                        note
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
                     };
-                    if self.active_notes[note_port_idx].contains(&note) {
-                        continue;
-                    }
-                    self.active_notes[note_port_idx].push(note);
-                    self.next_note_id = self.next_note_id.wrapping_add(1);
 
                     let velocity = prng.gen_range(0.0..=1.0);
                     return Ok(Event::Midi(clap_event_midi {
@@ -281,19 +347,28 @@ impl NoteGenerator {
                         },
                         port_index: note_port_idx as u16,
                         data: [
-                            midi::NOTE_ON | channel as u8,
-                            key as u8,
+                            midi::NOTE_ON | note.channel as u8,
+                            note.key as u8,
                             (velocity * 127.0f32).round().clamp(0.0, 127.0) as u8,
                         ],
                     }));
                 }
                 NoteEventType::MidiNoteOff => {
-                    if self.active_notes[note_port_idx].is_empty() {
-                        continue;
-                    }
+                    let note = if self.only_consistent_events {
+                        if self.active_notes[note_port_idx].is_empty() {
+                            continue;
+                        }
 
-                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
-                    let note = self.active_notes[note_port_idx].remove(note_idx);
+                        let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                        self.active_notes[note_port_idx].remove(note_idx)
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
+                    };
 
                     let velocity = prng.gen_range(0.0..=1.0);
                     return Ok(Event::Midi(clap_event_midi {
@@ -328,12 +403,21 @@ impl NoteGenerator {
                     }));
                 }
                 NoteEventType::MidiPolyKeyPressure => {
-                    if self.active_notes[note_port_idx].is_empty() {
-                        continue;
-                    }
+                    let note = if self.only_consistent_events {
+                        if self.active_notes[note_port_idx].is_empty() {
+                            continue;
+                        }
 
-                    let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
-                    let note = &self.active_notes[note_port_idx][note_idx];
+                        let note_idx = prng.gen_range(0..self.active_notes[note_port_idx].len());
+                        self.active_notes[note_port_idx][note_idx]
+                    } else {
+                        Note {
+                            key: prng.gen_range(0..128),
+                            channel: prng.gen_range(0..16),
+                            note_id: prng.gen_range(0..100),
+                            choked: false,
+                        }
+                    };
 
                     let pressure = prng.gen_range(0..128);
                     return Ok(Event::Midi(clap_event_midi {

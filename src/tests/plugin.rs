@@ -13,13 +13,15 @@ use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, NoteGenerator};
 
 const BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-basic";
-const BASIC_OUT_OF_PLACE_MIDI_PROCESSING: &str = "process-midi-out-of-place-basic";
+const BASIC_OUT_OF_PLACE_NOTE_PROCESSING: &str = "process-note-out-of-place-basic";
+const INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
 
 /// The tests for individual CLAP plugins. See the module's heading for more information, and the
 /// `description` function below for a description of each test case.
 pub enum PluginTestCase {
     BasicOutOfPlaceAudioProcessing,
-    BasicOutOfPlaceMidiProcessing,
+    BasicOutOfPlaceNoteProcessing,
+    InconsistentNoteProcessing,
 }
 
 impl<'a> TestCase<'a> for PluginTestCase {
@@ -29,7 +31,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     const ALL: &'static [Self] = &[
         PluginTestCase::BasicOutOfPlaceAudioProcessing,
-        PluginTestCase::BasicOutOfPlaceMidiProcessing,
+        PluginTestCase::BasicOutOfPlaceNoteProcessing,
+        PluginTestCase::InconsistentNoteProcessing,
     ];
 
     fn from_str(string: &str) -> Option<Self> {
@@ -37,9 +40,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
             BASIC_OUT_OF_PLACE_AUDIO_PROCESSING => {
                 Some(PluginTestCase::BasicOutOfPlaceAudioProcessing)
             }
-            BASIC_OUT_OF_PLACE_MIDI_PROCESSING => {
-                Some(PluginTestCase::BasicOutOfPlaceMidiProcessing)
+            BASIC_OUT_OF_PLACE_NOTE_PROCESSING => {
+                Some(PluginTestCase::BasicOutOfPlaceNoteProcessing)
             }
+            INCONSISTENT_NOTE_PROCESSING => Some(PluginTestCase::InconsistentNoteProcessing),
             _ => None,
         }
     }
@@ -47,14 +51,16 @@ impl<'a> TestCase<'a> for PluginTestCase {
     fn as_str(&self) -> &'static str {
         match self {
             PluginTestCase::BasicOutOfPlaceAudioProcessing => BASIC_OUT_OF_PLACE_AUDIO_PROCESSING,
-            PluginTestCase::BasicOutOfPlaceMidiProcessing => BASIC_OUT_OF_PLACE_MIDI_PROCESSING,
+            PluginTestCase::BasicOutOfPlaceNoteProcessing => BASIC_OUT_OF_PLACE_NOTE_PROCESSING,
+            PluginTestCase::InconsistentNoteProcessing => INCONSISTENT_NOTE_PROCESSING,
         }
     }
 
     fn description(&self) -> String {
         match self {
             PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from("Processes random audio through the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place audio processing."),
-            PluginTestCase::BasicOutOfPlaceMidiProcessing => String::from("Sends audio and random note and MIDI events to the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place audio processing."),
+            PluginTestCase::BasicOutOfPlaceNoteProcessing => String::from("Sends audio and random note and MIDI events to the plugin with its default parameter values and tests the output for consistency. Uses out-of-place audio processing."),
+            PluginTestCase::InconsistentNoteProcessing => String::from("Sends intentionally inconsistent and mismatching note and MIDI events to the plugin with its default parameter values and tests the output for consistency. Uses out-of-place audio processing."),
         }
     }
 
@@ -174,7 +180,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         },
                     }
                 }
-                PluginTestCase::BasicOutOfPlaceMidiProcessing => {
+                PluginTestCase::BasicOutOfPlaceNoteProcessing => {
                     // This test is very similar to `BasicAudioProcessing`, but it requires the
                     // `note-ports` extension, sends notes and/or MIDI to the plugin, and doesn't
                     // require the `audio-ports` extension
@@ -233,6 +239,111 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             // and/or MIDI events depending on what's supported by the plugin
                             // supports
                             let mut note_event_rng = NoteGenerator::new(note_port_config);
+
+                            plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
+                            plugin.on_audio_thread(|plugin| -> Result<()> {
+                                plugin.start_processing()?;
+                                for iteration in 0..5 {
+                                    note_event_rng.fill_event_queue(
+                                        &mut prng,
+                                        &process_data.input_events,
+                                        BUFFER_SIZE as u32,
+                                    )?;
+                                    process_data.buffers.randomize(&mut prng);
+                                    let original_input_buffers =
+                                        process_data.buffers.inputs_ref().to_owned();
+
+                                    plugin
+                                        .process(&mut process_data)
+                                        .context("Error during audio processing")?;
+                                    check_out_of_place_output_consistency(
+                                        &process_data,
+                                        &original_input_buffers,
+                                    )
+                                    .with_context(|| {
+                                        format!(
+                                            "Failed during processing cycle {} out of 5",
+                                            iteration + 1
+                                        )
+                                    })?;
+
+                                    process_data.clear_events();
+                                    process_data.advance_transport(BUFFER_SIZE as u32);
+                                }
+                                plugin.stop_processing();
+
+                                Ok(())
+                            })?;
+                            plugin.deactivate();
+
+                            host.thread_safety_check()
+                                .context("Thread safety checks failed")?;
+
+                            Ok(TestStatus::Success { notes: None })
+                        });
+
+                    match result {
+                        Ok(status) => status,
+                        Err(err) => TestStatus::Failed {
+                            reason: Some(format!("{err:#}")),
+                        },
+                    }
+                }
+                PluginTestCase::InconsistentNoteProcessing => {
+                    // This is the same test as `BasicOutOfPlaceNoteProcessing`, but without
+                    // requiring matched note on/off pairs and similar invariants
+                    let mut prng = new_prng();
+
+                    let host = ClapHost::new();
+                    let result = library
+                        .create_plugin(plugin_id, host.clone())
+                        .context("Could not create the plugin instance")
+                        .and_then(|plugin| {
+                            plugin.init().context("Error during initialization")?;
+
+                            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                                Some(audio_ports) => audio_ports.config().context(
+                                    "Error while querying 'audio-ports' IO configuration",
+                                )?,
+                                None => AudioPortConfig::default(),
+                            };
+                            let note_port_config = match plugin.get_extension::<NotePorts>() {
+                                Some(note_ports) => note_ports.config().context(
+                                    "Error while querying 'note-ports' IO configuration",
+                                )?,
+                                None => return Ok(TestStatus::Skipped {
+                                    reason: Some(String::from(
+                                        "The plugin does not implement the 'note-ports' extension.",
+                                    )),
+                                }),
+                            };
+
+                            const SAMPLE_RATE: f64 = 44_100.0;
+                            const BUFFER_SIZE: usize = 512;
+                            const TEMPO: f64 = 110.0;
+                            const TIME_SIG_NUMERATOR: u16 = 4;
+                            const TIME_SIG_DENOMINATOR: u16 = 4;
+
+                            // TODO: Use in-place processing for this test
+                            let (mut input_buffers, mut output_buffers) =
+                                audio_ports_config.create_buffers(BUFFER_SIZE);
+                            let mut process_data = ProcessData::new(
+                                AudioBuffers::OutOfPlace(
+                                    OutOfPlaceAudioBuffers::new(
+                                        &mut input_buffers,
+                                        &mut output_buffers,
+                                    )
+                                    .unwrap(),
+                                ),
+                                SAMPLE_RATE,
+                                TEMPO,
+                                TIME_SIG_NUMERATOR,
+                                TIME_SIG_DENOMINATOR,
+                            );
+
+                            // This RNG (Random Note Generator) allows generates mismatching events
+                            let mut note_event_rng =
+                                NoteGenerator::new(note_port_config).with_inconsistent_events();
 
                             plugin.activate(SAMPLE_RATE, 1, BUFFER_SIZE)?;
                             plugin.on_audio_thread(|plugin| -> Result<()> {
