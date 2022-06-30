@@ -19,7 +19,8 @@ use crate::util;
 /// all plugins exposed by the library and to initialize plugins.
 #[derive(Debug)]
 pub struct PluginLibrary {
-    /// The path to this plugin library.
+    /// The path to this plugin library. On macOS, this points to the bundle's root instead of the
+    /// library contained within the bundle.
     library_path: PathBuf,
     /// The plugin's library. Its entry point has already been initialized, and it will
     /// autoamtically be deinitialized when this object gets dropped.
@@ -72,7 +73,7 @@ impl PluginLibrary {
 
         // NOTE: Apple says you can dlopen() bundles. This is a lie.
         #[cfg(target_os = "macos")]
-        let path = {
+        let library = {
             use core_foundation::bundle::CFBundle;
             use core_foundation::url::CFURL;
 
@@ -83,13 +84,15 @@ impl PluginLibrary {
                 .executable_url()
                 .context("Could not get executable URL within bundle")?;
 
-            executable
+            let executable_path = executable
                 .to_path()
-                .context("Could not convert bundle executable path")?
+                .context("Could not convert bundle executable path")?;
+            unsafe { libloading::Library::new(&executable_path) }
+                .context("Could not load the plugin library in the bundle")?
         };
-
-        let library =
-            unsafe { libloading::Library::new(&path) }.context("Could not load the library")?;
+        #[cfg(not(target_os = "macos"))]
+        let library = unsafe { libloading::Library::new(&path) }
+            .context("Could not load the plugin library")?;
 
         // The entry point needs to be initialized before it can be used. It will be deinitialized
         // when the `Plugin` object is dropped.
