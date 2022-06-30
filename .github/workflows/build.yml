@@ -18,7 +18,8 @@ defaults:
     shell: bash
 
 jobs:
-  # We'll only package the plugins with an entry in bundler.toml
+  # This builds the binaries and uploads them to GitHub Actions. A second job
+  # builds a universal binary out of the macOS binaries.
   package:
     strategy:
       matrix:
@@ -36,15 +37,13 @@ jobs:
 
       - uses: actions/cache@v2
         with:
-          # FIXME: In combination with `actions-rs/toolchain@v1` this may
-          #        somehow cause the AArch64 version of rustup to end up here
-          # ~/.cargo/bin/
           path: |
+            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -70,19 +69,66 @@ jobs:
       - name: Create tarball
         if: startsWith(matrix.os, 'ubuntu') || (startsWith(matrix.os, 'macos') && !matrix.cross-target)
         run: |
-          tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/release/clap-validator
+          tar -C target/release -caf "$ARCHIVE_NAME.tar.gz" clap-validator
       - name: Create tarball
         if: startsWith(matrix.os, 'macos') && matrix.cross-target
         run: |
-          tar -caf "${{ env.ARCHIVE_NAME }}.tar.gz" target/${{ matrix.cross-target }}/release/clap-validator
+          tar -C target/${{ matrix.cross-target }}/release -caf "$ARCHIVE_NAME.tar.gz" clap-validator
       - uses: actions/upload-artifact@v2
         if: "!startsWith(matrix.os, 'windows')"
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.tar.gz
 
+      # On Windows we can just upload the .exe file directly since Windows
+      # doesn't have an executable bit
       - uses: actions/upload-artifact@v2
         if: startsWith(matrix.os, 'windows')
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: target/release/clap-validator.exe
+
+  universal-binary:
+    name: Build a universal macOS binary
+    runs-on: macos-11
+    needs: package
+    steps:
+      - uses: actions/checkout@v2
+      - name: Fetch all git history
+        run: git fetch --force --prune --tags --unshallow
+
+      - name: Determine the previously build archive names
+        run: |
+          echo "X86_64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-10.15-x86_64" >> "$GITHUB_ENV"
+          echo "AARCH64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-11-aarch64" >> "$GITHUB_ENV"
+
+      - name: Determine archive name for the universal binary
+        run: |
+          echo "ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-universal" >> "$GITHUB_ENV"
+
+      - name: Download the previously built x86_64 binary
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.X86_64_ARCHIVE_NAME }}
+          path: binaries/x86_64
+      - name: Download the previously built AArch64 binary
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.AARCH64_ARCHIVE_NAME }}
+          path: binaries/aarch64
+
+      - name: Combine the binaries
+        run: |
+          # There's only a single file in the directory, so that makes it easier
+          tar -C binaries/x86_64 -xvf binaries/x86_64/*.tar.gz
+          rm binaries/x86_64/*.tar.gz
+          tar -C binaries/aarch64 -xvf binaries/aarch64/*.tar.gz
+          rm binaries/aarch64/*.tar.gz
+
+          lipo -create -output binaries/clap-validator binaries/x86_64/clap-validator binaries/aarch64/clap-validator
+          tar -caf "$ARCHIVE_NAME.tar.gz" binaries/clap-validator
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: ${{ env.ARCHIVE_NAME }}.tar.gz
