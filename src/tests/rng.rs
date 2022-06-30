@@ -13,8 +13,10 @@ use clap_sys::ext::note_ports::{
 use midi_consts::channel_event as midi;
 use rand::Rng;
 use rand_pcg::Pcg32;
+use std::ops::RangeInclusive;
 
-use crate::plugin::{audio_thread::process::Event, ext::note_ports::NotePortConfig};
+use crate::plugin::audio_thread::process::{Event, EventQueue};
+use crate::plugin::ext::note_ports::NotePortConfig;
 
 /// Create a new pseudo-random number generator with a fixed seed.
 pub fn new_prng() -> Pcg32 {
@@ -71,6 +73,36 @@ impl NoteGenerator {
             active_notes: vec![Vec::new(); num_inputs],
             next_note_id: 0,
         }
+    }
+
+    /// Clear and fill an event queue with random events for the next `num_samples` samples. These
+    /// events are consistent, meaning that there are no things like note offs before a note on,
+    /// duplicate note ons, or note expressions for notes that don't exist.
+    ///
+    /// Returns an error if generating random events failed. This can happen if the plugin doesn't
+    /// support any note event types.
+    pub fn fill_event_queue(
+        &mut self,
+        prng: &mut Pcg32,
+        queue: &EventQueue,
+        num_samples: u32,
+    ) -> Result<()> {
+        // The range for the next event's timing relative to the `current_sample`. This will be
+        // capped at 0, so there's a ~58% chance the next event occurs on the same time interval as
+        // the previous event.
+        const SAMPLE_OFFSET_RANGE: RangeInclusive<i32> = -6..=5;
+
+        let mut events = queue.events.lock().unwrap();
+        events.clear();
+
+        let mut current_sample = prng.gen_range(SAMPLE_OFFSET_RANGE).max(0) as u32;
+        while current_sample < num_samples {
+            events.push(self.generate(prng, current_sample)?);
+
+            current_sample += prng.gen_range(SAMPLE_OFFSET_RANGE).max(0) as u32;
+        }
+
+        Ok(())
     }
 
     /// Generate a random note event for one of the plugin's note ports depending on the port's
