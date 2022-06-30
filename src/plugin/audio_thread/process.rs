@@ -415,10 +415,17 @@ impl EventQueue {
         check_null_ptr!(false, list, (*list).ctx, event);
         let this = &*((*list).ctx as *const Self);
 
-        this.events
-            .lock()
-            .unwrap()
-            .push(Event::from_header_ptr(event).unwrap());
+        let mut events = this.events.lock().unwrap();
+        if let Some(last_event) = events.last() {
+            // TODO: The test suite should assert this
+            let last_time = (*last_event.header_ptr()).time;
+            let time = (*event).time;
+            if last_time < time {
+                log::error!("The plugin pushed an event for sample {time}, but the last event it provided was for sample {last_time}. This should be a test failure in the future.")
+            }
+        }
+
+        events.push(Event::from_header_ptr(event).unwrap());
 
         true
     }
