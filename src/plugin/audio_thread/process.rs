@@ -189,6 +189,7 @@ impl<'a> ProcessData<'a> {
     }
 
     /// Get current the transport information.
+    #[allow(unused)]
     pub fn transport_info(&self) -> clap_event_transport {
         self.transport_info
     }
@@ -399,7 +400,7 @@ impl EventQueue {
         let events = this.events.lock().unwrap();
         #[allow(clippy::significant_drop_in_scrutinee)]
         match events.get(index as usize) {
-            Some(event) => event.header_ptr(),
+            Some(event) => event.header(),
             None => {
                 log::warn!(
                     "The plugin tried to get an event with index {index} ({} total events)",
@@ -417,17 +418,12 @@ impl EventQueue {
         check_null_ptr!(false, list, (*list).ctx, event);
         let this = &*((*list).ctx as *const Self);
 
-        let mut events = this.events.lock().unwrap();
-        if let Some(last_event) = events.last() {
-            // TODO: The test suite should assert this
-            let last_time = (*last_event.header_ptr()).time;
-            let time = (*event).time;
-            if last_time < time {
-                log::error!("The plugin pushed an event for sample {time}, but the last event it provided was for sample {last_time}. This should be a test failure in the future.")
-            }
-        }
-
-        events.push(Event::from_header_ptr(event).unwrap());
+        // The monotonicity of the plugin's event insertion order is checked as part of the output
+        // consistency checks
+        this.events
+            .lock()
+            .unwrap()
+            .push(Event::from_header_ptr(event).unwrap());
 
         true
     }
@@ -458,8 +454,8 @@ impl Event {
         }
     }
 
-    /// Get a pointer to the event's header
-    pub fn header_ptr(&self) -> *const clap_event_header {
+    /// Get a a reference to the event's header.
+    pub fn header(&self) -> &clap_event_header {
         match self {
             Event::ClapNote(event) => &event.header,
             Event::ClapNoteExpression(event) => &event.header,

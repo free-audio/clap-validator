@@ -138,11 +138,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                     plugin
                                         .process(&mut process_data)
                                         .context("Error during audio processing")?;
-
-                                    check_buffer_consistency(
-                                        process_data.buffers.inputs_ref(),
+                                    check_out_of_place_output_consistency(
+                                        &process_data,
                                         &original_input_buffers,
-                                        process_data.buffers.outputs_ref(),
                                     )
                                     .with_context(|| {
                                         format!(
@@ -252,10 +250,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                     plugin
                                         .process(&mut process_data)
                                         .context("Error during audio processing")?;
-                                    check_buffer_consistency(
-                                        process_data.buffers.inputs_ref(),
+                                    check_out_of_place_output_consistency(
+                                        &process_data,
                                         &original_input_buffers,
-                                        process_data.buffers.outputs_ref(),
                                     )
                                     .with_context(|| {
                                         format!(
@@ -292,13 +289,17 @@ impl<'a> TestCase<'a> for PluginTestCase {
     }
 }
 
-/// Check whether the output buffer doesn't contain any NaN, infinite, or denormal values, and that
-/// the input buffers have not been modified by the plugin.
-fn check_buffer_consistency(
-    input_buffers: &[Vec<Vec<f32>>],
+/// The process for consistency. This verifies that the output buffer doesn't contain any NaN,
+/// infinite, or denormal values, that the input buffers have not been modified by the plugin, and
+/// that the output event queue is monotonically ordered.
+fn check_out_of_place_output_consistency(
+    process_data: &ProcessData,
     original_input_buffers: &[Vec<Vec<f32>>],
-    output_buffers: &[Vec<Vec<f32>>],
 ) -> Result<()> {
+    // The input buffer must not be overwritten during out of place processing, and the outputs
+    // should not contain any non-finite or denormal values
+    let input_buffers = process_data.buffers.inputs_ref();
+    let output_buffers = process_data.buffers.outputs_ref();
     if input_buffers != original_input_buffers {
         anyhow::bail!(
             "The plugin has overwritten the input buffers during out-of-place processing"
@@ -314,6 +315,18 @@ fn check_buffer_consistency(
                 }
             }
         }
+    }
+
+    // If the plugin output any events, then they should be in a monotonically increasing order
+    let mut last_event_time = 0;
+    #[allow(clippy::significant_drop_in_scrutinee)]
+    for event in process_data.output_events.events.lock().unwrap().iter() {
+        let event_time = event.header().time;
+        if event_time < last_event_time {
+            anyhow::bail!("The plugin output an event for sample {event_time} after it had previously output an event for sample {last_event_time}")
+        }
+
+        last_event_time = event_time;
     }
 
     Ok(())
