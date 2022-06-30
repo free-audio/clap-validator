@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
+use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -28,6 +29,10 @@ pub struct Plugin<'lib> {
     /// not. If it is, then a new thread is spawned and the closure is run from that thread. If the
     /// function is called from another thread, then the closure can be run directly.
     main_thread_id: ThreadId,
+    /// Whether the plugin is activated. If it is, then dropping this object will try to deactivate
+    /// it.
+    activated: Cell<bool>,
+
     /// The CLAP plugin library this plugin instance was created from. This field is not used
     /// directly, but keeping a reference to the library here prevents the plugin instance from
     /// outliving the library.
@@ -58,6 +63,9 @@ impl<'lib> Deref for PluginSendWrapper<'lib> {
 
 impl Drop for Plugin<'_> {
     fn drop(&mut self) {
+        if self.activated.get() {
+            unsafe { (self.handle.as_ref().deactivate)(self.as_ptr()) };
+        }
         unsafe { (self.handle.as_ref().destroy)(self.as_ptr()) };
     }
 }
@@ -82,6 +90,8 @@ impl<'lib> Plugin<'lib> {
         Plugin {
             handle,
             main_thread_id: std::thread::current().id(),
+            activated: Cell::new(false),
+
             _library: library,
             _host: host,
             _send_sync_marker: PhantomData,
@@ -160,6 +170,11 @@ impl<'lib> Plugin<'lib> {
         min_buffer_size: usize,
         max_buffer_size: usize,
     ) -> Result<()> {
+        if self.activated.get() {
+            anyhow::bail!("Cannot activate an already active plugin.");
+        }
+        self.activated.set(true);
+
         // Apparently 0 is invalid here
         assert!(min_buffer_size >= 1);
 
@@ -180,7 +195,14 @@ impl<'lib> Plugin<'lib> {
     /// Deactivate the plugin. See
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
-    pub fn deactivate(&self) {
+    pub fn deactivate(&self) -> Result<()> {
+        if !self.activated.get() {
+            anyhow::bail!("Cannot deactivate an inactive plugin.");
+        }
+        self.activated.set(false);
+
         unsafe { (self.handle.as_ref().deactivate)(self.as_ptr()) };
+
+        Ok(())
     }
 }

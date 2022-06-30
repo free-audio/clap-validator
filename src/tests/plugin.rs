@@ -368,14 +368,10 @@ where
             process_data.advance_transport(buffer_size as u32);
         }
 
-        plugin.stop_processing();
-
-        Ok(())
+        plugin.stop_processing()
     })?;
 
-    plugin.deactivate();
-
-    Ok(())
+    plugin.deactivate()
 }
 
 /// The process for consistency. This verifies that the output buffer doesn't contain any NaN,

@@ -6,6 +6,7 @@ use clap_sys::process::{
     CLAP_PROCESS_CONTINUE, CLAP_PROCESS_CONTINUE_IF_NOT_QUIET, CLAP_PROCESS_ERROR,
     CLAP_PROCESS_SLEEP, CLAP_PROCESS_TAIL,
 };
+use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
@@ -24,6 +25,10 @@ pub struct PluginAudioThread<'a> {
     /// thread instance cannot outlive the plugin instance (which cannot outlive the plugin
     /// library).
     plugin: &'a Plugin<'a>,
+    /// Whether the plugin is processing. If it is, then dropping this object will try to stop
+    /// processing audio first.
+    processing: Cell<bool>,
+
     /// To honor CLAP's thread safety guidelines, this audio thread abstraction cannot be shared
     /// with or sent to other threads.
     _send_sync_marker: PhantomData<*const ()>,
@@ -50,10 +55,20 @@ impl Deref for PluginAudioThread<'_> {
     }
 }
 
+impl Drop for PluginAudioThread<'_> {
+    fn drop(&mut self) {
+        if self.processing.get() {
+            unsafe { (self.plugin.stop_processing)(self.plugin.as_ptr()) };
+        }
+    }
+}
+
 impl<'a> PluginAudioThread<'a> {
     pub fn new(plugin: &'a Plugin) -> Self {
         PluginAudioThread {
             plugin,
+            processing: Cell::new(false),
+
             _send_sync_marker: PhantomData,
         }
     }
@@ -87,6 +102,11 @@ impl<'a> PluginAudioThread<'a> {
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
     pub fn start_processing(&self) -> Result<()> {
+        if self.processing.get() {
+            anyhow::bail!("Cannot start processing for a plugin that's already processing audio.");
+        }
+        self.processing.set(true);
+
         if unsafe { (self.plugin.start_processing)(self.as_ptr()) } {
             Ok(())
         } else {
@@ -120,7 +140,16 @@ impl<'a> PluginAudioThread<'a> {
     /// Stop processing audio. See
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
-    pub fn stop_processing(&self) {
+    pub fn stop_processing(&self) -> Result<()> {
+        if !self.processing.get() {
+            anyhow::bail!(
+                "Cannot stop processing for a plugin that's currently not processing audio."
+            );
+        }
+        self.processing.set(false);
+
         unsafe { (self.plugin.stop_processing)(self.as_ptr()) };
+
+        Ok(())
     }
 }
