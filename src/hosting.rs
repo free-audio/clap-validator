@@ -6,7 +6,9 @@ use clap_sys::ext::note_ports::{
     clap_host_note_ports, clap_note_dialect, CLAP_EXT_NOTE_PORTS, CLAP_NOTE_DIALECT_CLAP,
     CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
 };
+use clap_sys::ext::params::{clap_host_params, clap_param_clear_flags, clap_param_rescan_flags};
 use clap_sys::host::clap_host;
+use clap_sys::id::clap_id;
 use clap_sys::version::CLAP_VERSION;
 use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
@@ -40,6 +42,7 @@ pub struct ClapHost {
     // These are the vtables for the extensions supported by the host
     clap_host_audio_ports: clap_host_audio_ports,
     clap_host_note_ports: clap_host_note_ports,
+    clap_host_params: clap_host_params,
 }
 
 impl ClapHost {
@@ -72,6 +75,11 @@ impl ClapHost {
             clap_host_note_ports: clap_host_note_ports {
                 supported_dialects: Self::ext_note_ports_supported_dialects,
                 rescan: Self::ext_note_ports_rescan,
+            },
+            clap_host_params: clap_host_params {
+                rescan: Self::ext_params_rescan,
+                clear: Self::ext_params_clear,
+                request_flush: Self::ext_params_request_flush,
             },
         }))
     }
@@ -121,7 +129,6 @@ impl ClapHost {
     #[allow(unused)]
     pub fn assert_audio_thread(&self, function_name: &str) {
         let mut thread_safety_error = self.thread_safety_error.lock().unwrap();
-        let current_thread_id = std::thread::current().id();
 
         #[allow(clippy::significant_drop_in_scrutinee)]
         match *thread_safety_error {
@@ -212,5 +219,40 @@ impl ClapHost {
 
         this.assert_main_thread("clap_host_note_ports::rescan()");
         log::trace!("TODO: Add callbacks for 'clap_host_note_ports::rescan()'");
+    }
+
+    unsafe extern "C" fn ext_params_rescan(
+        host: *const clap_host,
+        _flags: clap_param_rescan_flags,
+    ) {
+        check_null_ptr!((), host);
+        let this = &*(host as *const Self);
+
+        this.assert_main_thread("clap_host_params::rescan()");
+        log::trace!("TODO: Add callbacks for 'clap_host_params::rescan()'");
+    }
+
+    unsafe extern "C" fn ext_params_clear(
+        host: *const clap_host,
+        _param_id: clap_id,
+        _flags: clap_param_clear_flags,
+    ) {
+        check_null_ptr!((), host);
+        let this = &*(host as *const Self);
+
+        this.assert_main_thread("clap_host_params::clear()");
+        log::trace!("TODO: Add callbacks for 'clap_host_params::clear()'");
+    }
+
+    unsafe extern "C" fn ext_params_request_flush(host: *const clap_host) {
+        check_null_ptr!((), host);
+        let this = &*(host as *const Self);
+
+        // TODO: This is not quite correct. The function may be called from any thread that isn't
+        //       'the audio thread'. We currently just don't know what the audio threads are here.
+        //       A way to implement that could work by tracking audio thread IDs on this host
+        //       object, and adding and removing them in `Plugin::on_audio_thread()`.
+        this.assert_main_thread("clap_host_params::request_flush()");
+        log::trace!("TODO: Add callbacks for 'clap_host_params::request_flush()'");
     }
 }
