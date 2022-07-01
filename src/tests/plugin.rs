@@ -72,7 +72,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from("Processes random audio through the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place audio processing."),
             PluginTestCase::BasicOutOfPlaceNoteProcessing => String::from("Sends audio and random note and MIDI events to the plugin with its default parameter values and tests the output for consistency. Uses out-of-place audio processing."),
             PluginTestCase::InconsistentNoteProcessing => String::from("Sends intentionally inconsistent and mismatching note and MIDI events to the plugin with its default parameter values and tests the output for consistency. Uses out-of-place audio processing."),
-            PluginTestCase::ConvertParams => String::from("Asserts that value to string and string to value conversions are support for all end/or none of the plugin's parameters, and that conversions between values and strings roundtrip correctly."),
+            PluginTestCase::ConvertParams => String::from("Asserts that value to string and string to value conversions are supported for ether all or none of the plugin's parameters, and that conversions between values and strings roundtrip consistently."),
         }
     }
 
