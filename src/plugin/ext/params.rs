@@ -244,7 +244,7 @@ impl Params<'_> {
                     != 0
             {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) is modulatable per note ID, key, channel, or port, but does not have CLAP_PARAM_IS_AUTOMATABLE. This is likely a bug.",
+                    "Parameter '{}' (stable ID {}) is modulatable per note ID, key, channel, or port, but does not have CLAP_PARAM_IS_MODULATABLE. This is likely a bug.",
                     &name,
                     info.id
                 )
