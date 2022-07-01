@@ -295,7 +295,7 @@ impl NoteGenerator {
 
                     return Ok(Event::ClapNoteExpression(clap_event_note_expression {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_note_expression>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_NOTE_CHOKE,
@@ -339,7 +339,7 @@ impl NoteGenerator {
                     let velocity = prng.gen_range(0.0..=1.0);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
@@ -373,7 +373,7 @@ impl NoteGenerator {
                     let velocity = prng.gen_range(0.0..=1.0);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
@@ -392,7 +392,7 @@ impl NoteGenerator {
                     let pressure = prng.gen_range(0..128);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
@@ -422,7 +422,7 @@ impl NoteGenerator {
                     let pressure = prng.gen_range(0..128);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
@@ -443,7 +443,7 @@ impl NoteGenerator {
                     let byte2 = prng.gen_range(0..128);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
@@ -459,7 +459,7 @@ impl NoteGenerator {
                     let value = prng.gen_range(0..128);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
@@ -474,7 +474,7 @@ impl NoteGenerator {
                     let program_number = prng.gen_range(0..128);
                     return Ok(Event::Midi(clap_event_midi {
                         header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
+                            size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
