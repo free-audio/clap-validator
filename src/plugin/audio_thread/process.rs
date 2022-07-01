@@ -23,7 +23,7 @@ use crate::util::check_null_ptr;
 /// The input and output data for a call to `clap_plugin::process()`.
 pub struct ProcessData<'a> {
     /// The input and output audio buffers.
-    pub buffers: AudioBuffers<'a>,
+    pub buffers: &'a mut AudioBuffers<'a>,
     /// The input events.
     pub input_events: Pin<Arc<EventQueue>>,
     /// The output events.
@@ -128,7 +128,7 @@ impl<'a> ProcessData<'a> {
     /// [`advance_transport()`][Self::advance_transport()] method.
     //
     // TODO: More transport info options. Missing fields, loop regions, flags, etc.
-    pub fn new(buffers: AudioBuffers<'a>, config: ProcessConfig) -> Self {
+    pub fn new(buffers: &'a mut AudioBuffers<'a>, config: ProcessConfig) -> Self {
         ProcessData {
             buffers,
             input_events: EventQueue::new(),
