@@ -386,14 +386,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                     params.value_to_text(param_id, reconverted_value)?;
                                 // Both of these are produced by the plugin, so they should be equal
                                 if starting_text != reconverted_text {
-                                    anyhow::bail!("Converting {starting_value} to a string, back to a value, and then back to a string again results in '{starting_text}' -> {reconverted_value} -> '{reconverted_text}', which is not consistent.");
+                                    anyhow::bail!("Converting {starting_value:?} to a string, back to a value, and then back to a string again results in '{starting_text}' -> {reconverted_value:?} -> '{reconverted_text}', which is not consistent.");
                                 }
 
                                 // And one last hop back for good measure
                                 let final_value =
                                     params.text_to_value(param_id, &reconverted_text)?;
                                 if final_value != reconverted_value {
-                                    anyhow::bail!("Converting {starting_value} to a string, back to a value, back to a string, and then back to a value again results in '{starting_text}' -> {reconverted_value} -> '{reconverted_text}' -> {final_value}, which is not consistent.");
+                                    anyhow::bail!("Converting {starting_value:?} to a string, back to a value, back to a string, and then back to a value again results in '{starting_text}' -> {reconverted_value:?} -> '{reconverted_text}' -> {final_value:?}, which is not consistent.");
                                 }
                             }
                         }
