@@ -68,3 +68,14 @@ pub unsafe fn cstr_array_to_vec(mut ptr: *const *const c_char) -> Result<Option<
 
     Ok(Some(strings))
 }
+
+/// Convert a `c_char` slice to a `String`. Returns an error if the slice did not contain a null
+/// byte, or if the string is not valid UTF-8.
+pub fn c_char_slice_to_string(slice: &[c_char]) -> Result<String> {
+    // `from_bytes_with_nul` only takes u8, and not c_char which is signed on x86 based
+    // platforms
+    CStr::from_bytes_with_nul(unsafe { &*(slice as *const [c_char] as *const [u8]) })
+        .map_err(anyhow::Error::from)
+        .and_then(|cstr| cstr.to_str().context("Error while parsing UTF-8"))
+        .map(String::from)
+}

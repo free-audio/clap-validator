@@ -7,6 +7,7 @@ use std::ptr::NonNull;
 
 pub mod audio_ports;
 pub mod note_ports;
+pub mod params;
 
 /// An abstraction for a CLAP plugin extension. `P` here is the plugin type. In practice, this is
 /// either `Plugin` or `PluginAudioThread`. Abstractions for main thread functions will implement
