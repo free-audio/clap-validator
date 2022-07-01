@@ -153,26 +153,26 @@ impl PluginLibrary {
             };
 
             metadata.plugins.push(PluginMetadata {
-                id: unsafe { util::cstr_ptr_to_string((*descriptor).id) }
+                id: unsafe { util::cstr_ptr_to_string((*descriptor).id)? }
                     .context("The plugin's 'id' pointer was null")?,
-                name: unsafe { util::cstr_ptr_to_string((*descriptor).name) }
+                name: unsafe { util::cstr_ptr_to_string((*descriptor).name)? }
                     .context("The plugin's 'id' pointer was null")?,
                 version: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).version)
+                    util::cstr_ptr_to_string((*descriptor).version)?
                 }),
                 vendor: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).vendor)
+                    util::cstr_ptr_to_string((*descriptor).vendor)?
                 }),
                 description: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).description)
+                    util::cstr_ptr_to_string((*descriptor).description)?
                 }),
                 manual_url: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).manual_url)
+                    util::cstr_ptr_to_string((*descriptor).manual_url)?
                 }),
                 support_url: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).support_url)
+                    util::cstr_ptr_to_string((*descriptor).support_url)?
                 }),
-                features: unsafe { util::cstr_array_to_vec((*descriptor).features) }
+                features: unsafe { util::cstr_array_to_vec((*descriptor).features)? }
                     .context("The plugin's 'features' were malformed")?,
             })
         }
