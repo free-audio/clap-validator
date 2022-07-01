@@ -11,14 +11,14 @@ use clap_sys::ext::params::{
     CLAP_PARAM_IS_STEPPED,
 };
 use clap_sys::id::clap_id;
+use clap_sys::string_sizes::CLAP_NAME_SIZE;
 use std::collections::HashMap;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::ops::RangeInclusive;
-use std::os::raw::c_char;
 use std::ptr::NonNull;
 
 use crate::plugin::instance::Plugin;
-use crate::util;
+use crate::util::{self, c_char_slice_to_string};
 
 use super::Extension;
 
@@ -55,6 +55,62 @@ pub struct ParamInfo {
 }
 
 impl Params<'_> {
+    /// Get a parameter's value.
+    pub fn get(&self, param_id: clap_id) -> Result<f64> {
+        let mut value = 0.0f64;
+        if unsafe { (self.params.as_ref().get_value)(self.plugin.as_ptr(), param_id, &mut value) } {
+            Ok(value)
+        } else {
+            anyhow::bail!(
+                "'clap_plugin_params::get_value()' returned false for parameter ID {param_id}"
+            );
+        }
+    }
+
+    /// Convert a parameter value's to a string. Returns an error if the plugin doesn't support
+    /// this.
+    pub fn value_to_text(&self, param_id: clap_id, value: f64) -> Result<String> {
+        let mut string_buffer = [0; CLAP_NAME_SIZE];
+        if unsafe {
+            (self.params.as_ref().value_to_text)(
+                self.plugin.as_ptr(),
+                param_id,
+                value,
+                string_buffer.as_mut_ptr(),
+                string_buffer.len() as u32,
+            )
+        } {
+            // TODO: We should not be using anyhow for this, this should be a discernable error type even though it of course shouldn't happen
+            c_char_slice_to_string(&string_buffer).with_context(|| format!("Could not convert the string representation of {value} for parameter {param_id} to a UTF-8 string"))
+        } else {
+            anyhow::bail!(
+                "'clap_plugin_params::value_to_text()' returned false for parameter ID {param_id} and value {value}"
+            );
+        }
+    }
+
+    /// Convert a string representation for a parameter to a value. Returns an error if the plugin
+    /// doesn't support this.
+    pub fn text_to_value(&self, param_id: clap_id, text: &str) -> Result<f64> {
+        let text_cstring = CString::new(text)?;
+
+        let mut value = 0.0f64;
+        if unsafe {
+            (self.params.as_ref().text_to_value)(
+                self.plugin.as_ptr(),
+                param_id,
+                text_cstring.as_ptr(),
+                &mut value,
+            )
+        } {
+            Ok(value)
+        } else {
+            anyhow::bail!(
+                "'clap_plugin_params::text_to_value()' returned false for parameter ID {param_id} and string representation '{text}'"
+            );
+        }
+    }
+
     /// Get information about all of the plugin's parameters. Returns an error if the plugin's
     /// parameters are inconsistent. For instance, if there are multiple parameter with the same
     /// index, or if a parameter's minimum value is higher than the maximum value.
