@@ -182,7 +182,7 @@ impl Params<'_> {
                 )
             }
             if (info.flags & CLAP_PARAM_IS_STEPPED) != 0 {
-                if info.min_value == info.min_value.trunc() {
+                if info.min_value != info.min_value.trunc() {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a stepped parameter, but its minimum value ({:?}) is not an integer",
                         &name,
@@ -190,7 +190,7 @@ impl Params<'_> {
                         info.min_value,
                     )
                 }
-                if info.max_value == info.max_value.trunc() {
+                if info.max_value != info.max_value.trunc() {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a stepped parameter, but its maximum value ({:?}) is not an integer",
                         &name,
