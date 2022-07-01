@@ -12,7 +12,7 @@ use clap_sys::ext::params::{
 };
 use clap_sys::id::clap_id;
 use clap_sys::string_sizes::CLAP_NAME_SIZE;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::ops::RangeInclusive;
 use std::ptr::NonNull;
@@ -113,9 +113,10 @@ impl Params<'_> {
 
     /// Get information about all of the plugin's parameters. Returns an error if the plugin's
     /// parameters are inconsistent. For instance, if there are multiple parameter with the same
-    /// index, or if a parameter's minimum value is higher than the maximum value.
-    pub fn info(&self) -> Result<HashMap<clap_id, ParamInfo>> {
-        let mut result = HashMap::new();
+    /// index, or if a parameter's minimum value is higher than the maximum value. This uses a
+    /// BTreeMap to ensure the order is consistent between runs.
+    pub fn info(&self) -> Result<BTreeMap<clap_id, ParamInfo>> {
+        let mut result = BTreeMap::new();
 
         let params = unsafe { self.params.as_ref() };
         let num_params = unsafe { (params.count)(self.plugin.as_ptr()) };
@@ -165,7 +166,7 @@ impl Params<'_> {
             let range = info.min_value..=info.max_value;
             if info.min_value > info.max_value {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) has a minimum value ({}) that's higher than it's maximum value ({})",
+                    "Parameter '{}' (stable ID {}) has a minimum value ({:?}) that's higher than it's maximum value ({:?})",
                     &name,
                     info.id,
                     info.min_value,
@@ -174,7 +175,7 @@ impl Params<'_> {
             }
             if !range.contains(&info.default_value) {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) has a default value ({}) that falls outside of its value range ({:?})",
+                    "Parameter '{}' (stable ID {}) has a default value ({:?}) that falls outside of its value range ({:?})",
                     &name,
                     info.id,
                     info.default_value,
