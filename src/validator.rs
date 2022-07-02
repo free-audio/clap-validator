@@ -174,7 +174,8 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
         for plugin_metadata in metadata.plugins {
             if results.plugin_tests.contains_key(&plugin_metadata.id) {
                 anyhow::bail!(
-                    "Duplicate plugin ID in validation results: '{}' ({}) has already been validated",
+                    "Duplicate plugin ID in validation results: '{}' ({}) has already been \
+                     validated",
                     plugin_metadata.id,
                     library_path.display(),
                 );

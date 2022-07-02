@@ -143,7 +143,10 @@ impl PluginLibrary {
             let descriptor =
                 unsafe { ((*plugin_factory).get_plugin_descriptor)(plugin_factory, i) };
             if descriptor.is_null() {
-                anyhow::bail!("The plugin returned a null plugin descriptor for plugin index {i} (expected {num_plugins} total plugins)");
+                anyhow::bail!(
+                    "The plugin returned a null plugin descriptor for plugin index {i} (expected \
+                     {num_plugins} total plugins)"
+                );
             }
 
             // Empty strings should be treated as missing values in some cases

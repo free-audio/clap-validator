@@ -118,10 +118,9 @@ impl ClapHost {
             // Don't overwrite the first error
             None if std::thread::current().id() != self.main_thread_id => {
                 *thread_safety_error = Some(format!(
-                    "'{}' may only be called from the main thread (thread {:?}), but it was called from thread {:?}",
-                    function_name,
-                    self.main_thread_id,
-                    current_thread_id
+                    "'{}' may only be called from the main thread (thread {:?}), but it was \
+                     called from thread {:?}",
+                    function_name, self.main_thread_id, current_thread_id
                 ))
             }
             _ => (),
@@ -141,7 +140,8 @@ impl ClapHost {
             // TODO: This doesn't necessarily check for 'the' audio thread, although in practice that shouldn't matter
             None if std::thread::current().id() == self.main_thread_id => {
                 *thread_safety_error = Some(format!(
-                    "'{}' may only be called from an audio thread, but it was called from the main thread",
+                    "'{}' may only be called from an audio thread, but it was called from the \
+                     main thread",
                     function_name,
                 ))
             }

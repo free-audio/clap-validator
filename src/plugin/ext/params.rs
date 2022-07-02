@@ -87,7 +87,12 @@ impl Params<'_> {
         } {
             c_char_slice_to_string(&string_buffer)
                 .map(Some)
-                .with_context(|| format!("Could not convert the string representation of {value} for parameter {param_id} to a UTF-8 string"))
+                .with_context(|| {
+                    format!(
+                        "Could not convert the string representation of {value} for parameter \
+                         {param_id} to a UTF-8 string"
+                    )
+                })
         } else {
             Ok(None)
         }
@@ -129,7 +134,10 @@ impl Params<'_> {
             let mut info: clap_param_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (params.get_info)(self.plugin.as_ptr(), i, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying parameter {i} ({num_params} total parameters)");
+                anyhow::bail!(
+                    "Plugin returned an error when querying parameter {i} ({num_params} total \
+                     parameters)"
+                );
             }
 
             let name = util::c_char_slice_to_string(&info.name).with_context(|| {
@@ -150,25 +158,35 @@ impl Params<'_> {
             })?;
             if module.starts_with('/') {
                 anyhow::bail!(
-                    "The module name for parameter '{}' (stable ID {}) starts with a leading slash: '{}'",
-                    &name, info.id, module
+                    "The module name for parameter '{}' (stable ID {}) starts with a leading \
+                     slash: '{}'",
+                    &name,
+                    info.id,
+                    module
                 )
             } else if module.ends_with('/') {
                 anyhow::bail!(
-                    "The module name for parameter '{}' (stable ID {}) ends with a trailing slash: '{}'",
-                    &name, info.id, module
+                    "The module name for parameter '{}' (stable ID {}) ends with a trailing \
+                     slash: '{}'",
+                    &name,
+                    info.id,
+                    module
                 )
             } else if module.contains("//") {
                 anyhow::bail!(
-                    "The module name for parameter '{}' (stable ID {}) contains multiple subsequent slashes: '{}'",
-                    &name, info.id, module
+                    "The module name for parameter '{}' (stable ID {}) contains multiple \
+                     subsequent slashes: '{}'",
+                    &name,
+                    info.id,
+                    module
                 )
             }
 
             let range = info.min_value..=info.max_value;
             if info.min_value > info.max_value {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) has a minimum value ({:?}) that's higher than it's maximum value ({:?})",
+                    "Parameter '{}' (stable ID {}) has a minimum value ({:?}) that's higher than \
+                     it's maximum value ({:?})",
                     &name,
                     info.id,
                     info.min_value,
@@ -177,7 +195,8 @@ impl Params<'_> {
             }
             if !range.contains(&info.default_value) {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) has a default value ({:?}) that falls outside of its value range ({:?})",
+                    "Parameter '{}' (stable ID {}) has a default value ({:?}) that falls outside \
+                     of its value range ({:?})",
                     &name,
                     info.id,
                     info.default_value,
@@ -187,7 +206,8 @@ impl Params<'_> {
             if (info.flags & CLAP_PARAM_IS_STEPPED) != 0 {
                 if info.min_value != info.min_value.trunc() {
                     anyhow::bail!(
-                        "Parameter '{}' (stable ID {}) is a stepped parameter, but its minimum value ({:?}) is not an integer",
+                        "Parameter '{}' (stable ID {}) is a stepped parameter, but its minimum \
+                         value ({:?}) is not an integer",
                         &name,
                         info.id,
                         info.min_value,
@@ -195,7 +215,8 @@ impl Params<'_> {
                 }
                 if info.max_value != info.max_value.trunc() {
                     anyhow::bail!(
-                        "Parameter '{}' (stable ID {}) is a stepped parameter, but its maximum value ({:?}) is not an integer",
+                        "Parameter '{}' (stable ID {}) is a stepped parameter, but its maximum \
+                         value ({:?}) is not an integer",
                         &name,
                         info.id,
                         info.max_value,
@@ -214,7 +235,8 @@ impl Params<'_> {
 
                 if (info.flags & CLAP_PARAM_IS_STEPPED) == 0 {
                     anyhow::bail!(
-                        "Parameter '{}' (stable ID {}) is a bypass parameter, but it is not stepped",
+                        "Parameter '{}' (stable ID {}) is a bypass parameter, but it is not \
+                         stepped",
                         &name,
                         info.id
                     )
@@ -233,7 +255,8 @@ impl Params<'_> {
                     != 0
             {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) is automatable per note ID, key, channel, or port, but does not have CLAP_PARAM_IS_AUTOMATABLE. This is likely a bug.",
+                    "Parameter '{}' (stable ID {}) is automatable per note ID, key, channel, or \
+                     port, but does not have CLAP_PARAM_IS_AUTOMATABLE. This is likely a bug.",
                     &name,
                     info.id
                 )
@@ -247,7 +270,8 @@ impl Params<'_> {
                     != 0
             {
                 anyhow::bail!(
-                    "Parameter '{}' (stable ID {}) is modulatable per note ID, key, channel, or port, but does not have CLAP_PARAM_IS_MODULATABLE. This is likely a bug.",
+                    "Parameter '{}' (stable ID {}) is modulatable per note ID, key, channel, or \
+                     port, but does not have CLAP_PARAM_IS_MODULATABLE. This is likely a bug.",
                     &name,
                     info.id
                 )

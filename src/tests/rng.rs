@@ -156,7 +156,13 @@ impl NoteGenerator {
                 .contains(&CLAP_NOTE_DIALECT_MIDI_MPE);
         let possible_events =
             NoteEventType::supported_types(supports_clap_note_events, supports_midi_events)
-                .with_context(|| format!("Note input port {note_port_idx} supports neither CLAP note events nor MIDI. This is technically allowed, but few hosts will be able to interact with the plugin."))?;
+                .with_context(|| {
+                    format!(
+                        "Note input port {note_port_idx} supports neither CLAP note events nor \
+                         MIDI. This is technically allowed, but few hosts will be able to \
+                         interact with the plugin."
+                    )
+                })?;
 
         // We could do this in a smarter way to avoid generating impossible event types (like a note
         // off when there are no active notes), but this should work fine.
@@ -501,7 +507,10 @@ impl NoteGenerator {
             }
         }
 
-        panic!("Unable to generate a random note event after 1024 tries, this is a bug in the validator");
+        panic!(
+            "Unable to generate a random note event after 1024 tries, this is a bug in the \
+             validator"
+        );
     }
 }
 

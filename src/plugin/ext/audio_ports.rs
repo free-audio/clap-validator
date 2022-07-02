@@ -80,10 +80,18 @@ impl AudioPorts<'_> {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying input audio port {i} ({num_inputs} total input ports)");
+                anyhow::bail!(
+                    "Plugin returned an error when querying input audio port {i} ({num_inputs} \
+                     total input ports)"
+                );
             }
 
-            is_audio_port_type_consistent(&info).with_context(|| format!("Inconsistent channel count for output port {i} ({num_outputs} total output ports)"))?;
+            is_audio_port_type_consistent(&info).with_context(|| {
+                format!(
+                    "Inconsistent channel count for output port {i} ({num_outputs} total output \
+                     ports)"
+                )
+            })?;
 
             // We'll convert these stable IDs to vector indices later
             if input_stable_index_pairs.contains_key(&info.id) {
@@ -106,10 +114,18 @@ impl AudioPorts<'_> {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), i, false, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying output audio port {i} ({num_outputs} total output ports)");
+                anyhow::bail!(
+                    "Plugin returned an error when querying output audio port {i} ({num_outputs} \
+                     total output ports)"
+                );
             }
 
-            is_audio_port_type_consistent(&info).with_context(|| format!("Inconsistent channel count for output port {i} ({num_outputs} total output ports)"))?;
+            is_audio_port_type_consistent(&info).with_context(|| {
+                format!(
+                    "Inconsistent channel count for output port {i} ({num_outputs} total output \
+                     ports)"
+                )
+            })?;
 
             if output_stable_index_pairs.contains_key(&info.id) {
                 anyhow::bail!(
@@ -142,10 +158,19 @@ impl AudioPorts<'_> {
                     config.inputs[*pair_output_port_idx].in_place_pair_idx = Some(*input_port_idx);
                 }
                 Some((output_stable_id, (pair_output_port_idx, output_pair_stable_id))) => {
-                    anyhow::bail!("Input port {input_port_idx} with stable ID {input_stable_id} is connected to output port {pair_output_port_idx} with stable ID {output_stable_id} through an in-place pair, but the relation is not symmetrical. \
-                                   The output port reports to have an in-place pair with stable ID {output_pair_stable_id}.")
+                    anyhow::bail!(
+                        "Input port {input_port_idx} with stable ID {input_stable_id} is \
+                         connected to output port {pair_output_port_idx} with stable ID \
+                         {output_stable_id} through an in-place pair, but the relation is not \
+                         symmetrical. The output port reports to have an in-place pair with \
+                         stable ID {output_pair_stable_id}."
+                    )
                 }
-                None => anyhow::bail!("Input port {input_port_idx} with stable ID {input_stable_id} claims to be connected to an output port with stable ID {pair_stable_id} through an in-place pair, but this port does not exist."),
+                None => anyhow::bail!(
+                    "Input port {input_port_idx} with stable ID {input_stable_id} claims to be \
+                     connected to an output port with stable ID {pair_stable_id} through an \
+                     in-place pair, but this port does not exist."
+                ),
             }
         }
 
@@ -164,14 +189,29 @@ impl AudioPorts<'_> {
                 {
                     // We should have already done this. If this is not the case, then this is an
                     // error in the validator
-                    assert_eq!(config.inputs[*output_port_idx].in_place_pair_idx, Some(*pair_input_port_idx));
-                    assert_eq!(config.inputs[*pair_input_port_idx].in_place_pair_idx, Some(*output_port_idx));
+                    assert_eq!(
+                        config.inputs[*output_port_idx].in_place_pair_idx,
+                        Some(*pair_input_port_idx)
+                    );
+                    assert_eq!(
+                        config.inputs[*pair_input_port_idx].in_place_pair_idx,
+                        Some(*output_port_idx)
+                    );
                 }
                 Some((input_stable_id, (pair_input_port_idx, input_pair_stable_id))) => {
-                    anyhow::bail!("Output port {output_port_idx} with stable ID {output_stable_id} is connected to input port {pair_input_port_idx} with stable ID {input_stable_id} through an in-place pair, but the relation is not symmetrical. \
-                                   The input port reports to have an in-place pair with stable ID {input_pair_stable_id}.")
+                    anyhow::bail!(
+                        "Output port {output_port_idx} with stable ID {output_stable_id} is \
+                         connected to input port {pair_input_port_idx} with stable ID \
+                         {input_stable_id} through an in-place pair, but the relation is not \
+                         symmetrical. The input port reports to have an in-place pair with stable \
+                         ID {input_pair_stable_id}."
+                    )
                 }
-                None => anyhow::bail!("Output port {output_port_idx} with stable ID {output_stable_id} claims to be connected to an input port with stable ID {pair_stable_id} through an in-place pair, but this port does not exist."),
+                None => anyhow::bail!(
+                    "Output port {output_port_idx} with stable ID {output_stable_id} claims to be \
+                     connected to an input port with stable ID {pair_stable_id} through an \
+                     in-place pair, but this port does not exist."
+                ),
             }
         }
 

@@ -81,12 +81,39 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn description(&self) -> String {
         match self {
-            PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from("Processes random audio through the plugin with its default parameter values and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place audio processing."),
-            PluginTestCase::BasicOutOfPlaceNoteProcessing => String::from("Sends audio and random note and MIDI events to the plugin with its default parameter values and tests the output for consistency. Uses out-of-place audio processing."),
-            PluginTestCase::InconsistentNoteProcessing => String::from("Sends intentionally inconsistent and mismatching note and MIDI events to the plugin with its default parameter values and tests the output for consistency. Uses out-of-place audio processing."),
-            PluginTestCase::ConvertParams => String::from("Asserts that value to string and string to value conversions are supported for ether all or none of the plugin's parameters, and that conversions between values and strings roundtrip consistently."),
-            PluginTestCase::BasicStateReproducibility => String::from("Randomizes a plugin's parameters, saves its state, recreates the plugin instance, reloads the state, and then checks whether the parameter values are the same and whether saving the state once more results in the same state file as before. The parameter values are updated using the process function."),
-            PluginTestCase::FlushStateReproducibility => String::from("Randomizes a plugin's parameters, saves its state, recreates the plugin instance, sets the same parameters as before, saves the state again, and then asserts that the two states are identical. The parameter values are set updated using the process function to create the first state, and using the flush function to create the second state."),
+            PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from(
+                "Processes random audio through the plugin with its default parameter values and \
+                 tests whether the output does not contain any non-finite or subnormal values. \
+                 Uses out-of-place audio processing.",
+            ),
+            PluginTestCase::BasicOutOfPlaceNoteProcessing => String::from(
+                "Sends audio and random note and MIDI events to the plugin with its default \
+                 parameter values and tests the output for consistency. Uses out-of-place audio \
+                 processing.",
+            ),
+            PluginTestCase::InconsistentNoteProcessing => String::from(
+                "Sends intentionally inconsistent and mismatching note and MIDI events to the \
+                 plugin with its default parameter values and tests the output for consistency. \
+                 Uses out-of-place audio processing.",
+            ),
+            PluginTestCase::ConvertParams => String::from(
+                "Asserts that value to string and string to value conversions are supported for \
+                 ether all or none of the plugin's parameters, and that conversions between \
+                 values and strings roundtrip consistently.",
+            ),
+            PluginTestCase::BasicStateReproducibility => String::from(
+                "Randomizes a plugin's parameters, saves its state, recreates the plugin \
+                 instance, reloads the state, and then checks whether the parameter values are \
+                 the same and whether saving the state once more results in the same state file \
+                 as before. The parameter values are updated using the process function.",
+            ),
+            PluginTestCase::FlushStateReproducibility => String::from(
+                "Randomizes a plugin's parameters, saves its state, recreates the plugin \
+                 instance, sets the same parameters as before, saves the state again, and then \
+                 asserts that the two states are identical. The parameter values are set updated \
+                 using the process function to create the first state, and using the flush \
+                 function to create the second state.",
+            ),
         }
     }
 
@@ -133,9 +160,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             plugin.init().context("Error during initialization")?;
 
                             let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                                Some(audio_ports) => audio_ports
-                                    .config()
-                                    .context("Error while querying 'audio-ports' IO configuration")?,
+                                Some(audio_ports) => audio_ports.config().context(
+                                    "Error while querying 'audio-ports' IO configuration",
+                                )?,
                                 None => AudioPortConfig::default(),
                             };
                             let params = match plugin.get_extension::<Params>() {
@@ -211,7 +238,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         let plugin = library
                             .create_plugin(plugin_id, host.clone())
                             .context("Could not create the plugin instance a second time")?;
-                        plugin.init().context("Error while initializing the second plugin instance")?;
+                        plugin
+                            .init()
+                            .context("Error while initializing the second plugin instance")?;
 
                         let params = match plugin.get_extension::<Params>() {
                             Some(params) => params,
@@ -219,9 +248,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 // I sure hope that no plugin will eer hit this
                                 return Ok(TestStatus::Skipped {
                                     reason: Some(String::from(
-                                        "The plugin's second instance does not support the 'params' extension.",
+                                        "The plugin's second instance does not support the \
+                                         'params' extension.",
                                     )),
-                                })
+                                });
                             }
                         };
                         let state = match plugin.get_extension::<State>() {
@@ -229,7 +259,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             None => {
                                 return Ok(TestStatus::Skipped {
                                     reason: Some(String::from(
-                                        "The plugin's second instance does not support the 'state' extension.",
+                                        "The plugin's second instance does not support the \
+                                         'state' extension.",
                                     )),
                                 })
                             }
@@ -257,13 +288,21 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                         None
                                     } else {
                                         let param_name = &param_infos[&param_id].name;
-                                        Some(format!("parameter {param_id} ('{param_name}'), expected {expected_value:?}, actual {actual_value:?}"))
+                                        Some(format!(
+                                            "parameter {param_id} ('{param_name}'), expected \
+                                             {expected_value:?}, actual {actual_value:?}"
+                                        ))
                                     }
                                 })
                                 .collect::<Vec<String>>()
                                 .join(", ");
 
-                            anyhow::bail!("After reloading the state, the plugin's parameter values do not match the old values when queried through 'clap_plugin_params::get()'. The mismatching values are {incorrect_values}.");
+                            anyhow::bail!(
+                                "After reloading the state, the plugin's parameter values do not \
+                                 match the old values when queried through \
+                                 'clap_plugin_params::get()'. The mismatching values are \
+                                 {incorrect_values}."
+                            );
                         }
 
                         // Now for the monent of truth
@@ -271,7 +310,12 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         if second_state_file == state_file {
                             Ok(TestStatus::Success { notes: None })
                         } else {
-                            Ok(TestStatus::Failed { reason: Some(String::from("Re-saving the loaded state resulted in a different state file.")) })
+                            Ok(TestStatus::Failed {
+                                reason: Some(String::from(
+                                    "Re-saving the loaded state resulted in a different state \
+                                     file.",
+                                )),
+                            })
                         }
                     });
 

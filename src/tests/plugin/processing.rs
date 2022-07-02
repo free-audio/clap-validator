@@ -235,7 +235,10 @@ pub fn test_basic_out_of_place_note_processing(
             };
             if note_port_config.inputs.is_empty() {
                 return Ok(TestStatus::Skipped {
-                    reason: Some(String::from("The plugin implements the 'note-ports' extension but it does not have any input note ports.")),
+                    reason: Some(String::from(
+                        "The plugin implements the 'note-ports' extension but it does not have \
+                         any input note ports.",
+                    )),
                 });
             }
 
@@ -247,20 +250,16 @@ pub fn test_basic_out_of_place_note_processing(
             let (mut input_buffers, mut output_buffers) =
                 audio_ports_config.create_buffers(BUFFER_SIZE);
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
-                .run(
-                    5,
-                    ProcessConfig::default(),
-                    |process_data| {
-                        note_event_rng.fill_event_queue(
-                            &mut prng,
-                            &process_data.input_events,
-                            BUFFER_SIZE as u32,
-                        )?;
-                        process_data.buffers.randomize(&mut prng);
+                .run(5, ProcessConfig::default(), |process_data| {
+                    note_event_rng.fill_event_queue(
+                        &mut prng,
+                        &process_data.input_events,
+                        BUFFER_SIZE as u32,
+                    )?;
+                    process_data.buffers.randomize(&mut prng);
 
-                        Ok(())
-                    },
-                )?;
+                    Ok(())
+                })?;
 
             host.thread_safety_check()
                 .context("Thread safety checks failed")?;
@@ -309,7 +308,10 @@ pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &st
             };
             if note_port_config.inputs.is_empty() {
                 return Ok(TestStatus::Skipped {
-                    reason: Some(String::from("The plugin implements the 'note-ports' extension but it does not have any input note ports.")),
+                    reason: Some(String::from(
+                        "The plugin implements the 'note-ports' extension but it does not have \
+                         any input note ports.",
+                    )),
                 });
             }
 
@@ -322,20 +324,16 @@ pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &st
             let (mut input_buffers, mut output_buffers) =
                 audio_ports_config.create_buffers(BUFFER_SIZE);
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
-                .run(
-                    5,
-                    ProcessConfig::default(),
-                    |process_data| {
-                        note_event_rng.fill_event_queue(
-                            &mut prng,
-                            &process_data.input_events,
-                            BUFFER_SIZE as u32,
-                        )?;
-                        process_data.buffers.randomize(&mut prng);
+                .run(5, ProcessConfig::default(), |process_data| {
+                    note_event_rng.fill_event_queue(
+                        &mut prng,
+                        &process_data.input_events,
+                        BUFFER_SIZE as u32,
+                    )?;
+                    process_data.buffers.randomize(&mut prng);
 
-                        Ok(())
-                    },
-                )?;
+                    Ok(())
+                })?;
 
             host.thread_safety_check()
                 .context("Thread safety checks failed")?;
@@ -371,9 +369,15 @@ fn check_out_of_place_output_consistency(
         for (channel_idx, channel_slice) in channel_slices.iter().enumerate() {
             for (sample_idx, sample) in channel_slice.iter().enumerate() {
                 if !sample.is_finite() {
-                    anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is {sample:?}");
+                    anyhow::bail!(
+                        "The sample written to output port {port_idx}, channel {channel_idx}, and \
+                         sample index {sample_idx} is {sample:?}"
+                    );
                 } else if sample.is_subnormal() {
-                    anyhow::bail!("The sample written to output port {port_idx}, channel {channel_idx}, and sample index {sample_idx} is subnormal ({sample:?})");
+                    anyhow::bail!(
+                        "The sample written to output port {port_idx}, channel {channel_idx}, and \
+                         sample index {sample_idx} is subnormal ({sample:?})"
+                    );
                 }
             }
         }
@@ -385,7 +389,10 @@ fn check_out_of_place_output_consistency(
     for event in process_data.output_events.events.lock().unwrap().iter() {
         let event_time = event.header().time;
         if event_time < last_event_time {
-            anyhow::bail!("The plugin output an event for sample {event_time} after it had previously output an event for sample {last_event_time}")
+            anyhow::bail!(
+                "The plugin output an event for sample {event_time} after it had previously \
+                 output an event for sample {last_event_time}"
+            )
         }
 
         last_event_time = event_time;

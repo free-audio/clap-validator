@@ -132,7 +132,8 @@ impl<'a> PluginAudioThread<'a> {
             CLAP_PROCESS_TAIL => Ok(ProcessStatus::Tail),
             CLAP_PROCESS_SLEEP => Ok(ProcessStatus::Sleep),
             result => anyhow::bail!(
-                "The plugin returned an unknown 'clap_process_status' value {result} from 'clap_plugin::process()'"
+                "The plugin returned an unknown 'clap_process_status' value {result} from \
+                 'clap_plugin::process()'"
             ),
         }
     }

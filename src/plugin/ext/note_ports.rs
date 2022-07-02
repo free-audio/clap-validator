@@ -70,7 +70,10 @@ impl NotePorts<'_> {
             let mut info: clap_note_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying input note port {i} ({num_inputs} total input ports)");
+                anyhow::bail!(
+                    "Plugin returned an error when querying input note port {i} ({num_inputs} \
+                     total input ports)"
+                );
             }
 
             let num_preferred_dialects = info.preferred_dialect.count_ones();
@@ -81,7 +84,12 @@ impl NotePorts<'_> {
             }
 
             if (info.supported_dialects & info.preferred_dialect) == 0 {
-                anyhow::bail!("Plugin prefers note dialect {:#b} for input note port {i} which is not contained within the supported note dialects field ({:#b})", info.preferred_dialect, info.supported_dialects);
+                anyhow::bail!(
+                    "Plugin prefers note dialect {:#b} for input note port {i} which is not \
+                     contained within the supported note dialects field ({:#b})",
+                    info.preferred_dialect,
+                    info.supported_dialects
+                );
             }
 
             if !input_stable_indices.insert(info.id) {
@@ -104,7 +112,10 @@ impl NotePorts<'_> {
             let mut info: clap_note_port_info = unsafe { std::mem::zeroed() };
             let success = unsafe { (note_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
             if !success {
-                anyhow::bail!("Plugin returned an error when querying output note port {i} ({num_outputs} total output ports)");
+                anyhow::bail!(
+                    "Plugin returned an error when querying output note port {i} ({num_outputs} \
+                     total output ports)"
+                );
             }
 
             let num_preferred_dialects = info.preferred_dialect.count_ones();
@@ -115,7 +126,12 @@ impl NotePorts<'_> {
             }
 
             if (info.supported_dialects & info.preferred_dialect) == 0 {
-                anyhow::bail!("Plugin prefers note dialect {:#b} for output note port {i} which is not contained within the supported note dialects field ({:#b})", info.preferred_dialect, info.supported_dialects);
+                anyhow::bail!(
+                    "Plugin prefers note dialect {:#b} for output note port {i} which is not \
+                     contained within the supported note dialects field ({:#b})",
+                    info.preferred_dialect,
+                    info.supported_dialects
+                );
             }
 
             if !output_stable_indices.insert(info.id) {
