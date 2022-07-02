@@ -366,7 +366,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 prng.gen_range(param_info.range.clone()),
                                 prng.gen_range(param_info.range),
                             ];
-                            for starting_value in values {
+                            'value_loop: for starting_value in values {
                                 // If the plugin rounds string representations then `value` may very
                                 // will not roundtrip correctly, so we'll start at the string
                                 // representation
@@ -379,7 +379,11 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 let reconverted_value =
                                     match params.text_to_value(param_id, &starting_text) {
                                         Ok(value) => value,
-                                        Err(_) => continue 'param_loop,
+                                        // We can't test text to value conversions without a text
+                                        // value provided by the plugin, but if the plugin doesn't
+                                        // support this then we should still continue testing
+                                        // whether the value to text conversion works consistently
+                                        Err(_) => continue 'value_loop,
                                     };
                                 num_supported_text_to_value += 1;
 
