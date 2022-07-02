@@ -147,7 +147,10 @@ impl<'a> ProcessingTest<'a> {
 }
 
 /// The test for `ProcessingTest::BasicOutOfPlaceAudioProcessing`.
-pub fn basic_out_of_place_audio_processing(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+pub fn test_basic_out_of_place_audio_processing(
+    library: &PluginLibrary,
+    plugin_id: &str,
+) -> TestStatus {
     let mut prng = new_prng();
 
     // The host doesn't need to do anything special for this test
@@ -197,7 +200,10 @@ pub fn basic_out_of_place_audio_processing(library: &PluginLibrary, plugin_id: &
 /// The test for `ProcessingTest::BasicOutOfPlaceNoteProcessing`. This test is very similar to
 /// `BasicAudioProcessing`, but it requires the `note-ports` extension, sends notes and/or MIDI to
 /// the plugin, and doesn't require the `audio-ports` extension.
-pub fn basic_out_of_place_note_processing(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+pub fn test_basic_out_of_place_note_processing(
+    library: &PluginLibrary,
+    plugin_id: &str,
+) -> TestStatus {
     let mut prng = new_prng();
 
     let host = ClapHost::new();
@@ -273,7 +279,7 @@ pub fn basic_out_of_place_note_processing(library: &PluginLibrary, plugin_id: &s
 /// The test for `ProcessingTest::InconsistentNoteProcessing`. This is the same test as
 /// `BasicOutOfPlaceNoteProcessing`, but without requiring matched note on/off pairs and similar
 /// invariants
-pub fn inconsistent_note_processing(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
 
     let host = ClapHost::new();
