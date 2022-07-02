@@ -400,14 +400,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             }
                         }
 
-                        if num_supported_value_to_text != 0 && num_supported_value_to_text != expected_conversions {
+                        if !(num_supported_value_to_text == 0 || num_supported_value_to_text == expected_conversions) {
                             // This makes zero sense as a float, but when plugins are doing some
                             // _really_ weird things getting a value like 0.33334 instead of 0 may
                             // make it a bit more obvious what's goin on
                             let num_supported_params = num_supported_value_to_text as f32 / VALUES_PER_PARAM as f32;
                             anyhow::bail!("'clap_plugin_params::value_to_text()' is supported for {num_supported_params} out of {num_params} parameters. This function is expected to be supported for either none of the parameters or for all of them.");
                         }
-                        if num_supported_text_to_value != 0 && num_supported_text_to_value != expected_conversions {
+                        if !(num_supported_text_to_value == 0 || num_supported_text_to_value == expected_conversions) {
                             let num_supported_params = num_supported_text_to_value as f32 / VALUES_PER_PARAM as f32;
                             anyhow::bail!("'clap_plugin_params::text_to_value()' is supported for {num_supported_params} out of {num_params} parameters. This function is expected to be supported for either none of the parameters or for all of them.");
                         }
@@ -415,7 +415,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         host.thread_safety_check()
                             .context("Thread safety checks failed")?;
 
-                        if num_supported_value_to_text == 0 ||  num_supported_text_to_value == 0 {
+                        if num_supported_value_to_text == 0 || num_supported_text_to_value == 0 {
                             Ok(TestStatus::Skipped { reason: Some(String::from("The plugin doesn't support value to text and/or text to value conversions for parameters.")) })
                         } else {
                             Ok(TestStatus::Success { notes: None })
