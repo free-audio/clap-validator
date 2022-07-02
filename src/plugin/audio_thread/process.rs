@@ -4,9 +4,10 @@ use anyhow::Result;
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::events::{
     clap_event_header, clap_event_midi, clap_event_note, clap_event_note_expression,
-    clap_event_transport, clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID,
-    CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_EXPRESSION,
-    CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_EVENT_TRANSPORT,
+    clap_event_param_mod, clap_event_param_value, clap_event_transport, clap_input_events,
+    clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE,
+    CLAP_EVENT_NOTE_END, CLAP_EVENT_NOTE_EXPRESSION, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON,
+    CLAP_EVENT_PARAM_MOD, CLAP_EVENT_PARAM_VALUE, CLAP_EVENT_TRANSPORT,
     CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
     CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_HAS_TIME_SIGNATURE, CLAP_TRANSPORT_IS_PLAYING,
 };
@@ -117,6 +118,10 @@ pub enum Event {
     NoteExpression(clap_event_note_expression),
     /// `CLAP_EVENT_MIDI`.
     Midi(clap_event_midi),
+    /// `CLAP_EVENT_PARAM_VALUE`.
+    ParamValue(clap_event_param_value),
+    /// `CLAP_EVENT_PARAM_MOD`.
+    ParamMod(clap_event_param_mod),
     /// An unhandled event type. This is only used when the plugin outputs an event we don't handle
     /// or recognize.
     Unknown(clap_event_header),
@@ -459,6 +464,12 @@ impl Event {
             (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_EXPRESSION) => Ok(Event::NoteExpression(
                 *(ptr as *const clap_event_note_expression),
             )),
+            (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE) => {
+                Ok(Event::ParamValue(*(ptr as *const clap_event_param_value)))
+            }
+            (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_MOD) => {
+                Ok(Event::ParamMod(*(ptr as *const clap_event_param_mod)))
+            }
             (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI) => {
                 Ok(Event::Midi(*(ptr as *const clap_event_midi)))
             }
@@ -471,6 +482,8 @@ impl Event {
         match self {
             Event::Note(event) => &event.header,
             Event::NoteExpression(event) => &event.header,
+            Event::ParamValue(event) => &event.header,
+            Event::ParamMod(event) => &event.header,
             Event::Midi(event) => &event.header,
             Event::Unknown(header) => header,
         }
