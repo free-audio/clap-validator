@@ -3,13 +3,14 @@
 use anyhow::{Context, Result};
 use clap_sys::events::{
     clap_event_header, clap_event_midi, clap_event_note, clap_event_note_expression,
-    CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE, CLAP_EVENT_NOTE_OFF,
-    CLAP_EVENT_NOTE_ON, CLAP_NOTE_EXPRESSION_PRESSURE, CLAP_NOTE_EXPRESSION_TUNING,
-    CLAP_NOTE_EXPRESSION_VOLUME,
+    clap_event_param_value, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_CHOKE,
+    CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE, CLAP_NOTE_EXPRESSION_PRESSURE,
+    CLAP_NOTE_EXPRESSION_TUNING, CLAP_NOTE_EXPRESSION_VOLUME,
 };
 use clap_sys::ext::note_ports::{
     CLAP_NOTE_DIALECT_CLAP, CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
 };
+use clap_sys::ext::params::CLAP_PARAM_IS_AUTOMATABLE;
 use midi_consts::channel_event as midi;
 use rand::Rng;
 use rand_pcg::Pcg32;
@@ -17,6 +18,7 @@ use std::ops::RangeInclusive;
 
 use crate::plugin::audio_thread::process::{Event, EventQueue};
 use crate::plugin::ext::note_ports::NotePortConfig;
+use crate::plugin::ext::params::ParamInfo;
 
 /// Create a new pseudo-random number generator with a fixed seed.
 pub fn new_prng() -> Pcg32 {
@@ -41,6 +43,12 @@ pub struct NoteGenerator {
     active_notes: Vec<Vec<Note>>,
     /// The CLAP note ID for the next note on event.
     next_note_id: i32,
+}
+
+/// A helper to generate random parameter automation and modulation events in a couple different
+/// ways to stress test a plugin's parameter handling.
+pub struct ParamFuzzer<'a> {
+    config: &'a ParamInfo,
 }
 
 /// The description of an active note in the [`NoteGenerator`].
@@ -542,5 +550,57 @@ impl NoteEventType {
         } else {
             None
         }
+    }
+}
+
+impl<'a> ParamFuzzer<'a> {
+    /// Create a new parmaeter fuzzer
+    pub fn new(config: &'a ParamInfo) -> Self {
+        ParamFuzzer { config }
+    }
+
+    // TODO: Modulation and per-{key,channel,port,note_id} modulation
+    // TODO: Variants similar to `fill_event_queue` from `NoteGenerator`
+    // TODO: A variant that snaps to the minimum or maximum value
+
+    /// Randomize all parameters at a certain sample index using **automation**, returning an
+    /// iterator yielding automation events for all parameters.
+    pub fn randomize_params_at(
+        &'a self,
+        prng: &'a mut Pcg32,
+        time_offset: u32,
+    ) -> impl Iterator<Item = Event> + 'a {
+        self.config
+            .iter()
+            .filter_map(move |(param_id, param_info)| {
+                if (param_info.flags & CLAP_PARAM_IS_AUTOMATABLE) == 0 {
+                    return None;
+                }
+
+                let value = if param_info.stepped() {
+                    // We already confirmed that the range starts and ends in an integer when
+                    // constructing the parameter info
+                    prng.gen_range(param_info.range.clone()).round()
+                } else {
+                    prng.gen_range(param_info.range.clone())
+                };
+
+                Some(Event::ParamValue(clap_event_param_value {
+                    header: clap_event_header {
+                        size: std::mem::size_of::<clap_event_param_value>() as u32,
+                        time: time_offset,
+                        space_id: CLAP_CORE_EVENT_SPACE_ID,
+                        type_: CLAP_EVENT_PARAM_VALUE,
+                        flags: 0,
+                    },
+                    param_id: *param_id,
+                    cookie: param_info.cookie,
+                    note_id: -1,
+                    port_index: -1,
+                    channel: -1,
+                    key: -1,
+                    value,
+                }))
+            })
     }
 }
