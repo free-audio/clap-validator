@@ -67,9 +67,10 @@ impl Params<'_> {
         }
     }
 
-    /// Convert a parameter value's to a string. Returns an error if the plugin doesn't support
-    /// this.
-    pub fn value_to_text(&self, param_id: clap_id, value: f64) -> Result<String> {
+    /// Convert a parameter value's to a string. Returns `Ok(None)` if the plugin doesn't support
+    /// this, or an error if the returned string did not contain any null bytes or if it isn't
+    /// invalid UTF-8.
+    pub fn value_to_text(&self, param_id: clap_id, value: f64) -> Result<Option<String>> {
         let mut string_buffer = [0; CLAP_NAME_SIZE];
         if unsafe {
             (self.params.as_ref().value_to_text)(
@@ -80,18 +81,17 @@ impl Params<'_> {
                 string_buffer.len() as u32,
             )
         } {
-            // TODO: We should not be using anyhow for this, this should be a discernable error type even though it of course shouldn't happen
-            c_char_slice_to_string(&string_buffer).with_context(|| format!("Could not convert the string representation of {value} for parameter {param_id} to a UTF-8 string"))
+            c_char_slice_to_string(&string_buffer)
+                .map(Some)
+                .with_context(|| format!("Could not convert the string representation of {value} for parameter {param_id} to a UTF-8 string"))
         } else {
-            anyhow::bail!(
-                "'clap_plugin_params::value_to_text()' returned false for parameter ID {param_id} and value {value}"
-            );
+            Ok(None)
         }
     }
 
-    /// Convert a string representation for a parameter to a value. Returns an error if the plugin
-    /// doesn't support this.
-    pub fn text_to_value(&self, param_id: clap_id, text: &str) -> Result<f64> {
+    /// Convert a string representation for a parameter to a value. Returns an `Ok(None)` if the
+    /// plugin doesn't support this, or an error if the string contained internal null bytes.
+    pub fn text_to_value(&self, param_id: clap_id, text: &str) -> Result<Option<f64>> {
         let text_cstring = CString::new(text)?;
 
         let mut value = 0.0f64;
@@ -103,11 +103,9 @@ impl Params<'_> {
                 &mut value,
             )
         } {
-            Ok(value)
+            Ok(Some(value))
         } else {
-            anyhow::bail!(
-                "'clap_plugin_params::text_to_value()' returned false for parameter ID {param_id} and string representation '{text}'"
-            );
+            Ok(None)
         }
     }
 

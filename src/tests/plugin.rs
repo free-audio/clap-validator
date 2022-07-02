@@ -371,32 +371,30 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 // will not roundtrip correctly, so we'll start at the string
                                 // representation
                                 let starting_text =
-                                    match params.value_to_text(param_id, starting_value) {
-                                        Ok(text) => text,
-                                        Err(_) => continue 'param_loop,
+                                    match params.value_to_text(param_id, starting_value)? {
+                                        Some(text) => text,
+                                        None => continue 'param_loop,
                                     };
                                 num_supported_value_to_text += 1;
                                 let reconverted_value =
-                                    match params.text_to_value(param_id, &starting_text) {
-                                        Ok(value) => value,
+                                    match params.text_to_value(param_id, &starting_text)? {
+                                        Some(value) => value,
                                         // We can't test text to value conversions without a text
                                         // value provided by the plugin, but if the plugin doesn't
                                         // support this then we should still continue testing
                                         // whether the value to text conversion works consistently
-                                        Err(_) => continue 'value_loop,
+                                        None => continue 'value_loop,
                                     };
                                 num_supported_text_to_value += 1;
 
-                                let reconverted_text =
-                                    params.value_to_text(param_id, reconverted_value)?;
+                                let reconverted_text = params.value_to_text(param_id, reconverted_value)?.with_context(|| format!("Failure in repeated value to text conversion for parameter {param_id} ('{param_name}')"))?;
                                 // Both of these are produced by the plugin, so they should be equal
                                 if starting_text != reconverted_text {
                                     anyhow::bail!("Converting {starting_value:?} to a string, back to a value, and then back to a string again for parameter {param_id} ('{param_name}') results in '{starting_text}' -> {reconverted_value:?} -> '{reconverted_text}', which is not consistent.");
                                 }
 
                                 // And one last hop back for good measure
-                                let final_value =
-                                    params.text_to_value(param_id, &reconverted_text)?;
+                                let final_value = params.text_to_value(param_id, &reconverted_text)?.with_context(|| format!("Failure in repeated text to value conversion for parameter {param_id} ('{param_name}')"))?;
                                 if final_value != reconverted_value {
                                     anyhow::bail!("Converting {starting_value:?} to a string, back to a value, back to a string, and then back to a value again for parameter {param_id} ('{param_name}') results in '{starting_text}' -> {reconverted_value:?} -> '{reconverted_text}' -> {final_value:?}, which is not consistent.");
                                 }
