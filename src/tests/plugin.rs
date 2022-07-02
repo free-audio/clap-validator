@@ -621,10 +621,3 @@ impl<'a> TestCase<'a> for PluginTestCase {
         self.create_result(status)
     }
 }
-
-// FIXME: This shouldn't be needed
-
-/// Round a parameter value to the tenth decimal.
-fn round_param_value(value: f64) -> f64 {
-    (value * 10_000_000_000.0).round() / 10_000_000_000.0
-}
