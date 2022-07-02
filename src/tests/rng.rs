@@ -563,7 +563,7 @@ impl NoteEventType {
 }
 
 impl<'a> ParamFuzzer<'a> {
-    /// Create a new parmaeter fuzzer
+    /// Create a new parameter fuzzer
     pub fn new(config: &'a ParamInfo) -> Self {
         ParamFuzzer { config }
     }

@@ -3,7 +3,7 @@
 use clap::ValueEnum;
 use std::process::Command;
 
-use super::{TestCase, TestResult, TestStatus};
+use super::{TestCase, TestResult};
 use crate::plugin::library::PluginLibrary;
 
 mod params;
@@ -137,9 +137,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::BasicStateReproducibility => {
                 state::test_basic_state_reproducibility(library, plugin_id)
             }
-            PluginTestCase::FlushStateReproducibility => TestStatus::Skipped {
-                reason: Some(String::from("Not yet implemented")),
-            },
+            PluginTestCase::FlushStateReproducibility => {
+                state::test_flush_state_reproducibility(library, plugin_id)
+            }
         };
 
         self.create_result(status)

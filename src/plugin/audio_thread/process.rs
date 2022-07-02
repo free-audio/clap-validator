@@ -109,7 +109,7 @@ pub struct EventQueue<VTable> {
 
 /// An event sent to or from the plugin. This uses an enum to make the implementation simple and
 /// correct at the cost of more wasteful memory usage.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C, align(8))]
 pub enum Event {
     /// `CLAP_EVENT_NOTE_ON`, `CLAP_EVENT_NOTE_OFF`, `CLAP_EVENT_NOTE_CHOKE`, or `CLAP_EVENT_NOTE_END`.
