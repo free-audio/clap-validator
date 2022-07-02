@@ -1,6 +1,7 @@
 //! Abstractions for interacting with the `params` extension.
 
 use anyhow::{Context, Result};
+use clap_sys::events::{clap_input_events, clap_output_events};
 use clap_sys::ext::params::{
     clap_param_info, clap_param_info_flags, clap_plugin_params, CLAP_EXT_PARAMS,
     CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_AUTOMATABLE_PER_CHANNEL,
@@ -18,6 +19,7 @@ use std::ops::RangeInclusive;
 use std::ptr::NonNull;
 
 use super::Extension;
+use crate::plugin::audio_thread::process::EventQueue;
 use crate::plugin::instance::Plugin;
 use crate::util::{self, c_char_slice_to_string};
 
@@ -293,6 +295,30 @@ impl Params<'_> {
         }
 
         Ok(result)
+    }
+
+    /// Perform a parameter flush. Returns an error if the plugin is active.
+    pub fn flush(
+        &self,
+        input_events: &EventQueue<clap_input_events>,
+        output_events: &EventQueue<clap_output_events>,
+    ) -> Result<()> {
+        if self.plugin.activated() {
+            anyhow::bail!(
+                "Flushing parameters from the main thread is not allowed when the plugin is \
+                 active."
+            )
+        }
+
+        unsafe {
+            (self.params.as_ref().flush)(
+                self.plugin.as_ptr(),
+                &input_events.vtable,
+                &output_events.vtable,
+            )
+        };
+
+        Ok(())
     }
 }
 

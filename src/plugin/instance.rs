@@ -103,6 +103,11 @@ impl<'lib> Plugin<'lib> {
         self.handle.as_ptr()
     }
 
+    /// Whether this plugin is currently active.
+    pub fn activated(&self) -> bool {
+        self.activated.get()
+    }
+
     /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
