@@ -343,7 +343,6 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         let param_infos = params
                             .info()
                             .context("Failure while fetching the plugin's parameters")?;
-                        let num_params = param_infos.len();
 
                         // We keep track of how many parameters support these conversions. A plugin
                         // should support either conversion either for all of its parameters, or for
