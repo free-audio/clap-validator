@@ -92,7 +92,9 @@ impl NoteGenerator {
         self
     }
 
-    /// Clear and fill an event queue with random events for the next `num_samples` samples.
+    /// Fill an event queue with random events for the next `num_samples` samples. This does not
+    /// clear the event queue. If the queue was not empty, then this will do a stable sort after
+    /// inserting _all_ events. If an error was returned, then the queue will not have been sorted.
     ///
     /// Returns an error if generating random events failed. This can happen if the plugin doesn't
     /// support any note event types.
@@ -108,13 +110,17 @@ impl NoteGenerator {
         const SAMPLE_OFFSET_RANGE: RangeInclusive<i32> = -6..=5;
 
         let mut events = queue.events.lock().unwrap();
-        events.clear();
+        let should_sort = !events.is_empty();
 
         let mut current_sample = prng.gen_range(SAMPLE_OFFSET_RANGE).max(0) as u32;
         while current_sample < num_samples {
             events.push(self.generate(prng, current_sample)?);
 
             current_sample += prng.gen_range(SAMPLE_OFFSET_RANGE).max(0) as u32;
+        }
+
+        if should_sort {
+            events.sort_by_key(|event| event.header().time);
         }
 
         Ok(())
