@@ -173,20 +173,11 @@ pub fn basic_out_of_place_audio_processing(library: &PluginLibrary, plugin_id: &
 
             let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
-                .run(
-                    5,
-                    ProcessConfig {
-                        sample_rate: 44_100.0,
-                        tempo: 110.0,
-                        time_sig_numerator: 4,
-                        time_sig_denominator: 4,
-                    },
-                    |process_data| {
-                        process_data.buffers.randomize(&mut prng);
+                .run(5, ProcessConfig::default(), |process_data| {
+                    process_data.buffers.randomize(&mut prng);
 
-                        Ok(())
-                    },
-                )?;
+                    Ok(())
+                })?;
 
             // The `ClapHost` contains built-in thread safety checks
             host.thread_safety_check()
@@ -252,12 +243,7 @@ pub fn basic_out_of_place_note_processing(library: &PluginLibrary, plugin_id: &s
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
                 .run(
                     5,
-                    ProcessConfig {
-                        sample_rate: 44_100.0,
-                        tempo: 110.0,
-                        time_sig_numerator: 4,
-                        time_sig_denominator: 4,
-                    },
+                    ProcessConfig::default(),
                     |process_data| {
                         note_event_rng.fill_event_queue(
                             &mut prng,
@@ -332,12 +318,7 @@ pub fn inconsistent_note_processing(library: &PluginLibrary, plugin_id: &str) ->
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
                 .run(
                     5,
-                    ProcessConfig {
-                        sample_rate: 44_100.0,
-                        tempo: 110.0,
-                        time_sig_numerator: 4,
-                        time_sig_denominator: 4,
-                    },
+                    ProcessConfig::default(),
                     |process_data| {
                         note_event_rng.fill_event_queue(
                             &mut prng,

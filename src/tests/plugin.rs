@@ -282,12 +282,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                                 &mut output_buffers,
                             )?
                             .run_once(
-                                ProcessConfig {
-                                    sample_rate: 44_100.0,
-                                    tempo: 110.0,
-                                    time_sig_numerator: 4,
-                                    time_sig_denominator: 4,
-                                },
+                                ProcessConfig::default(),
                                 move |process_data| {
                                     *process_data.input_events.events.lock().unwrap() =
                                         random_param_set_events;

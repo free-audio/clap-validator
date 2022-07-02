@@ -127,6 +127,17 @@ pub enum Event {
     Unknown(clap_event_header),
 }
 
+impl Default for ProcessConfig {
+    fn default() -> Self {
+        Self {
+            sample_rate: 44_100.0,
+            tempo: 110.0,
+            time_sig_numerator: 4,
+            time_sig_denominator: 4,
+        }
+    }
+}
+
 impl<'a> ProcessData<'a> {
     /// Initialize the process data using the given audio buffers. The transport information will be
     /// initialized at the start of the project, and it can be moved using the
