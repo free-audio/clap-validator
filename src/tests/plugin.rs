@@ -414,7 +414,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             .context("Thread safety checks failed")?;
 
                         if num_supported_value_to_text == 0 || num_supported_text_to_value == 0 {
-                            Ok(TestStatus::Skipped { reason: Some(String::from("The plugin doesn't support value to text and/or text to value conversions for parameters.")) })
+                            Ok(TestStatus::Skipped { reason: Some(String::from("The plugin doesn't support both value to text and text to value conversions for its parameters.")) })
                         } else {
                             Ok(TestStatus::Success { notes: None })
                         }
