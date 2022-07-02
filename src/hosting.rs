@@ -7,6 +7,7 @@ use clap_sys::ext::note_ports::{
     CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
 };
 use clap_sys::ext::params::{clap_host_params, clap_param_clear_flags, clap_param_rescan_flags};
+use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
 use clap_sys::version::CLAP_VERSION;
@@ -43,6 +44,7 @@ pub struct ClapHost {
     clap_host_audio_ports: clap_host_audio_ports,
     clap_host_note_ports: clap_host_note_ports,
     clap_host_params: clap_host_params,
+    clap_host_state: clap_host_state,
 }
 
 impl ClapHost {
@@ -80,6 +82,9 @@ impl ClapHost {
                 rescan: Self::ext_params_rescan,
                 clear: Self::ext_params_clear,
                 request_flush: Self::ext_params_request_flush,
+            },
+            clap_host_state: clap_host_state {
+                mark_dirty: Self::ext_state_mark_dirty,
             },
         }))
     }
@@ -158,6 +163,8 @@ impl ClapHost {
             &this.clap_host_audio_ports as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS {
             &this.clap_host_note_ports as *const _ as *const c_void
+        } else if extension_id_cstr == CLAP_EXT_STATE {
+            &this.clap_host_state as *const _ as *const c_void
         } else {
             std::ptr::null()
         }
@@ -254,5 +261,13 @@ impl ClapHost {
         //       object, and adding and removing them in `Plugin::on_audio_thread()`.
         this.assert_main_thread("clap_host_params::request_flush()");
         log::trace!("TODO: Add callbacks for 'clap_host_params::request_flush()'");
+    }
+
+    unsafe extern "C" fn ext_state_mark_dirty(host: *const clap_host) {
+        check_null_ptr!((), host);
+        let this = &*(host as *const Self);
+
+        this.assert_main_thread("clap_host_state::mark_dirty()");
+        log::trace!("TODO: Add callbacks for 'clap_host_state::mark_dirty()'");
     }
 }
