@@ -32,12 +32,13 @@ impl<'a> ProcessingTest<'a> {
     }
 
     /// Run the standard audio processing test for a still **deactivated** plugin. This calls the
-    /// process function five times, and checks the output for consistency each time.
+    /// process function `num_iters` times, and checks the output for consistency each time.
     ///
     /// The `Preprocess` closure is called before each processing cycle to allow the process data to be
     /// modified for the next process cycle.
     pub fn run<Preprocess>(
         &'a mut self,
+        num_iters: usize,
         process_config: ProcessConfig,
         mut preprocess: Preprocess,
     ) -> Result<()>
@@ -53,9 +54,9 @@ impl<'a> ProcessingTest<'a> {
         self.plugin.on_audio_thread(|plugin| -> Result<()> {
             plugin.start_processing()?;
 
-            // This test is repeated a couple times
+            // This test can be repeated a couple of times
             // NOTE: We intentionally do not disable denormals here
-            for iteration in 0..5 {
+            for iteration in 0..num_iters {
                 preprocess(&mut process_data)?;
 
                 // We'll check that the plugin hasn't modified the input buffers after the
@@ -74,7 +75,11 @@ impl<'a> ProcessingTest<'a> {
                     ),
                 }
                 .with_context(|| {
-                    format!("Failed during processing cycle {} out of 5", iteration + 1)
+                    format!(
+                        "Failed during processing cycle {} out of {}",
+                        iteration + 1,
+                        num_iters
+                    )
                 })?;
 
                 process_data.clear_events();

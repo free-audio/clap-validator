@@ -124,6 +124,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                             &mut output_buffers,
                         )?
                         .run(
+                            5,
                             ProcessConfig {
                                 sample_rate: 44_100.0,
                                 tempo: 110.0,
@@ -198,13 +199,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
                         const BUFFER_SIZE: usize = 512;
                         let (mut input_buffers, mut output_buffers) =
-                            audio_ports_config.create_buffers(512);
+                            audio_ports_config.create_buffers(BUFFER_SIZE);
                         ProcessingTest::new_out_of_place(
                             &plugin,
                             &mut input_buffers,
                             &mut output_buffers,
                         )?
                         .run(
+                            5,
                             ProcessConfig {
                                 sample_rate: 44_100.0,
                                 tempo: 110.0,
@@ -280,13 +282,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         // TODO: Use in-place processing for this test
                         const BUFFER_SIZE: usize = 512;
                         let (mut input_buffers, mut output_buffers) =
-                            audio_ports_config.create_buffers(512);
+                            audio_ports_config.create_buffers(BUFFER_SIZE);
                         ProcessingTest::new_out_of_place(
                             &plugin,
                             &mut input_buffers,
                             &mut output_buffers,
                         )?
                         .run(
+                            5,
                             ProcessConfig {
                                 sample_rate: 44_100.0,
                                 tempo: 110.0,
