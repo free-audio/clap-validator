@@ -91,6 +91,53 @@ impl<'a> ProcessingTest<'a> {
 
         self.plugin.deactivate()
     }
+
+    /// Run the standard audio processing test for a still **deactivated** plugin. This is identical
+    /// to the [`run()`][Self::run()] function, except that it does exactly one processing cycle and
+    /// thus non-copy values can be moved into the closure.
+    pub fn run_once<Preprocess>(
+        &'a mut self,
+        process_config: ProcessConfig,
+        preprocess: Preprocess,
+    ) -> Result<()>
+    where
+        Preprocess: FnOnce(&mut ProcessData) -> Result<()> + Send,
+    {
+        let buffer_size = self.audio_buffers.len();
+        let mut process_data = ProcessData::new(&mut self.audio_buffers, process_config);
+
+        self.plugin
+            .activate(process_config.sample_rate, 1, buffer_size)?;
+
+        self.plugin.on_audio_thread(|plugin| -> Result<()> {
+            plugin.start_processing()?;
+
+            preprocess(&mut process_data)?;
+
+            // We'll check that the plugin hasn't modified the input buffers after the
+            // test
+            let original_input_buffers = process_data.buffers.inputs_ref().to_owned();
+
+            plugin
+                .process(&mut process_data)
+                .context("Error during audio processing")?;
+
+            // When we add in-place processing this will need some slightly different checks
+            match process_data.buffers {
+                AudioBuffers::OutOfPlace(_) => {
+                    check_out_of_place_output_consistency(&process_data, &original_input_buffers)
+                }
+            }
+            .context("Failed during processing")?;
+
+            process_data.clear_events();
+            process_data.advance_transport(buffer_size as u32);
+
+            plugin.stop_processing()
+        })?;
+
+        self.plugin.deactivate()
+    }
 }
 
 /// The process for consistency. This verifies that the output buffer doesn't contain any NaN,
