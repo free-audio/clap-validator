@@ -130,6 +130,15 @@ impl<'lib> Plugin<'lib> {
         &'a self,
         f: F,
     ) -> T {
+        // This would be a hard mistake on the the validator's end, because th eaudio thread doesn't
+        // exist when the plugin is deactivated.
+        if !self.activated.get() {
+            panic!(
+                "'Plugin::on_audio_thread()' call while the plugin is not active, this is a bug \
+                 in the validator."
+            )
+        }
+
         if std::thread::current().id() == self.main_thread_id {
             let unsafe_self_wrapper = PluginSendWrapper(self);
 
