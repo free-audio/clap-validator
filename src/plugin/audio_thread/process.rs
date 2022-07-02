@@ -112,9 +112,9 @@ pub struct EventQueue<VTable> {
 #[repr(C, align(8))]
 pub enum Event {
     /// `CLAP_EVENT_NOTE_ON`, `CLAP_EVENT_NOTE_OFF`, `CLAP_EVENT_NOTE_CHOKE`, or `CLAP_EVENT_NOTE_END`.
-    ClapNote(clap_event_note),
+    Note(clap_event_note),
     /// `CLAP_EVENT_NOTE_EXPRESSION`.
-    ClapNoteExpression(clap_event_note_expression),
+    NoteExpression(clap_event_note_expression),
     /// `CLAP_EVENT_MIDI`.
     Midi(clap_event_midi),
     /// An unhandled event type. This is only used when the plugin outputs an event we don't handle
@@ -455,10 +455,10 @@ impl Event {
                 | CLAP_EVENT_NOTE_OFF
                 | CLAP_EVENT_NOTE_CHOKE
                 | CLAP_EVENT_NOTE_END,
-            ) => Ok(Event::ClapNote(*(ptr as *const clap_event_note))),
-            (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_EXPRESSION) => Ok(
-                Event::ClapNoteExpression(*(ptr as *const clap_event_note_expression)),
-            ),
+            ) => Ok(Event::Note(*(ptr as *const clap_event_note))),
+            (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_EXPRESSION) => Ok(Event::NoteExpression(
+                *(ptr as *const clap_event_note_expression),
+            )),
             (CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI) => {
                 Ok(Event::Midi(*(ptr as *const clap_event_midi)))
             }
@@ -469,8 +469,8 @@ impl Event {
     /// Get a a reference to the event's header.
     pub fn header(&self) -> &clap_event_header {
         match self {
-            Event::ClapNote(event) => &event.header,
-            Event::ClapNoteExpression(event) => &event.header,
+            Event::Note(event) => &event.header,
+            Event::NoteExpression(event) => &event.header,
             Event::Midi(event) => &event.header,
             Event::Unknown(header) => header,
         }

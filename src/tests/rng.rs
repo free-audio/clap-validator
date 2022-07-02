@@ -183,7 +183,7 @@ impl NoteGenerator {
                     };
 
                     let velocity = prng.gen_range(0.0..=1.0);
-                    return Ok(Event::ClapNote(clap_event_note {
+                    return Ok(Event::Note(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
@@ -217,7 +217,7 @@ impl NoteGenerator {
                     };
 
                     let velocity = prng.gen_range(0.0..=1.0);
-                    return Ok(Event::ClapNote(clap_event_note {
+                    return Ok(Event::Note(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
@@ -258,7 +258,7 @@ impl NoteGenerator {
 
                     // Does a velocity make any sense here? Probably not.
                     let velocity = prng.gen_range(0.0..=1.0);
-                    return Ok(Event::ClapNote(clap_event_note {
+                    return Ok(Event::Note(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
@@ -299,7 +299,7 @@ impl NoteGenerator {
                     };
                     let value = prng.gen_range(value_range);
 
-                    return Ok(Event::ClapNoteExpression(clap_event_note_expression {
+                    return Ok(Event::NoteExpression(clap_event_note_expression {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note_expression>() as u32,
                             time: time_offset,
