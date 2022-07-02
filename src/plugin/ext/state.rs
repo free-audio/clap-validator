@@ -77,7 +77,7 @@ impl State<'_> {
         if unsafe { (self.state.as_ref().load)(self.plugin.as_ptr(), &stream.vtable) } {
             Ok(())
         } else {
-            anyhow::bail!("'clap_plugin_state::save()' returned false.");
+            anyhow::bail!("'clap_plugin_state::load()' returned false.");
         }
     }
 }
