@@ -401,10 +401,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
                         }
 
                         if !(num_supported_value_to_text == 0 || num_supported_value_to_text == expected_conversions) {
-                            anyhow::bail!("'clap_plugin_params::value_to_text()' returned true {num_supported_value_to_text} out of {expected_conversions} calls. This function is expected to be supported for either none of the parameters or for all of them.");
+                            anyhow::bail!("'clap_plugin_params::value_to_text()' returned true for {num_supported_value_to_text} out of {expected_conversions} calls. This function is expected to be supported for either none of the parameters or for all of them.");
                         }
                         if !(num_supported_text_to_value == 0 || num_supported_text_to_value == expected_conversions) {
-                            anyhow::bail!("'clap_plugin_params::text_to_value()' returned true {num_supported_text_to_value} out of {expected_conversions} calls. This function is expected to be supported for either none of the parameters or for all of them.");
+                            anyhow::bail!("'clap_plugin_params::text_to_value()' returned true for {num_supported_text_to_value} out of {expected_conversions} calls. This function is expected to be supported for either none of the parameters or for all of them.");
                         }
 
                         host.thread_safety_check()
