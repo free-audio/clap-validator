@@ -98,10 +98,10 @@ impl NoteGenerator {
     ///
     /// Returns an error if generating random events failed. This can happen if the plugin doesn't
     /// support any note event types.
-    pub fn fill_event_queue(
+    pub fn fill_event_queue<VTable>(
         &mut self,
         prng: &mut Pcg32,
-        queue: &EventQueue,
+        queue: &EventQueue<VTable>,
         num_samples: u32,
     ) -> Result<()> {
         // The range for the next event's timing relative to the `current_sample`. This will be
