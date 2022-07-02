@@ -13,14 +13,15 @@ use clap_sys::ext::params::{
 use clap_sys::id::clap_id;
 use clap_sys::string_sizes::CLAP_NAME_SIZE;
 use std::collections::BTreeMap;
-use std::ffi::{CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::ops::RangeInclusive;
 use std::ptr::NonNull;
 
+use super::Extension;
 use crate::plugin::instance::Plugin;
 use crate::util::{self, c_char_slice_to_string};
 
-use super::Extension;
+pub type ParamInfo = BTreeMap<clap_id, Param>;
 
 /// Abstraction for the `params` extension covering the main thread functionality.
 #[derive(Debug)]
@@ -44,8 +45,11 @@ impl<'a> Extension<&'a Plugin<'a>> for Params<'a> {
 
 /// Information about a parameter.
 #[derive(Debug, Clone)]
-pub struct ParamInfo {
+pub struct Param {
     pub name: String,
+    /// This should be provided to the plugin when sending automation or modulation events for this
+    /// parameter.
+    pub cookie: *mut c_void,
     /// The parameter's value range.
     pub range: RangeInclusive<f64>,
     /// The parameter's default value.
@@ -113,7 +117,7 @@ impl Params<'_> {
     /// parameters are inconsistent. For instance, if there are multiple parameter with the same
     /// index, or if a parameter's minimum value is higher than the maximum value. This uses a
     /// BTreeMap to ensure the order is consistent between runs.
-    pub fn info(&self) -> Result<BTreeMap<clap_id, ParamInfo>> {
+    pub fn info(&self) -> Result<ParamInfo> {
         let mut result = BTreeMap::new();
 
         let params = unsafe { self.params.as_ref() };
@@ -249,8 +253,9 @@ impl Params<'_> {
                 )
             }
 
-            let processed_info = ParamInfo {
+            let processed_info = Param {
                 name,
+                cookie: info.cookie,
                 range,
                 default: info.default_value,
                 flags: info.flags,
@@ -267,7 +272,7 @@ impl Params<'_> {
     }
 }
 
-impl ParamInfo {
+impl Param {
     /// Whether this parameter is stepped.
     pub fn stepped(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_STEPPED) != 0
