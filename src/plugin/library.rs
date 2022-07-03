@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use super::instance::Plugin;
 use crate::hosting::ClapHost;
-use crate::util;
+use crate::util::{self, unsafe_clap_call};
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over
 /// all plugins exposed by the library and to initialize plugins.
@@ -55,7 +55,7 @@ impl Drop for PluginLibrary {
         // plugin here
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
-        unsafe { (entry_point.deinit)() };
+        unsafe_clap_call! { entry_point=>deinit() };
     }
 }
 
@@ -103,7 +103,7 @@ impl PluginLibrary {
                 .context("Path contains invalid UTF-8")?,
         )
         .context("Path contains null bytes")?;
-        if !unsafe { (entry_point.init)(path_cstring.as_ptr()) } {
+        if !unsafe_clap_call! { entry_point=>init(path_cstring.as_ptr()) } {
             anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false");
         }
 
@@ -122,7 +122,7 @@ impl PluginLibrary {
     pub fn metadata(&self) -> Result<PluginLibraryMetadata> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
-        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
+        let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
             as *const clap_plugin_factory;
         // TODO: Should we log anything here? In theory not supporting the plugin factory is
         //       perfectly legal, but it's a bit weird
@@ -138,10 +138,10 @@ impl PluginLibrary {
             ),
             plugins: Vec::new(),
         };
-        let num_plugins = unsafe { ((*plugin_factory).get_plugin_count)(plugin_factory) };
+        let num_plugins = unsafe_clap_call! { plugin_factory=>get_plugin_count(plugin_factory) };
         for i in 0..num_plugins {
             let descriptor =
-                unsafe { ((*plugin_factory).get_plugin_descriptor)(plugin_factory, i) };
+                unsafe_clap_call! { plugin_factory=>get_plugin_descriptor(plugin_factory, i) };
             if descriptor.is_null() {
                 anyhow::bail!(
                     "The plugin returned a null plugin descriptor for plugin index {i} (expected \
@@ -190,15 +190,15 @@ impl PluginLibrary {
     pub fn create_plugin(&self, id: &str, host: Pin<Arc<ClapHost>>) -> Result<Plugin> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
-        let plugin_factory = unsafe { (entry_point.get_factory)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
+        let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
             as *const clap_plugin_factory;
         if plugin_factory.is_null() {
             anyhow::bail!("The plugin does not support the 'clap_plugin_factory'");
         }
 
         let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
-        let plugin = unsafe {
-            ((*plugin_factory).create_plugin)(plugin_factory, host.as_ptr(), id_cstring.as_ptr())
+        let plugin = unsafe_clap_call! {
+            plugin_factory=>create_plugin(plugin_factory, host.as_ptr(), id_cstring.as_ptr())
         };
         if plugin.is_null() {
             anyhow::bail!(

@@ -11,7 +11,7 @@ use std::sync::Mutex;
 
 use super::Extension;
 use crate::plugin::instance::Plugin;
-use crate::util::check_null_ptr;
+use crate::util::{check_null_ptr, unsafe_clap_call};
 
 /// Abstraction for the `state` extension covering the main thread functionality.
 #[derive(Debug)]
@@ -70,7 +70,7 @@ impl State<'_> {
     pub fn save(&self) -> Result<Vec<u8>> {
         let stream = OutputStream::new();
 
-        if unsafe { (self.state.as_ref().save)(self.plugin.as_ptr(), &stream.vtable) } {
+        if unsafe_clap_call! { self.state.as_ptr()=>save(self.plugin.as_ptr(), &stream.vtable) } {
             Ok(stream.into_vec())
         } else {
             anyhow::bail!("'clap_plugin_state::save()' returned false.");
@@ -82,7 +82,7 @@ impl State<'_> {
     pub fn save_buffered(&self, max_bytes: usize) -> Result<Vec<u8>> {
         let stream = OutputStream::new().with_buffering(max_bytes);
 
-        if unsafe { (self.state.as_ref().save)(self.plugin.as_ptr(), &stream.vtable) } {
+        if unsafe_clap_call! { self.state.as_ptr()=>save(self.plugin.as_ptr(), &stream.vtable) } {
             Ok(stream.into_vec())
         } else {
             anyhow::bail!(
@@ -96,7 +96,7 @@ impl State<'_> {
     pub fn load(&self, state: &[u8]) -> Result<()> {
         let stream = InputStream::new(state);
 
-        if unsafe { (self.state.as_ref().load)(self.plugin.as_ptr(), &stream.vtable) } {
+        if unsafe_clap_call! { self.state.as_ptr()=>load(self.plugin.as_ptr(), &stream.vtable) } {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin_state::load()' returned false.");
@@ -108,7 +108,7 @@ impl State<'_> {
     pub fn load_buffered(&self, state: &[u8], max_bytes: usize) -> Result<()> {
         let stream = InputStream::new(state).with_buffering(max_bytes);
 
-        if unsafe { (self.state.as_ref().load)(self.plugin.as_ptr(), &stream.vtable) } {
+        if unsafe_clap_call! { self.state.as_ptr()=>load(self.plugin.as_ptr(), &stream.vtable) } {
             Ok(())
         } else {
             anyhow::bail!(
@@ -125,7 +125,7 @@ impl<'a> InputStream<'a> {
         Box::pin(InputStream {
             vtable: clap_istream {
                 ctx: std::ptr::null_mut(),
-                read: Self::read,
+                read: Some(Self::read),
             },
 
             buffer,
@@ -168,7 +168,7 @@ impl OutputStream {
         Box::pin(OutputStream {
             vtable: clap_ostream {
                 ctx: std::ptr::null_mut(),
-                write: Self::write,
+                write: Some(Self::write),
             },
 
             buffer: Mutex::new(Vec::new()),

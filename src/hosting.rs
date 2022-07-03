@@ -60,10 +60,10 @@ impl ClapHost {
                 vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
                 url: b"https://github.com/robbert-vdh/clap-validator\0".as_ptr() as *const c_char,
                 version: b"0.1.0\0".as_ptr() as *const c_char,
-                get_extension: Self::get_extension,
-                request_restart: Self::request_restart,
-                request_process: Self::request_process,
-                request_callback: Self::request_callback,
+                get_extension: Some(Self::get_extension),
+                request_restart: Some(Self::request_restart),
+                request_process: Some(Self::request_process),
+                request_callback: Some(Self::request_callback),
             },
             main_thread_id: std::thread::current().id(),
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
@@ -71,20 +71,20 @@ impl ClapHost {
             thread_safety_error: Mutex::new(None),
 
             clap_host_audio_ports: clap_host_audio_ports {
-                is_rescan_flag_supported: Self::ext_audio_ports_is_rescan_flag_supported,
-                rescan: Self::ext_audio_ports_rescan,
+                is_rescan_flag_supported: Some(Self::ext_audio_ports_is_rescan_flag_supported),
+                rescan: Some(Self::ext_audio_ports_rescan),
             },
             clap_host_note_ports: clap_host_note_ports {
-                supported_dialects: Self::ext_note_ports_supported_dialects,
-                rescan: Self::ext_note_ports_rescan,
+                supported_dialects: Some(Self::ext_note_ports_supported_dialects),
+                rescan: Some(Self::ext_note_ports_rescan),
             },
             clap_host_params: clap_host_params {
-                rescan: Self::ext_params_rescan,
-                clear: Self::ext_params_clear,
-                request_flush: Self::ext_params_request_flush,
+                rescan: Some(Self::ext_params_rescan),
+                clear: Some(Self::ext_params_clear),
+                request_flush: Some(Self::ext_params_request_flush),
             },
             clap_host_state: clap_host_state {
-                mark_dirty: Self::ext_state_mark_dirty,
+                mark_dirty: Some(Self::ext_state_mark_dirty),
             },
         }))
     }

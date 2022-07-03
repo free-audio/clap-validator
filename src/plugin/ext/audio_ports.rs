@@ -14,6 +14,7 @@ use std::ffi::CStr;
 use std::ptr::NonNull;
 
 use crate::plugin::instance::Plugin;
+use crate::util::unsafe_clap_call;
 
 use super::Extension;
 
@@ -64,8 +65,8 @@ impl AudioPorts<'_> {
 
         // TODO: Refactor this to reduce the duplication a little without hurting the human readable error messages
         let audio_ports = unsafe { self.audio_ports.as_ref() };
-        let num_inputs = unsafe { (audio_ports.count)(self.plugin.as_ptr(), true) };
-        let num_outputs = unsafe { (audio_ports.count)(self.plugin.as_ptr(), false) };
+        let num_inputs = unsafe_clap_call! { audio_ports=>count(self.plugin.as_ptr(), true) };
+        let num_outputs = unsafe_clap_call! { audio_ports=>count(self.plugin.as_ptr(), false) };
 
         // Audio ports have a stable ID attribute that can be used to connect input and output ports
         // so the host can do in-place processing. This uses stable IDs rather than the indices in
@@ -78,7 +79,8 @@ impl AudioPorts<'_> {
 
         for i in 0..num_inputs {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), i, true, &mut info) };
+            let success =
+                unsafe_clap_call! { audio_ports=>get(self.plugin.as_ptr(), i, true, &mut info) };
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying input audio port {i} ({num_inputs} \
@@ -112,7 +114,8 @@ impl AudioPorts<'_> {
 
         for i in 0..num_outputs {
             let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (audio_ports.get)(self.plugin.as_ptr(), i, false, &mut info) };
+            let success =
+                unsafe_clap_call! { audio_ports=>get(self.plugin.as_ptr(), i, false, &mut info) };
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying output audio port {i} ({num_outputs} \

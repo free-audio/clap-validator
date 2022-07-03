@@ -27,8 +27,40 @@ macro_rules! check_null_ptr_msg {
     };
 }
 
+/// Call a CLAP function. This is needed because even though none of CLAP's functions are allowed to
+/// be null pointers, people will still use null pointers for some of the function arguments. This
+/// also happens in the official `clap-helpers`. As such, these functions are now `Option<fn(...)>`
+/// optional function pointers in `clap-sys`. This macro asserts that the pointer is not null, and
+/// prints a nicely formatted error message containing the struct and funciton name if it is. It
+/// also emulates C's syntax for accessing fields struct through a pointer. Except that it uses `=>`
+/// instead of `->`. Because that sounds like it would be hilarious.
+macro_rules! clap_call {
+    { $obj_ptr:expr=>$function_name:ident($($args:expr),* $(, )?) } => {
+        match (*$obj_ptr).$function_name {
+            Some(function_ptr) => function_ptr($($args),*),
+            None => panic!("'{}::{}' is a null pointer, but this is not allowed", $crate::util::type_name_of_ptr($obj_ptr), stringify!($function_name)),
+        }
+    }
+}
+
+/// [`clap_call!()`], wrapped in an unsafe block.
+macro_rules! unsafe_clap_call {
+    { $($args:tt)* } => {
+        unsafe { $crate::util::clap_call! { $($args)* } }
+    }
+}
+
 pub(crate) use check_null_ptr;
 pub(crate) use check_null_ptr_msg;
+pub(crate) use clap_call;
+pub(crate) use unsafe_clap_call;
+
+/// Similar to, [`std::any::type_name_of_val()`], but on stable Rust, and stripping away the pointer
+/// part.
+#[must_use]
+pub fn type_name_of_ptr<T: ?Sized>(_ptr: *const T) -> &'static str {
+    std::any::type_name::<T>()
+}
 
 /// Convert a `*const c_char` to a `String`. Returns `Ok(None)` if the pointer is a null pointer or
 /// if the string is not valid UTF-8. This only returns an error if the string contains invalid

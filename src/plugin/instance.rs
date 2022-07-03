@@ -14,6 +14,7 @@ use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
 use crate::hosting::ClapHost;
+use crate::util::unsafe_clap_call;
 
 /// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All
 /// functions here are callable only from the main thread. Use the
@@ -64,9 +65,9 @@ impl<'lib> Deref for PluginSendWrapper<'lib> {
 impl Drop for Plugin<'_> {
     fn drop(&mut self) {
         if self.activated.get() {
-            unsafe { (self.handle.as_ref().deactivate)(self.as_ptr()) };
+            unsafe_clap_call! { self.handle.as_ptr()=>deactivate(self.as_ptr()) };
         }
-        unsafe { (self.handle.as_ref().destroy)(self.as_ptr()) };
+        unsafe_clap_call! { self.handle.as_ptr()=>destroy(self.as_ptr()) };
     }
 }
 
@@ -112,8 +113,8 @@ impl<'lib> Plugin<'lib> {
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
-        let extension_ptr = unsafe {
-            (self.handle.as_ref().get_extension)(self.as_ptr(), T::EXTENSION_ID.as_ptr())
+        let extension_ptr = unsafe_clap_call! {
+            self.handle.as_ptr()=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr())
         };
 
         if extension_ptr.is_null() {
@@ -168,7 +169,7 @@ impl<'lib> Plugin<'lib> {
 
     /// Initialize the plugin. This needs to be called before doing anything else.
     pub fn init(&self) -> Result<()> {
-        if unsafe { (self.handle.as_ref().init)(self.as_ptr()) } {
+        if unsafe_clap_call! { self.handle.as_ptr()=>init(self.as_ptr()) } {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::init()' returned false")
@@ -192,8 +193,8 @@ impl<'lib> Plugin<'lib> {
         // Apparently 0 is invalid here
         assert!(min_buffer_size >= 1);
 
-        if unsafe {
-            (self.handle.as_ref().activate)(
+        if unsafe_clap_call! {
+            self.handle.as_ptr()=>activate(
                 self.as_ptr(),
                 sample_rate,
                 min_buffer_size as u32,
@@ -215,7 +216,7 @@ impl<'lib> Plugin<'lib> {
         }
         self.activated.set(false);
 
-        unsafe { (self.handle.as_ref().deactivate)(self.as_ptr()) };
+        unsafe_clap_call! { self.handle.as_ptr()=>deactivate(self.as_ptr()) };
 
         Ok(())
     }

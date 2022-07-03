@@ -21,7 +21,7 @@ use std::ptr::NonNull;
 use super::Extension;
 use crate::plugin::audio_thread::process::EventQueue;
 use crate::plugin::instance::Plugin;
-use crate::util::{self, c_char_slice_to_string};
+use crate::util::{self, c_char_slice_to_string, unsafe_clap_call};
 
 pub type ParamInfo = BTreeMap<clap_id, Param>;
 
@@ -64,7 +64,8 @@ impl Params<'_> {
     /// Get a parameter's value.
     pub fn get(&self, param_id: clap_id) -> Result<f64> {
         let mut value = 0.0f64;
-        if unsafe { (self.params.as_ref().get_value)(self.plugin.as_ptr(), param_id, &mut value) } {
+        if unsafe_clap_call! { self.params.as_ptr()=>get_value(self.plugin.as_ptr(), param_id, &mut value) }
+        {
             Ok(value)
         } else {
             anyhow::bail!(
@@ -78,8 +79,8 @@ impl Params<'_> {
     /// invalid UTF-8.
     pub fn value_to_text(&self, param_id: clap_id, value: f64) -> Result<Option<String>> {
         let mut string_buffer = [0; CLAP_NAME_SIZE];
-        if unsafe {
-            (self.params.as_ref().value_to_text)(
+        if unsafe_clap_call! {
+            self.params.as_ptr()=>value_to_text(
                 self.plugin.as_ptr(),
                 param_id,
                 value,
@@ -106,8 +107,8 @@ impl Params<'_> {
         let text_cstring = CString::new(text)?;
 
         let mut value = 0.0f64;
-        if unsafe {
-            (self.params.as_ref().text_to_value)(
+        if unsafe_clap_call! {
+            self.params.as_ptr()=>text_to_value(
                 self.plugin.as_ptr(),
                 param_id,
                 text_cstring.as_ptr(),
@@ -128,13 +129,14 @@ impl Params<'_> {
         let mut result = BTreeMap::new();
 
         let params = unsafe { self.params.as_ref() };
-        let num_params = unsafe { (params.count)(self.plugin.as_ptr()) };
+        let num_params = unsafe_clap_call! { params=>count(self.plugin.as_ptr()) };
 
         // Right now this is only used to make sure the plugin doesn't have multiple bypass parameters
         let mut bypass_parameter_id = None;
         for i in 0..num_params {
             let mut info: clap_param_info = unsafe { std::mem::zeroed() };
-            let success = unsafe { (params.get_info)(self.plugin.as_ptr(), i, &mut info) };
+            let success =
+                unsafe_clap_call! { params=>get_info(self.plugin.as_ptr(), i, &mut info) };
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying parameter {i} ({num_params} total \
@@ -310,8 +312,8 @@ impl Params<'_> {
             )
         }
 
-        unsafe {
-            (self.params.as_ref().flush)(
+        unsafe_clap_call! {
+            self.params.as_ptr()=>flush(
                 self.plugin.as_ptr(),
                 &input_events.vtable,
                 &output_events.vtable,

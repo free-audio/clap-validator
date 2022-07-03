@@ -11,6 +11,8 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
+use crate::util::unsafe_clap_call;
+
 use self::process::ProcessData;
 use super::ext::Extension;
 use super::instance::Plugin;
@@ -58,7 +60,7 @@ impl Deref for PluginAudioThread<'_> {
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
         if self.processing.get() {
-            unsafe { (self.plugin.stop_processing)(self.plugin.as_ptr()) };
+            unsafe_clap_call! { self.plugin=>stop_processing(self.plugin.as_ptr()) };
         }
     }
 }
@@ -85,8 +87,7 @@ impl<'a> PluginAudioThread<'a> {
     // TODO: Remove this unused attribute once we implement audio thread extensions:w
     #[allow(unused)]
     pub fn get_extension<T: Extension<&'a Self>>(&'a self) -> Option<T> {
-        let extension_ptr =
-            unsafe { (self.plugin.get_extension)(self.as_ptr(), T::EXTENSION_ID.as_ptr()) };
+        let extension_ptr = unsafe_clap_call! { self.plugin=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr()) };
 
         if extension_ptr.is_null() {
             None
@@ -107,7 +108,7 @@ impl<'a> PluginAudioThread<'a> {
         }
         self.processing.set(true);
 
-        if unsafe { (self.plugin.start_processing)(self.as_ptr()) } {
+        if unsafe_clap_call! { self.plugin=>start_processing(self.as_ptr()) } {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::start_processing()' returned false")
@@ -119,8 +120,10 @@ impl<'a> PluginAudioThread<'a> {
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
     pub fn process(&self, process_data: &mut ProcessData) -> Result<ProcessStatus> {
-        let result = process_data.with_clap_process_data(|clap_process_data| unsafe {
-            (self.plugin.process)(self.as_ptr(), &clap_process_data)
+        let result = process_data.with_clap_process_data(|clap_process_data| {
+            unsafe_clap_call! {
+                self.plugin=>process(self.as_ptr(), &clap_process_data)
+            }
         });
 
         match result {
@@ -149,7 +152,7 @@ impl<'a> PluginAudioThread<'a> {
         }
         self.processing.set(false);
 
-        unsafe { (self.plugin.stop_processing)(self.as_ptr()) };
+        unsafe_clap_call! { self.plugin=>stop_processing(self.as_ptr()) };
 
         Ok(())
     }

@@ -383,8 +383,8 @@ impl EventQueue<clap_input_events> {
                 // This is not used as we can directly cast the pointer to `*const Self` because
                 // this vtable is always at the start of the struct
                 ctx: std::ptr::null_mut(),
-                size: Self::size,
-                get: Self::get,
+                size: Some(Self::size),
+                get: Some(Self::get),
             },
             // Using a mutex here is obviously a terrible idea in a real host, but we're not a real
             // host
@@ -401,7 +401,7 @@ impl EventQueue<clap_output_events> {
                 // This is not used as we can directly cast the pointer to `*const Self` because
                 // this vtable is always at the start of the struct
                 ctx: std::ptr::null_mut(),
-                try_push: Self::try_push,
+                try_push: Some(Self::try_push),
             },
             // Using a mutex here is obviously a terrible idea in a real host, but we're not a real
             // host
