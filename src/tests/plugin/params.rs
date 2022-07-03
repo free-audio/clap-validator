@@ -142,8 +142,8 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> TestStat
             if num_supported_value_to_text == 0 || num_supported_text_to_value == 0 {
                 Ok(TestStatus::Skipped {
                     reason: Some(String::from(
-                        "The plugin doesn't support both value to text and text to value \
-                         conversions for its parameters.",
+                        "The plugin's parameters need to support both value to text and text to \
+                         value conversions for this test.",
                     )),
                 })
             } else {
