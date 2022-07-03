@@ -363,3 +363,154 @@ fn format_mismatching_values(
         .collect::<Vec<String>>()
         .join(", ")
 }
+
+/// The test for `PluginTestCase::BufferedStateStreams`.
+pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+    let mut prng = new_prng();
+
+    let host = ClapHost::new();
+    let result = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance")
+        .and_then(|plugin| {
+            let (first_state_file, expected_param_values) = {
+                plugin.init().context("Error during initialization")?;
+
+                let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                    Some(audio_ports) => audio_ports
+                        .config()
+                        .context("Error while querying 'audio-ports' IO configuration")?,
+                    None => AudioPortConfig::default(),
+                };
+                let params = match plugin.get_extension::<Params>() {
+                    Some(params) => params,
+                    None => {
+                        return Ok(TestStatus::Skipped {
+                            details: Some(String::from(
+                                "The plugin does not support the 'params' extension.",
+                            )),
+                        })
+                    }
+                };
+                let state = match plugin.get_extension::<State>() {
+                    Some(state) => state,
+                    None => {
+                        return Ok(TestStatus::Skipped {
+                            details: Some(String::from(
+                                "The plugin does not support the 'state' extension.",
+                            )),
+                        })
+                    }
+                };
+
+                let param_infos = params
+                    .info()
+                    .context("Failure while fetching the plugin's parameters")?;
+                let param_fuzzer = ParamFuzzer::new(&param_infos);
+                let random_param_set_events: Vec<_> =
+                    param_fuzzer.randomize_params_at(&mut prng, 0).collect();
+                let (mut input_buffers, mut output_buffers) =
+                    audio_ports_config.create_buffers(512);
+                ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
+                    .run_once(ProcessConfig::default(), move |process_data| {
+                        *process_data.input_events.events.lock().unwrap() = random_param_set_events;
+
+                        Ok(())
+                    })?;
+
+                let expected_param_values: BTreeMap<clap_id, f64> = param_infos
+                    .iter()
+                    .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
+                    .collect::<Result<BTreeMap<clap_id, f64>>>()?;
+
+                // This state file is saved without buffered writes. It's expected that the plugin
+                // implementsq this correctly, so we can check if it handles buffered streams
+                // correctly by treating this as the ground truth.
+                let state_file = state.save()?;
+
+                (state_file, expected_param_values)
+            };
+
+            // Now we'll recreate the plugin instance, load the state using buffered reads, check
+            // the parameter values, save it again using buffered writes, and then check whether the fir.
+            drop(plugin);
+
+            let plugin = library
+                .create_plugin(plugin_id, host.clone())
+                .context("Could not create the plugin instance a second time")?;
+            plugin
+                .init()
+                .context("Error while initializing the second plugin instance")?;
+            let params = match plugin.get_extension::<Params>() {
+                Some(params) => params,
+                None => {
+                    return Ok(TestStatus::Skipped {
+                        details: Some(String::from(
+                            "The plugin's second instance does not support the 'params' extension.",
+                        )),
+                    });
+                }
+            };
+            let state = match plugin.get_extension::<State>() {
+                Some(state) => state,
+                None => {
+                    return Ok(TestStatus::Skipped {
+                        details: Some(String::from(
+                            "The plugin's second instance does not support the 'state' extension.",
+                        )),
+                    })
+                }
+            };
+
+            // This is a buffered load that only loads 17 bytes at a time. Why 17? Because.
+            const BUFFERED_LOAD_MAX_BYTES: usize = 17;
+            state.load_buffered(&first_state_file, BUFFERED_LOAD_MAX_BYTES)?;
+            let actual_param_values: BTreeMap<clap_id, f64> = expected_param_values
+                .iter()
+                .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
+                .collect::<Result<BTreeMap<clap_id, f64>>>()?;
+            if actual_param_values != expected_param_values {
+                let param_infos = params
+                    .info()
+                    .context("Failure while fetching the plugin's parameters")?;
+
+                // To avoid flooding the output too much, we'll print only the different
+                // values
+                anyhow::bail!(
+                    "After reloading the state by allowing the plugin to read at most \
+                     {BUFFERED_LOAD_MAX_BYTES} bytes at a time, the plugin's parameter values do \
+                     not match the old values when queried through 'clap_plugin_params::get()'. \
+                     The mismatching values are {}.",
+                    format_mismatching_values(
+                        actual_param_values,
+                        &expected_param_values,
+                        &param_infos
+                    )
+                );
+            }
+
+            // Because we're mean, we'll use a different prime number for the saving
+            const BUFFERED_SAVE_MAX_BYTES: usize = 23;
+            let second_state_file = state.save_buffered(BUFFERED_SAVE_MAX_BYTES)?;
+            if second_state_file == first_state_file {
+                Ok(TestStatus::Success { details: None })
+            } else {
+                Ok(TestStatus::Failed {
+                    details: Some(String::from(
+                        "Re-saving the loaded state resulted in a different state file. The \
+                         original state file being compared to was written unbuffered, reloaded \
+                         by allowing the plugin to read only {BUFFERED_LOAD_MAX_BYTES} bytes at a \
+                         time, and then written again by allowing the plugin to write only \
+                         {BUFFERED_SAVE_MAX_BYTES} bytes at a time.",
+                    )),
+                })
+            }
+        });
+
+    match result {
+        Ok(status) => status,
+        Err(err) => TestStatus::Failed {
+            details: Some(format!("{err:#}")),
+        },
+    }
+}

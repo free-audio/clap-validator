@@ -86,8 +86,8 @@ impl State<'_> {
             Ok(stream.into_vec())
         } else {
             anyhow::bail!(
-                "'clap_plugin_state::save()' returned false when only allowing {max_bytes} bytes \
-                 to be written at a time."
+                "'clap_plugin_state::save()' returned false when only allowing the plugin to \
+                 write {max_bytes} bytes at a time."
             );
         }
     }
@@ -112,8 +112,8 @@ impl State<'_> {
             Ok(())
         } else {
             anyhow::bail!(
-                "'clap_plugin_state::load()' returned false when only allowing {max_bytes} bytes \
-                 to be read at a time."
+                "'clap_plugin_state::load()' returned false when only allowing the plugin to read \
+                 {max_bytes} bytes at a time."
             );
         }
     }

@@ -16,6 +16,7 @@ const INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
 const CONVERT_PARAMS: &str = "param-conversions";
 const BASIC_STATE_REPRODUCIBILITY: &str = "state-reproducibility-basic";
 const FLUSH_STATE_REPRODUCIBILITY: &str = "state-reproducibility-flush";
+const BUFFERED_STATE_STREAMS: &str = "state-buffered-streams";
 
 /// The tests for individual CLAP plugins. See the module's heading for more information, and the
 /// `description` function below for a description of each test case.
@@ -26,6 +27,7 @@ pub enum PluginTestCase {
     ConvertParams,
     BasicStateReproducibility,
     FlushStateReproducibility,
+    BufferedStateStreams,
 }
 
 impl<'a> TestCase<'a> for PluginTestCase {
@@ -40,6 +42,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
         PluginTestCase::ConvertParams,
         PluginTestCase::BasicStateReproducibility,
         PluginTestCase::FlushStateReproducibility,
+        PluginTestCase::BufferedStateStreams,
     ];
 
     fn from_str(string: &str) -> Option<Self> {
@@ -54,6 +57,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             CONVERT_PARAMS => Some(PluginTestCase::ConvertParams),
             BASIC_STATE_REPRODUCIBILITY => Some(PluginTestCase::BasicStateReproducibility),
             FLUSH_STATE_REPRODUCIBILITY => Some(PluginTestCase::FlushStateReproducibility),
+            BUFFERED_STATE_STREAMS => Some(PluginTestCase::BufferedStateStreams),
             _ => None,
         }
     }
@@ -66,6 +70,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::ConvertParams => CONVERT_PARAMS,
             PluginTestCase::BasicStateReproducibility => BASIC_STATE_REPRODUCIBILITY,
             PluginTestCase::FlushStateReproducibility => FLUSH_STATE_REPRODUCIBILITY,
+            PluginTestCase::BufferedStateStreams => BUFFERED_STATE_STREAMS,
         }
     }
 
@@ -104,6 +109,12 @@ impl<'a> TestCase<'a> for PluginTestCase {
                  using the process function to create the first state, and using the flush \
                  function to create the second state.",
             ),
+            PluginTestCase::BufferedStateStreams => format!(
+                "Performs the same state and parameter reproducibility check as in \
+                 '{BASIC_STATE_REPRODUCIBILITY}', but this time the plugin is only allowed to \
+                 read a small prime number of bytes at a time when reloading and resaving the \
+                 state."
+            ),
         }
     }
 
@@ -139,6 +150,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
             }
             PluginTestCase::FlushStateReproducibility => {
                 state::test_flush_state_reproducibility(library, plugin_id)
+            }
+            PluginTestCase::BufferedStateStreams => {
+                state::test_buffered_state_streams(library, plugin_id)
             }
         };
 
