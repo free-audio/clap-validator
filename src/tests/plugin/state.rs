@@ -228,13 +228,15 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 let output_events = EventQueue::new_output();
                 params.flush(&input_events, &output_events)?;
 
-                // We'll compare against these values in that  second pass
+                // We'll compare against these values in that second pass
                 let expected_param_values: BTreeMap<clap_id, f64> = param_infos
                     .iter()
                     .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
                     .collect::<Result<BTreeMap<clap_id, f64>>>()?;
                 let state_file = state.save()?;
-                if expected_param_values == initial_param_values {
+
+                // Plugins with no parameters at all should of course not trigger this error
+                if expected_param_values == initial_param_values && !param_infos.is_empty() {
                     anyhow::bail!(
                         "'clap_plugin_params::flush()' has been called with random parameter \
                          values, but the plugin's reported parameter values have not changed."
