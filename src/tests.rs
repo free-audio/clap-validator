@@ -38,7 +38,7 @@ pub struct TestResult {
 /// why this happened.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
-#[serde(tag = "status")]
+#[serde(tag = "code")]
 pub enum TestStatus {
     /// The test passed successfully.
     Success { details: Option<String> },
