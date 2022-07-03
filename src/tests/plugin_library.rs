@@ -93,7 +93,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                         Ok(metadata) => {
                             if !clap_version_is_compatible(metadata.clap_version()) {
                                 return self.create_result(TestStatus::Skipped {
-                                    reason: Some(format!(
+                                    details: Some(format!(
                                         "'{}' uses an unsupported CLAP version ({}.{}.{})",
                                         library_path.display(),
                                         metadata.version.0,
@@ -105,7 +105,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                         }
                         Err(err) => {
                             return self.create_result(TestStatus::Failed {
-                                reason: Some(format!("{err:#}")),
+                                details: Some(format!("{err:#}")),
                             })
                         }
                     }
@@ -116,7 +116,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                 if init_duration <= SCAN_TIME_LIMIT {
                     let millis = init_duration.as_millis();
                     TestStatus::Success {
-                        notes: Some(format!(
+                        details: Some(format!(
                             "The plugin can be scanned in {} {}.",
                             millis,
                             if millis == 1 {
@@ -128,7 +128,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                     }
                 } else {
                     TestStatus::Failed {
-                        reason: Some(format!(
+                        details: Some(format!(
                             "The plugin took {} milliseconds to scan",
                             init_duration.as_millis()
                         )),

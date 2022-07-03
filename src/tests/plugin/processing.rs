@@ -167,7 +167,7 @@ pub fn test_basic_out_of_place_audio_processing(
                     .context("Error while querying 'audio-ports' IO configuration")?,
                 None => {
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin does not support the 'audio-ports' extension.",
                         )),
                     })
@@ -186,13 +186,13 @@ pub fn test_basic_out_of_place_audio_processing(
             host.thread_safety_check()
                 .context("Thread safety checks failed")?;
 
-            Ok(TestStatus::Success { notes: None })
+            Ok(TestStatus::Success { details: None })
         });
 
     match result {
         Ok(status) => status,
         Err(err) => TestStatus::Failed {
-            reason: Some(format!("{err:#}")),
+            details: Some(format!("{err:#}")),
         },
     }
 }
@@ -227,7 +227,7 @@ pub fn test_basic_out_of_place_note_processing(
                     .context("Error while querying 'note-ports' IO configuration")?,
                 None => {
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin does not implement the 'note-ports' extension.",
                         )),
                     })
@@ -235,7 +235,7 @@ pub fn test_basic_out_of_place_note_processing(
             };
             if note_port_config.inputs.is_empty() {
                 return Ok(TestStatus::Skipped {
-                    reason: Some(String::from(
+                    details: Some(String::from(
                         "The plugin implements the 'note-ports' extension but it does not have \
                          any input note ports.",
                     )),
@@ -264,13 +264,13 @@ pub fn test_basic_out_of_place_note_processing(
             host.thread_safety_check()
                 .context("Thread safety checks failed")?;
 
-            Ok(TestStatus::Success { notes: None })
+            Ok(TestStatus::Success { details: None })
         });
 
     match result {
         Ok(status) => status,
         Err(err) => TestStatus::Failed {
-            reason: Some(format!("{err:#}")),
+            details: Some(format!("{err:#}")),
         },
     }
 }
@@ -300,7 +300,7 @@ pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &st
                     .context("Error while querying 'note-ports' IO configuration")?,
                 None => {
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin does not implement the 'note-ports' extension.",
                         )),
                     })
@@ -308,7 +308,7 @@ pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &st
             };
             if note_port_config.inputs.is_empty() {
                 return Ok(TestStatus::Skipped {
-                    reason: Some(String::from(
+                    details: Some(String::from(
                         "The plugin implements the 'note-ports' extension but it does not have \
                          any input note ports.",
                     )),
@@ -338,13 +338,13 @@ pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &st
             host.thread_safety_check()
                 .context("Thread safety checks failed")?;
 
-            Ok(TestStatus::Success { notes: None })
+            Ok(TestStatus::Success { details: None })
         });
 
     match result {
         Ok(status) => status,
         Err(err) => TestStatus::Failed {
-            reason: Some(format!("{err:#}")),
+            details: Some(format!("{err:#}")),
         },
     }
 }

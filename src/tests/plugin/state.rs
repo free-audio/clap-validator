@@ -40,7 +40,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     Some(params) => params,
                     None => {
                         return Ok(TestStatus::Skipped {
-                            reason: Some(String::from(
+                            details: Some(String::from(
                                 "The plugin does not support the 'params' extension.",
                             )),
                         })
@@ -50,7 +50,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     Some(state) => state,
                     None => {
                         return Ok(TestStatus::Skipped {
-                            reason: Some(String::from(
+                            details: Some(String::from(
                                 "The plugin does not support the 'state' extension.",
                             )),
                         })
@@ -108,7 +108,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 None => {
                     // I sure hope that no plugin will eer hit this
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin's second instance does not support the 'params' extension.",
                         )),
                     });
@@ -118,7 +118,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 Some(state) => state,
                 None => {
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin's second instance does not support the 'state' extension.",
                         )),
                     })
@@ -152,10 +152,10 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             // Now for the monent of truth
             let second_state_file = state.save()?;
             if second_state_file == first_state_file {
-                Ok(TestStatus::Success { notes: None })
+                Ok(TestStatus::Success { details: None })
             } else {
                 Ok(TestStatus::Failed {
-                    reason: Some(String::from(
+                    details: Some(String::from(
                         "Re-saving the loaded state resulted in a different state file.",
                     )),
                 })
@@ -165,7 +165,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
     match result {
         Ok(status) => status,
         Err(err) => TestStatus::Failed {
-            reason: Some(format!("{err:#}")),
+            details: Some(format!("{err:#}")),
         },
     }
 }
@@ -189,7 +189,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     Some(params) => params,
                     None => {
                         return Ok(TestStatus::Skipped {
-                            reason: Some(String::from(
+                            details: Some(String::from(
                                 "The plugin does not support the 'params' extension.",
                             )),
                         })
@@ -199,7 +199,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     Some(state) => state,
                     None => {
                         return Ok(TestStatus::Skipped {
-                            reason: Some(String::from(
+                            details: Some(String::from(
                                 "The plugin does not support the 'state' extension.",
                             )),
                         })
@@ -266,7 +266,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 None => {
                     // I sure hope that no plugin will eer hit this
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin's second instance does not support the 'params' extension.",
                         )),
                     });
@@ -276,7 +276,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 Some(state) => state,
                 None => {
                     return Ok(TestStatus::Skipped {
-                        reason: Some(String::from(
+                        details: Some(String::from(
                             "The plugin's second instance does not support the 'state' extension.",
                         )),
                     })
@@ -316,10 +316,10 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
 
             let second_state_file = state.save()?;
             if second_state_file == first_state_file {
-                Ok(TestStatus::Success { notes: None })
+                Ok(TestStatus::Success { details: None })
             } else {
                 Ok(TestStatus::Failed {
-                    reason: Some(String::from(
+                    details: Some(String::from(
                         "Sending the same parameter values to two different instances of the \
                          plugin resulted in different state files.",
                     )),
@@ -330,7 +330,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
     match result {
         Ok(status) => status,
         Err(err) => TestStatus::Failed {
-            reason: Some(format!("{err:#}")),
+            details: Some(format!("{err:#}")),
         },
     }
 }

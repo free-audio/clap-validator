@@ -41,14 +41,14 @@ pub struct TestResult {
 #[serde(tag = "status")]
 pub enum TestStatus {
     /// The test passed successfully.
-    Success { notes: Option<String> },
+    Success { details: Option<String> },
     /// The plugin segfaulted, SIGABRT'd, or otherwise crashed while running the test. This is only
     /// caught for out-of-process validation, for obvious reasons.
-    Crashed { reason: String },
+    Crashed { details: String },
     /// The test failed.
-    Failed { reason: Option<String> },
+    Failed { details: Option<String> },
     /// Preconditions for running the test were not met, so the test has been skipped.
-    Skipped { reason: Option<String> },
+    Skipped { details: Option<String> },
 }
 
 /// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
@@ -142,7 +142,7 @@ pub trait TestCase<'a>: Sized + 'static {
                 name: self.as_str().to_string(),
                 description: self.description(),
                 status: TestStatus::Crashed {
-                    reason: exit_status.to_string(),
+                    details: exit_status.to_string(),
                 },
             });
         }
@@ -171,13 +171,13 @@ impl TestStatus {
         }
     }
 
-    /// Get the textual explanation for the test status, if available.
-    pub fn reason(&self) -> Option<&str> {
+    /// Get the textual explanation for the test status, if this is available.
+    pub fn details(&self) -> Option<&str> {
         match self {
-            TestStatus::Success { notes: reason }
-            | TestStatus::Failed { reason }
-            | TestStatus::Skipped { reason } => reason.as_deref(),
-            TestStatus::Crashed { reason } => Some(reason),
+            TestStatus::Success { details }
+            | TestStatus::Failed { details }
+            | TestStatus::Skipped { details } => details.as_deref(),
+            TestStatus::Crashed { details } => Some(details),
         }
     }
 }
