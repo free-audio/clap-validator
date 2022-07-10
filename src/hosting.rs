@@ -8,6 +8,7 @@ use clap_sys::ext::note_ports::{
 };
 use clap_sys::ext::params::{clap_host_params, clap_param_clear_flags, clap_param_rescan_flags};
 use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
+use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
 use clap_sys::version::CLAP_VERSION;
@@ -45,6 +46,7 @@ pub struct ClapHost {
     clap_host_note_ports: clap_host_note_ports,
     clap_host_params: clap_host_params,
     clap_host_state: clap_host_state,
+    clap_host_thread_check: clap_host_thread_check,
 }
 
 impl ClapHost {
@@ -85,6 +87,10 @@ impl ClapHost {
             },
             clap_host_state: clap_host_state {
                 mark_dirty: Some(Self::ext_state_mark_dirty),
+            },
+            clap_host_thread_check: clap_host_thread_check {
+                is_main_thread: Some(Self::ext_thread_check_is_main_thread),
+                is_audio_thread: Some(Self::ext_thread_check_is_audio_thread),
             },
         }))
     }
@@ -165,6 +171,8 @@ impl ClapHost {
             &this.clap_host_note_ports as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_STATE {
             &this.clap_host_state as *const _ as *const c_void
+        } else if extension_id_cstr == CLAP_EXT_THREAD_CHECK {
+            &this.clap_host_thread_check as *const _ as *const c_void
         } else {
             std::ptr::null()
         }
@@ -269,5 +277,20 @@ impl ClapHost {
 
         this.assert_main_thread("clap_host_state::mark_dirty()");
         log::trace!("TODO: Add callbacks for 'clap_host_state::mark_dirty()'");
+    }
+
+    unsafe extern "C" fn ext_thread_check_is_main_thread(host: *const clap_host) -> bool {
+        check_null_ptr!(false, host);
+        let this = &*(host as *const Self);
+
+        std::thread::current().id() == this.main_thread_id
+    }
+
+    unsafe extern "C" fn ext_thread_check_is_audio_thread(host: *const clap_host) -> bool {
+        check_null_ptr!(false, host);
+        let this = &*(host as *const Self);
+
+        // TODO: Keep track of all audio threads
+        std::thread::current().id() != this.main_thread_id
     }
 }
