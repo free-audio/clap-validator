@@ -352,7 +352,8 @@ impl<'a> OutOfPlaceAudioBuffers<'a> {
             clap_inputs,
             clap_outputs,
 
-            num_samples: num_samples.unwrap_or(0),
+            // This cannot default to 0, because 0 isn't a valid buffer size in CLAP
+            num_samples: num_samples.unwrap_or(512),
         })
     }
 
