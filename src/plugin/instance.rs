@@ -13,7 +13,7 @@ use std::thread::ThreadId;
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
-use crate::hosting::ClapHost;
+use crate::host::ClapHost;
 use crate::util::unsafe_clap_call;
 
 /// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All

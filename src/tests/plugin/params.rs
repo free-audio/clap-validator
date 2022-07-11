@@ -3,7 +3,7 @@
 use anyhow::Context;
 use rand::Rng;
 
-use crate::hosting::ClapHost;
+use crate::host::ClapHost;
 use crate::plugin::ext::params::Params;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::new_prng;

@@ -5,7 +5,7 @@ use validator::{SingleTestSettings, ValidatorSettings};
 
 use crate::tests::TestResult;
 
-mod hosting;
+mod host;
 mod index;
 mod plugin;
 mod tests;

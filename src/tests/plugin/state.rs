@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap_sys::id::clap_id;
 use std::collections::BTreeMap;
 
-use crate::hosting::ClapHost;
+use crate::host::ClapHost;
 use crate::plugin::audio_thread::process::{EventQueue, ProcessConfig};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::{ParamInfo, Params};

@@ -12,7 +12,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 use super::instance::Plugin;
-use crate::hosting::ClapHost;
+use crate::host::ClapHost;
 use crate::util::{self, unsafe_clap_call};
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over

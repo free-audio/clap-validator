@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 
-use crate::hosting::ClapHost;
+use crate::host::ClapHost;
 use crate::plugin::audio_thread::process::{
     AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
 };
