@@ -6,7 +6,9 @@ use clap_sys::ext::note_ports::{
     clap_host_note_ports, clap_note_dialect, CLAP_EXT_NOTE_PORTS, CLAP_NOTE_DIALECT_CLAP,
     CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
 };
-use clap_sys::ext::params::{clap_host_params, clap_param_clear_flags, clap_param_rescan_flags};
+use clap_sys::ext::params::{
+    clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, CLAP_EXT_PARAMS,
+};
 use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
 use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
 use clap_sys::host::clap_host;
@@ -208,6 +210,8 @@ impl ClapHost {
             &this.clap_host_audio_ports as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS {
             &this.clap_host_note_ports as *const _ as *const c_void
+        } else if extension_id_cstr == CLAP_EXT_PARAMS {
+            &this.clap_host_params as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_STATE {
             &this.clap_host_state as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_THREAD_CHECK {
