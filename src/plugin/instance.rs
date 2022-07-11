@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
+use parking_lot::{MappedRwLockReadGuard, RwLockReadGuard};
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -13,7 +14,7 @@ use std::thread::ThreadId;
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
-use crate::host::ClapHost;
+use crate::host::{ClapHost, PluginInstance};
 use crate::util::unsafe_clap_call;
 
 /// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All
@@ -39,8 +40,9 @@ pub struct Plugin<'lib> {
     /// outliving the library.
     _library: &'lib PluginLibrary,
     /// The host instance for this plugin. Depending on the test, different instances may get their
-    /// own host, or they can share a single host instance.
-    _host: Pin<Arc<ClapHost>>,
+    /// own host, or they can share a single host instance. This host also used to keep track of the
+    /// plugin instance's audio threads and pending callbacks.
+    host: Pin<Arc<ClapHost>>,
     /// To honor CLAP's thread safety guidelines, the thread this object was created from is
     /// designated the 'main thread', and this object cannot be shared with other threads. The
     /// [`on_audio_thread()`][Self::on_audio_thread()] method spawns an audio thread that is able to call
@@ -67,7 +69,12 @@ impl Drop for Plugin<'_> {
         if self.activated.get() {
             unsafe_clap_call! { self.handle.as_ptr()=>deactivate(self.as_ptr()) };
         }
+
+        // TODO: We can't handle host callbacks that happen in between these two functions, but the
+        //       plugin really shouldn't be making callbacks in deactivate()
         unsafe_clap_call! { self.handle.as_ptr()=>destroy(self.as_ptr()) };
+
+        self.host.instances.write().remove(&self.as_ptr());
     }
 }
 
@@ -83,18 +90,26 @@ impl Deref for Plugin<'_> {
 }
 
 impl<'lib> Plugin<'lib> {
+    /// Wrap around a still uninitialized plugin. This will register the plugin instance with the
+    /// host.
     pub fn new(
         handle: NonNull<clap_plugin>,
         library: &'lib PluginLibrary,
         host: Pin<Arc<ClapHost>>,
     ) -> Self {
+        // The host can use this to keep track of things like audio threads and pending callbacks.
+        // The instance is remvoed again when this object is dropped.
+        host.instances
+            .write()
+            .insert(handle.as_ptr(), PluginInstance::default());
+
         Plugin {
             handle,
             main_thread_id: std::thread::current().id(),
             activated: Cell::new(false),
 
             _library: library,
-            _host: host,
+            host,
             _send_sync_marker: PhantomData,
         }
     }
@@ -102,6 +117,14 @@ impl<'lib> Plugin<'lib> {
     /// Get the raw pointer to the `clap_plugin` instance.
     pub fn as_ptr(&self) -> *const clap_plugin {
         self.handle.as_ptr()
+    }
+
+    /// Get the host instance for this plugin. This is used to keep track of audio threads and
+    /// pending callbacks.
+    pub fn host_instance(&self) -> MappedRwLockReadGuard<PluginInstance> {
+        RwLockReadGuard::map(self.host.instances.read(), |instances| {
+            &instances[&self.as_ptr()]
+        })
     }
 
     /// Whether this plugin is currently active.
@@ -156,7 +179,14 @@ impl<'lib> Plugin<'lib> {
                     //         to create this `PluginAudioThread`.
                     let this = unsafe { &**unsafe_self_wrapper };
 
-                    f(PluginAudioThread::new(this))
+                    // The host may use this to assert that calls are run from an audio thread
+                    this.host_instance()
+                        .audio_thread
+                        .store(Some(std::thread::current().id()));
+                    let result = f(PluginAudioThread::new(this));
+                    this.host_instance().audio_thread.store(None);
+
+                    result
                 })
                 .join()
                 .expect("Audio thread panicked")

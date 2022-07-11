@@ -11,8 +11,11 @@ use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
 use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
+use clap_sys::plugin::clap_plugin;
 use clap_sys::version::CLAP_VERSION;
-use parking_lot::Mutex;
+use crossbeam::atomic::AtomicCell;
+use parking_lot::{Mutex, RwLock};
+use std::collections::HashMap;
 use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
 use std::pin::Pin;
@@ -42,12 +45,25 @@ pub struct ClapHost {
     /// test has succeeded.
     thread_safety_error: Mutex<Option<String>>,
 
+    /// These are the plugin instances taht were registered on this host. They're added here when
+    /// the `Plugin` object is created, and they're removed when the object is dropped. This is used
+    /// to keep track of audio threads and pending callbacks.
+    pub instances: RwLock<HashMap<*const clap_plugin, PluginInstance>>,
+
     // These are the vtables for the extensions supported by the host
     clap_host_audio_ports: clap_host_audio_ports,
     clap_host_note_ports: clap_host_note_ports,
     clap_host_params: clap_host_params,
     clap_host_state: clap_host_state,
     clap_host_thread_check: clap_host_thread_check,
+}
+
+/// Runtime information about a plugin instance. This keeps track of pending callbacks and things
+/// like audio threads.
+#[derive(Debug, Default)]
+pub struct PluginInstance {
+    /// The plugin instance's audio thread, if it has one. Used for the audio thread checks.
+    pub audio_thread: AtomicCell<Option<ThreadId>>,
 }
 
 impl ClapHost {
@@ -72,6 +88,8 @@ impl ClapHost {
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
             // `None`. Otherwise this will be replaced by the first error.
             thread_safety_error: Mutex::new(None),
+
+            instances: RwLock::new(HashMap::new()),
 
             clap_host_audio_ports: clap_host_audio_ports {
                 is_rescan_flag_supported: Some(Self::ext_audio_ports_is_rescan_flag_supported),
@@ -104,7 +122,6 @@ impl ClapHost {
     }
 
     pub fn thread_safety_check(&self) -> Result<()> {
-        #[allow(clippy::significant_drop_in_scrutinee)]
         match self.thread_safety_error.lock().take() {
             Some(err) => anyhow::bail!(err),
             None => Ok(()),
@@ -114,13 +131,10 @@ impl ClapHost {
     /// Checks whether this is the main thread. If it is not, then an error indicating this can be
     /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
-    //
-    // TODO: Remove these unused attributes once we implement extensions
     pub fn assert_main_thread(&self, function_name: &str) {
         let mut thread_safety_error = self.thread_safety_error.lock();
         let current_thread_id = std::thread::current().id();
 
-        #[allow(clippy::significant_drop_in_scrutinee)]
         match *thread_safety_error {
             // Don't overwrite the first error
             None if std::thread::current().id() != self.main_thread_id => {
@@ -139,20 +153,44 @@ impl ClapHost {
     /// safety errors will not overwrite earlier ones.
     #[allow(unused)]
     pub fn assert_audio_thread(&self, function_name: &str) {
-        let mut thread_safety_error = self.thread_safety_error.lock();
+        let current_thread_id = std::thread::current().id();
+        if !self.is_audio_thread(current_thread_id) {
+            let mut thread_safety_error = self.thread_safety_error.lock();
 
-        #[allow(clippy::significant_drop_in_scrutinee)]
-        match *thread_safety_error {
-            // Don't overwrite the first error
-            // TODO: This doesn't necessarily check for 'the' audio thread, although in practice that shouldn't matter
-            None if std::thread::current().id() == self.main_thread_id => {
+            match *thread_safety_error {
+                None if current_thread_id == self.main_thread_id => {
+                    *thread_safety_error = Some(format!(
+                        "'{}' may only be called from an audio thread, but it was called from the \
+                         main thread",
+                        function_name,
+                    ))
+                }
+                None => {
+                    *thread_safety_error = Some(format!(
+                        "'{}' may only be called from an audio thread, but it was called from an \
+                         unknown thread",
+                        function_name,
+                    ))
+                }
+                _ => (),
+            }
+        }
+    }
+
+    /// Checks whether this is **not** the audio thread. If it is, then an error indicating this can
+    /// be retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
+    /// safety errors will not overwrite earlier ones.
+    #[allow(unused)]
+    pub fn assert_not_audio_thread(&self, function_name: &str) {
+        let current_thread_id = std::thread::current().id();
+        if self.is_audio_thread(current_thread_id) {
+            let mut thread_safety_error = self.thread_safety_error.lock();
+            if thread_safety_error.is_none() {
                 *thread_safety_error = Some(format!(
-                    "'{}' may only be called from an audio thread, but it was called from the \
-                     main thread",
+                    "'{}' was called from an audio thread, this is not allowed",
                     function_name,
                 ))
             }
-            _ => (),
         }
     }
 
@@ -177,6 +215,14 @@ impl ClapHost {
         } else {
             std::ptr::null()
         }
+    }
+
+    /// Returns whether the thread ID is one of the registered audio threads.
+    fn is_audio_thread(&self, thread_id: ThreadId) -> bool {
+        self.instances
+            .read()
+            .values()
+            .any(|instance| instance.audio_thread.load() == Some(thread_id))
     }
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
@@ -264,11 +310,7 @@ impl ClapHost {
         check_null_ptr!((), host);
         let this = &*(host as *const Self);
 
-        // TODO: This is not quite correct. The function may be called from any thread that isn't
-        //       'the audio thread'. We currently just don't know what the audio threads are here.
-        //       A way to implement that could work by tracking audio thread IDs on this host
-        //       object, and adding and removing them in `Plugin::on_audio_thread()`.
-        this.assert_main_thread("clap_host_params::request_flush()");
+        this.assert_not_audio_thread("clap_host_params::request_flush()");
         log::trace!("TODO: Add callbacks for 'clap_host_params::request_flush()'");
     }
 
@@ -291,7 +333,6 @@ impl ClapHost {
         check_null_ptr!(false, host);
         let this = &*(host as *const Self);
 
-        // TODO: Keep track of all audio threads
-        std::thread::current().id() != this.main_thread_id
+        this.is_audio_thread(std::thread::current().id())
     }
 }

@@ -428,7 +428,6 @@ impl<VTable> EventQueue<VTable> {
         let this = &*(list as *const Self);
 
         let events = this.events.lock();
-        #[allow(clippy::significant_drop_in_scrutinee)]
         match events.get(index as usize) {
             Some(event) => event.header(),
             None => {
