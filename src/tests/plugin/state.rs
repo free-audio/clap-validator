@@ -71,7 +71,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     audio_ports_config.create_buffers(512);
                 ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
                     .run_once(ProcessConfig::default(), move |process_data| {
-                        *process_data.input_events.events.lock().unwrap() = random_param_set_events;
+                        *process_data.input_events.events.lock() = random_param_set_events;
 
                         Ok(())
                     })?;
@@ -224,7 +224,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     param_fuzzer.randomize_params_at(&mut prng, 0).collect();
 
                 let input_events = EventQueue::new_input();
-                *input_events.events.lock().unwrap() = random_param_set_events.clone();
+                *input_events.events.lock() = random_param_set_events.clone();
                 let output_events = EventQueue::new_output();
                 params.flush(&input_events, &output_events)?;
 
@@ -289,7 +289,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
                 .run_once(ProcessConfig::default(), move |process_data| {
-                    *process_data.input_events.events.lock().unwrap() = random_param_set_events;
+                    *process_data.input_events.events.lock() = random_param_set_events;
 
                     Ok(())
                 })?;
@@ -415,7 +415,7 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                     audio_ports_config.create_buffers(512);
                 ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
                     .run_once(ProcessConfig::default(), move |process_data| {
-                        *process_data.input_events.events.lock().unwrap() = random_param_set_events;
+                        *process_data.input_events.events.lock() = random_param_set_events;
 
                         Ok(())
                     })?;

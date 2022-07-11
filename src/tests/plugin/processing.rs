@@ -386,7 +386,7 @@ fn check_out_of_place_output_consistency(
     // If the plugin output any events, then they should be in a monotonically increasing order
     let mut last_event_time = 0;
     #[allow(clippy::significant_drop_in_scrutinee)]
-    for event in process_data.output_events.events.lock().unwrap().iter() {
+    for event in process_data.output_events.events.lock().iter() {
         let event_time = event.header().time;
         if event_time < last_event_time {
             anyhow::bail!(

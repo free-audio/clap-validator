@@ -12,10 +12,11 @@ use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK}
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
 use clap_sys::version::CLAP_VERSION;
+use parking_lot::Mutex;
 use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::ThreadId;
 
 use crate::util::check_null_ptr;
@@ -104,7 +105,7 @@ impl ClapHost {
 
     pub fn thread_safety_check(&self) -> Result<()> {
         #[allow(clippy::significant_drop_in_scrutinee)]
-        match self.thread_safety_error.lock().unwrap().take() {
+        match self.thread_safety_error.lock().take() {
             Some(err) => anyhow::bail!(err),
             None => Ok(()),
         }
@@ -116,7 +117,7 @@ impl ClapHost {
     //
     // TODO: Remove these unused attributes once we implement extensions
     pub fn assert_main_thread(&self, function_name: &str) {
-        let mut thread_safety_error = self.thread_safety_error.lock().unwrap();
+        let mut thread_safety_error = self.thread_safety_error.lock();
         let current_thread_id = std::thread::current().id();
 
         #[allow(clippy::significant_drop_in_scrutinee)]
@@ -138,7 +139,7 @@ impl ClapHost {
     /// safety errors will not overwrite earlier ones.
     #[allow(unused)]
     pub fn assert_audio_thread(&self, function_name: &str) {
-        let mut thread_safety_error = self.thread_safety_error.lock().unwrap();
+        let mut thread_safety_error = self.thread_safety_error.lock();
 
         #[allow(clippy::significant_drop_in_scrutinee)]
         match *thread_safety_error {

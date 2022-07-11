@@ -117,7 +117,7 @@ impl NoteGenerator {
         // the previous event.
         const SAMPLE_OFFSET_RANGE: RangeInclusive<i32> = -6..=5;
 
-        let mut events = queue.events.lock().unwrap();
+        let mut events = queue.events.lock();
         let should_sort = !events.is_empty();
 
         let mut current_sample = prng.gen_range(SAMPLE_OFFSET_RANGE).max(0) as u32;

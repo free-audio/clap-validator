@@ -13,10 +13,11 @@ use clap_sys::events::{
 };
 use clap_sys::fixedpoint::{CLAP_BEATTIME_FACTOR, CLAP_SECTIME_FACTOR};
 use clap_sys::process::clap_process;
+use parking_lot::Mutex;
 use rand::Rng;
 use rand_pcg::Pcg32;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::util::check_null_ptr;
 
@@ -235,8 +236,8 @@ impl<'a> ProcessData<'a> {
     /// Clear the event queues. Make sure to also call
     /// [`advance_transport()`][Self::advance_transport()].
     pub fn clear_events(&mut self) {
-        self.input_events.events.lock().unwrap().clear();
-        self.output_events.events.lock().unwrap().clear();
+        self.input_events.events.lock().clear();
+        self.output_events.events.lock().clear();
     }
 }
 
@@ -416,7 +417,7 @@ impl<VTable> EventQueue<VTable> {
         check_null_ptr!(0, list);
         let this = &*(list as *const Self);
 
-        this.events.lock().unwrap().len() as u32
+        this.events.lock().len() as u32
     }
 
     unsafe extern "C" fn get(
@@ -426,7 +427,7 @@ impl<VTable> EventQueue<VTable> {
         check_null_ptr!(std::ptr::null(), list);
         let this = &*(list as *const Self);
 
-        let events = this.events.lock().unwrap();
+        let events = this.events.lock();
         #[allow(clippy::significant_drop_in_scrutinee)]
         match events.get(index as usize) {
             Some(event) => event.header(),
@@ -451,7 +452,6 @@ impl<VTable> EventQueue<VTable> {
         // consistency checks
         this.events
             .lock()
-            .unwrap()
             .push(Event::from_header_ptr(event).unwrap());
 
         true

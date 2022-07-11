@@ -3,11 +3,11 @@
 use anyhow::Result;
 use clap_sys::ext::state::{clap_plugin_state, CLAP_EXT_STATE};
 use clap_sys::stream::{clap_istream, clap_ostream};
+use parking_lot::Mutex;
 use std::ffi::{c_void, CStr};
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
 
 use super::Extension;
 use crate::plugin::instance::Plugin;
@@ -189,7 +189,6 @@ impl OutputStream {
         unsafe { Pin::into_inner_unchecked(self) }
             .buffer
             .into_inner()
-            .unwrap()
     }
 
     unsafe extern "C" fn write(
@@ -208,7 +207,6 @@ impl OutputStream {
 
         this.buffer
             .lock()
-            .unwrap()
             .extend_from_slice(std::slice::from_raw_parts(
                 buffer as *const u8,
                 size as usize,
