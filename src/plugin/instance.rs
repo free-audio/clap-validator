@@ -2,35 +2,39 @@
 
 use anyhow::Result;
 use clap_sys::plugin::clap_plugin;
-use parking_lot::{MappedRwLockReadGuard, RwLockReadGuard};
+use clap_sys::plugin_factory::clap_plugin_factory;
 use std::cell::Cell;
+use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::thread::ThreadId;
 
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
-use crate::host::{ClapHost, PluginInstance};
+use crate::host::{ClapHost, HostPluginInstance};
 use crate::util::unsafe_clap_call;
+
+/// A `Send+Sync` wrapper around `*const clap_plugin`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct PluginHandle(pub NonNull<clap_plugin>);
+
+unsafe impl Send for PluginHandle {}
+unsafe impl Sync for PluginHandle {}
 
 /// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All
 /// functions here are callable only from the main thread. Use the
 /// [`on_audio_thread()`][Self::on_audio_thread()] method to spawn an audio thread.
 #[derive(Debug)]
 pub struct Plugin<'lib> {
-    handle: NonNull<clap_plugin>,
-    /// The ID of the main thread. Or in other words, the ID of the thread this `Plugin` instance
-    /// was created from. This is useful when working with audio threads. We want the audio thread
-    /// to be separate from the main thread, but in some test cases it may be useful to process
-    /// multiple plugin instances in series from the same audio thread. Because of this,
-    /// [`Plugin::on_audio_thread()`] checks whether the function is called from the main thread or
-    /// not. If it is, then a new thread is spawned and the closure is run from that thread. If the
-    /// function is called from another thread, then the closure can be run directly.
-    main_thread_id: ThreadId,
+    handle: PluginHandle,
+    /// Information about this plugin instance stored on the host. This keeps track of things like
+    /// audio thread IDs and whether the plugin has pending callbacks.
+    host_instance: Pin<Arc<HostPluginInstance>>,
+
     /// Whether the plugin is activated. If it is, then dropping this object will try to deactivate
     /// it.
     activated: Cell<bool>,
@@ -39,10 +43,6 @@ pub struct Plugin<'lib> {
     /// directly, but keeping a reference to the library here prevents the plugin instance from
     /// outliving the library.
     _library: &'lib PluginLibrary,
-    /// The host instance for this plugin. Depending on the test, different instances may get their
-    /// own host, or they can share a single host instance. This host also used to keep track of the
-    /// plugin instance's audio threads and pending callbacks.
-    host: Pin<Arc<ClapHost>>,
     /// To honor CLAP's thread safety guidelines, the thread this object was created from is
     /// designated the 'main thread', and this object cannot be shared with other threads. The
     /// [`on_audio_thread()`][Self::on_audio_thread()] method spawns an audio thread that is able to call
@@ -67,14 +67,16 @@ impl<'lib> Deref for PluginSendWrapper<'lib> {
 impl Drop for Plugin<'_> {
     fn drop(&mut self) {
         if self.activated.get() {
-            unsafe_clap_call! { self.handle.as_ptr()=>deactivate(self.as_ptr()) };
+            unsafe_clap_call! { self.as_ptr()=>deactivate(self.as_ptr()) };
         }
 
         // TODO: We can't handle host callbacks that happen in between these two functions, but the
         //       plugin really shouldn't be making callbacks in deactivate()
-        unsafe_clap_call! { self.handle.as_ptr()=>destroy(self.as_ptr()) };
+        unsafe_clap_call! { self.as_ptr()=>destroy(self.as_ptr()) };
 
-        self.host.instances.write().remove(&self.as_ptr());
+        self.host_instance
+            .host
+            .unregister_instance(self.host_instance.clone());
     }
 }
 
@@ -85,46 +87,51 @@ impl Deref for Plugin<'_> {
     type Target = clap_plugin;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.handle.as_ref() }
+        unsafe { self.handle.0.as_ref() }
     }
 }
 
 impl<'lib> Plugin<'lib> {
-    /// Wrap around a still uninitialized plugin. This will register the plugin instance with the
-    /// host.
+    /// Create a plugin instance and return the still uninitialized plugin. Returns an error if the
+    /// plugin could not be created. The plugin instance will be registered with the host, and
+    /// unregistered when this object is dropped again.
     pub fn new(
-        handle: NonNull<clap_plugin>,
         library: &'lib PluginLibrary,
-        host: Pin<Arc<ClapHost>>,
-    ) -> Self {
+        host: Arc<ClapHost>,
+        factory: &clap_plugin_factory,
+        plugin_id: &CStr,
+    ) -> Result<Self> {
         // The host can use this to keep track of things like audio threads and pending callbacks.
         // The instance is remvoed again when this object is dropped.
-        host.instances
-            .write()
-            .insert(handle.as_ptr(), PluginInstance::default());
+        let host_instance = HostPluginInstance::new(host.clone());
+        let plugin = unsafe_clap_call! {
+            factory=>create_plugin(factory, host_instance.as_ptr(), plugin_id.as_ptr())
+        };
+        if plugin.is_null() {
+            anyhow::bail!(
+                "'clap_plugin_factory::create_plugin({plugin_id:?})' returned a null pointer"
+            );
+        }
 
-        Plugin {
+        // We can only register the plugin instance with the host now because we did not have a
+        // plugin pointer before this.
+        let handle = PluginHandle(NonNull::new(plugin as *mut clap_plugin).unwrap());
+        host_instance.plugin.store(Some(handle));
+        host.register_instance(host_instance.clone());
+
+        Ok(Plugin {
             handle,
-            main_thread_id: std::thread::current().id(),
+            host_instance,
             activated: Cell::new(false),
 
             _library: library,
-            host,
             _send_sync_marker: PhantomData,
-        }
+        })
     }
 
     /// Get the raw pointer to the `clap_plugin` instance.
     pub fn as_ptr(&self) -> *const clap_plugin {
-        self.handle.as_ptr()
-    }
-
-    /// Get the host instance for this plugin. This is used to keep track of audio threads and
-    /// pending callbacks.
-    pub fn host_instance(&self) -> MappedRwLockReadGuard<PluginInstance> {
-        RwLockReadGuard::map(self.host.instances.read(), |instances| {
-            &instances[&self.as_ptr()]
-        })
+        self.handle.0.as_ptr()
     }
 
     /// Whether this plugin is currently active.
@@ -137,7 +144,7 @@ impl<'lib> Plugin<'lib> {
     /// [`init()`][Self::init()] before this may be called.
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
         let extension_ptr = unsafe_clap_call! {
-            self.handle.as_ptr()=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr())
+            self.as_ptr()=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr())
         };
 
         if extension_ptr.is_null() {
@@ -152,9 +159,10 @@ impl<'lib> Plugin<'lib> {
 
     /// Execute some code for this plugin from an audio thread context. The closure receives a
     /// [`PluginAudioThread`], which disallows calling main thread functions, and permits calling
-    /// audio thread functions. If this function is called from the main thread (the thread where
-    /// the plugin instance was created on), then this closure will be run from a new thread. If
-    /// this function is called from another thread, then the closure is run directly.
+    /// audio thread functions.
+    ///
+    /// TODO: Right now there's no way to interact with the main thread. This function should be
+    ///       extended with a second closure to do main thread things.
     pub fn on_audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
         &'a self,
         f: F,
@@ -168,38 +176,33 @@ impl<'lib> Plugin<'lib> {
             )
         }
 
-        if std::thread::current().id() == self.main_thread_id {
-            let unsafe_self_wrapper = PluginSendWrapper(self);
+        let unsafe_self_wrapper = PluginSendWrapper(self);
+        crossbeam::scope(|s| {
+            s.spawn(move |_| {
+                // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
+                //         `PluginAudioThread` to prevent them from being shared with other
+                //         threads. But we'll need to temporarily lift that restriction in order
+                //         to create this `PluginAudioThread`.
+                let this = unsafe { &**unsafe_self_wrapper };
 
-            crossbeam::scope(|s| {
-                s.spawn(move |_| {
-                    // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
-                    //         `PluginAudioThread` to prevent them from being shared with other
-                    //         threads. But we'll need to temporarily lift that restriction in order
-                    //         to create this `PluginAudioThread`.
-                    let this = unsafe { &**unsafe_self_wrapper };
+                // The host may use this to assert that calls are run from an audio thread
+                this.host_instance
+                    .audio_thread
+                    .store(Some(std::thread::current().id()));
+                let result = f(PluginAudioThread::new(this));
+                this.host_instance.audio_thread.store(None);
 
-                    // The host may use this to assert that calls are run from an audio thread
-                    this.host_instance()
-                        .audio_thread
-                        .store(Some(std::thread::current().id()));
-                    let result = f(PluginAudioThread::new(this));
-                    this.host_instance().audio_thread.store(None);
-
-                    result
-                })
-                .join()
-                .expect("Audio thread panicked")
+                result
             })
+            .join()
             .expect("Audio thread panicked")
-        } else {
-            f(PluginAudioThread::new(self))
-        }
+        })
+        .expect("Audio thread panicked")
     }
 
     /// Initialize the plugin. This needs to be called before doing anything else.
     pub fn init(&self) -> Result<()> {
-        if unsafe_clap_call! { self.handle.as_ptr()=>init(self.as_ptr()) } {
+        if unsafe_clap_call! { self.as_ptr()=>init(self.as_ptr()) } {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::init()' returned false")
@@ -224,7 +227,7 @@ impl<'lib> Plugin<'lib> {
         assert!(min_buffer_size >= 1);
 
         if unsafe_clap_call! {
-            self.handle.as_ptr()=>activate(
+            self.as_ptr()=>activate(
                 self.as_ptr(),
                 sample_rate,
                 min_buffer_size as u32,
@@ -246,7 +249,7 @@ impl<'lib> Plugin<'lib> {
         }
         self.activated.set(false);
 
-        unsafe_clap_call! { self.handle.as_ptr()=>deactivate(self.as_ptr()) };
+        unsafe_clap_call! { self.as_ptr()=>deactivate(self.as_ptr()) };
 
         Ok(())
     }

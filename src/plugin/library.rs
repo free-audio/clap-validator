@@ -7,8 +7,6 @@ use clap_sys::version::clap_version;
 use serde::Serialize;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
-use std::ptr::NonNull;
 use std::sync::Arc;
 
 use super::instance::Plugin;
@@ -187,7 +185,7 @@ impl PluginLibrary {
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
     /// `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str, host: Pin<Arc<ClapHost>>) -> Result<Plugin> {
+    pub fn create_plugin(&self, id: &str, host: Arc<ClapHost>) -> Result<Plugin> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
@@ -197,21 +195,7 @@ impl PluginLibrary {
         }
 
         let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
-        let plugin = unsafe_clap_call! {
-            plugin_factory=>create_plugin(plugin_factory, host.as_ptr(), id_cstring.as_ptr())
-        };
-        if plugin.is_null() {
-            anyhow::bail!(
-                "'clap_plugin_factory::create_plugin({id_cstring:?})' returned a null pointer"
-            );
-        }
-
-        // TODO: There's no *const NonNull equivalent, right?
-        Ok(Plugin::new(
-            NonNull::new(plugin as *mut _).unwrap(),
-            self,
-            host,
-        ))
+        Plugin::new(self, host, unsafe { &*plugin_factory }, &id_cstring)
     }
 }
 
