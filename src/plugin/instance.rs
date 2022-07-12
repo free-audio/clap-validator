@@ -200,7 +200,7 @@ impl<'lib> Plugin<'lib> {
             let unsafe_self_wrapper = PluginSendWrapper(self);
             let callback_task_sender = self.host().callback_task_sender.clone();
 
-            let audio_thread = s.spawn(move |_| {
+            let audio_thread = s.builder().name("audio-thread").spawn(move |_| {
                 // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
                 //         `PluginAudioThread` to prevent them from being shared with other
                 //         threads. But we'll need to temporarily lift that restriction in order
