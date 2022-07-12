@@ -67,17 +67,17 @@ fn main() -> ExitCode {
     // For now logging everything to the terminal is fine. In the future it may be useful to have
     // CLI options for things like the verbosity level.
     simplelog::TermLogger::init(
-        simplelog::LevelFilter::Trace,
+        match cli.verbosity {
+            Verbosity::Quiet => simplelog::LevelFilter::Off,
+            Verbosity::Error => simplelog::LevelFilter::Error,
+            Verbosity::Warn => simplelog::LevelFilter::Warn,
+            Verbosity::Info => simplelog::LevelFilter::Info,
+            Verbosity::Debug => simplelog::LevelFilter::Debug,
+            Verbosity::Trace => simplelog::LevelFilter::Trace,
+        },
         simplelog::ConfigBuilder::new()
             .set_thread_mode(simplelog::ThreadLogMode::Both)
-            .set_location_level(match cli.verbosity {
-                Verbosity::Quiet => simplelog::LevelFilter::Off,
-                Verbosity::Error => simplelog::LevelFilter::Error,
-                Verbosity::Warn => simplelog::LevelFilter::Warn,
-                Verbosity::Info => simplelog::LevelFilter::Info,
-                Verbosity::Debug => simplelog::LevelFilter::Debug,
-                Verbosity::Trace => simplelog::LevelFilter::Trace,
-            })
+            .set_location_level(simplelog::LevelFilter::Debug)
             .build(),
         simplelog::TerminalMode::Stderr,
         simplelog::ColorChoice::Auto,
