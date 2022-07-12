@@ -6,7 +6,6 @@ use clap_sys::process::{
     CLAP_PROCESS_CONTINUE, CLAP_PROCESS_CONTINUE_IF_NOT_QUIET, CLAP_PROCESS_ERROR,
     CLAP_PROCESS_SLEEP, CLAP_PROCESS_TAIL,
 };
-use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -18,7 +17,7 @@ use crate::util::unsafe_clap_call;
 
 use self::process::ProcessData;
 use super::ext::Extension;
-use super::instance::Plugin;
+use super::instance::{Plugin, PluginState};
 
 pub mod process;
 
@@ -28,12 +27,8 @@ pub mod process;
 pub struct PluginAudioThread<'a> {
     /// The plugin instance this audio thread belongs to. This is needed to ensure that the audio
     /// thread instance cannot outlive the plugin instance (which cannot outlive the plugin
-    /// library).
+    /// library). This `Plugin` also contains a reference to the plugin instance's state.
     plugin: &'a Plugin<'a>,
-    /// Whether the plugin is processing. If it is, then dropping this object will try to stop
-    /// processing audio first.
-    processing: Cell<bool>,
-
     /// To honor CLAP's thread safety guidelines, this audio thread abstraction cannot be shared
     /// with or sent to other threads.
     _send_sync_marker: PhantomData<*const ()>,
@@ -62,8 +57,17 @@ impl Deref for PluginAudioThread<'_> {
 
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
-        if self.processing.get() {
-            unsafe_clap_call! { self.plugin=>stop_processing(self.plugin.as_ptr()) };
+        match self
+            .host_instance()
+            .state
+            .compare_exchange(PluginState::Processing, PluginState::Activated)
+        {
+            Ok(_) => unsafe_clap_call! { self.plugin=>stop_processing(self.plugin.as_ptr()) },
+            Err(PluginState::Activated) => (),
+            Err(state) => panic!(
+                "The plugin was in an invalid state '{state:?}' when the audio thread got \
+                 dropped, this is a clap-validator bug"
+            ),
         }
     }
 }
@@ -72,8 +76,6 @@ impl<'a> PluginAudioThread<'a> {
     pub fn new(plugin: &'a Plugin) -> Self {
         PluginAudioThread {
             plugin,
-            processing: Cell::new(false),
-
             _send_sync_marker: PhantomData,
         }
     }
@@ -111,10 +113,20 @@ impl<'a> PluginAudioThread<'a> {
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
     pub fn start_processing(&self) -> Result<()> {
-        if self.processing.get() {
-            anyhow::bail!("Cannot start processing for a plugin that's already processing audio.");
+        match self
+            .host_instance()
+            .state
+            .compare_exchange(PluginState::Activated, PluginState::Processing)
+        {
+            Ok(_) => (),
+            Err(PluginState::Processing) => anyhow::bail!(
+                "Cannot start processing for a plugin that's already processing audio."
+            ),
+            Err(state) => panic!(
+                "The plugin was in an invalid state '{state:?}' when trying to start processing, \
+                 this is a clap-validator bug"
+            ),
         }
-        self.processing.set(true);
 
         if unsafe_clap_call! { self.plugin=>start_processing(self.as_ptr()) } {
             Ok(())
@@ -153,12 +165,20 @@ impl<'a> PluginAudioThread<'a> {
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
     pub fn stop_processing(&self) -> Result<()> {
-        if !self.processing.get() {
-            anyhow::bail!(
+        match self
+            .host_instance()
+            .state
+            .compare_exchange(PluginState::Processing, PluginState::Activated)
+        {
+            Ok(_) => (),
+            Err(PluginState::Activated) => anyhow::bail!(
                 "Cannot stop processing for a plugin that's currently not processing audio."
-            );
+            ),
+            Err(state) => panic!(
+                "The plugin was in an invalid state '{state:?}' when trying to stop processing, \
+                 this is a clap-validator bug"
+            ),
         }
-        self.processing.set(false);
 
         unsafe_clap_call! { self.plugin=>stop_processing(self.as_ptr()) };
 

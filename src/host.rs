@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::ThreadId;
 
-use crate::plugin::instance::PluginHandle;
+use crate::plugin::instance::{PluginHandle, PluginState};
 use crate::util::check_null_ptr;
 
 /// An abstraction for a CLAP plugin host. It handles callback requests made by the plugin, and it
@@ -78,6 +78,9 @@ pub struct HostPluginInstance {
     /// created, and the factory's `create_plugin()` function requires a pointer to the `clap_host`.
     pub plugin: AtomicCell<Option<PluginHandle>>,
 
+    /// The plugin's current state in terms of activation and processing status.
+    pub state: AtomicCell<PluginState>,
+
     /// The plugin instance's audio thread, if it has one. Used for the audio thread checks.
     pub audio_thread: AtomicCell<Option<ThreadId>>,
     /// Whether the plugin has called `clap_host::request_restart()` and expects the plugin to be
@@ -115,6 +118,8 @@ impl HostPluginInstance {
             },
             host,
             plugin: AtomicCell::new(None),
+
+            state: AtomicCell::new(PluginState::Deactivated),
 
             audio_thread: AtomicCell::new(None),
             requested_restart: AtomicBool::new(false),
