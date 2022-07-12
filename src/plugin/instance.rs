@@ -89,7 +89,7 @@ impl Drop for Plugin<'_> {
         //       plugin really shouldn't be making callbacks in deactivate()
         unsafe_clap_call! { self.as_ptr()=>destroy(self.as_ptr()) };
 
-        self.state.host.unregister_instance(self.state.clone());
+        self.host().unregister_instance(self.state.clone());
     }
 }
 
@@ -118,7 +118,7 @@ impl<'lib> Plugin<'lib> {
         // The instance is remvoed again when this object is dropped.
         let state = InstanceState::new(host.clone());
         let plugin = unsafe_clap_call! {
-            factory=>create_plugin(factory, state.host_ptr(), plugin_id.as_ptr())
+            factory=>create_plugin(factory, state.clap_host_ptr(), plugin_id.as_ptr())
         };
         if plugin.is_null() {
             anyhow::bail!(
@@ -144,6 +144,14 @@ impl<'lib> Plugin<'lib> {
     /// Get the raw pointer to the `clap_plugin` instance.
     pub fn as_ptr(&self) -> *const clap_plugin {
         self.handle.0.as_ptr()
+    }
+
+    /// Get the host for this plugin instance.
+    pub fn host(&self) -> &Host {
+        // `Plugin` can only be used from the main thread
+        self.state
+            .host()
+            .expect("Tried to get the host instance from a thread that isn't the main thread")
     }
 
     /// Whether this plugin is currently active.
@@ -190,7 +198,7 @@ impl<'lib> Plugin<'lib> {
 
         crossbeam::scope(|s| {
             let unsafe_self_wrapper = PluginSendWrapper(self);
-            let callback_task_sender = self.state.host.callback_task_sender.clone();
+            let callback_task_sender = self.host().callback_task_sender.clone();
 
             let audio_thread = s.spawn(move |_| {
                 // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
@@ -213,7 +221,7 @@ impl<'lib> Plugin<'lib> {
             });
 
             // Handle callbacks requests on the main thread whle the aduio thread is running
-            self.state.host.handle_callbacks_blocking();
+            self.host().handle_callbacks_blocking();
 
             audio_thread.join().expect("Audio thread panicked")
         })

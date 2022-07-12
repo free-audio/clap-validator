@@ -132,7 +132,7 @@ impl<'a> ProcessingTest<'a> {
         }
 
         // Handle callbacks the plugin may have made during deactivate
-        self.plugin.state.host.handle_callbacks_once();
+        self.plugin.host().handle_callbacks_once();
 
         Ok(())
     }
@@ -192,7 +192,7 @@ impl<'a> ProcessingTest<'a> {
         let result = self.plugin.deactivate();
 
         // Handle callbacks the plugin may have made during deactivate
-        self.plugin.state.host.handle_callbacks_once();
+        self.plugin.host().handle_callbacks_once();
 
         result
     }

@@ -80,7 +80,7 @@ pub struct InstanceState {
     clap_host: clap_host,
     /// The host this `InstanceState` belongs to. This is needed to get back to the `Host`
     /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
-    pub host: Arc<Host>,
+    host: Arc<Host>,
     /// The plugin this `InstanceState` is associated with. This is the same as they key in the
     /// `Host::instances` hash map, but it also needs to be stored here to make it possible to
     /// know what plugin instance a `*const clap_host` refers to.
@@ -161,9 +161,19 @@ impl InstanceState {
         (this, &*this.host)
     }
 
+    /// Get the host instance if this is called from the main thread. Returns `None` if this is not
+    /// the case.
+    pub fn host(&self) -> Option<&Host> {
+        if std::thread::current().id() == self.host.main_thread_id {
+            Some(&*self.host)
+        } else {
+            None
+        }
+    }
+
     /// Get a pointer to the `clap_host` struct for this instance. This uniquely identifies the
     /// instance.
-    pub fn host_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
+    pub fn clap_host_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
         // The value will not move, since this `Host` can only be constructed as a
         // `Pin<Arc<InstanceState>>`
         &self.clap_host
