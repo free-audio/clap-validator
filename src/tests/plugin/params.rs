@@ -30,6 +30,7 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> TestStat
                     })
                 }
             };
+            host.handle_callbacks_once();
 
             let param_infos = params
                 .info()

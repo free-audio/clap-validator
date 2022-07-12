@@ -13,7 +13,7 @@ use std::sync::Arc;
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
-use crate::host::{Host, InstanceState};
+use crate::host::{CallbackTask, Host, InstanceState};
 use crate::util::unsafe_clap_call;
 
 /// A `Send+Sync` wrapper around `*const clap_plugin`.
@@ -175,8 +175,8 @@ impl<'lib> Plugin<'lib> {
     /// [`PluginAudioThread`], which disallows calling main thread functions, and permits calling
     /// audio thread functions.
     ///
-    /// TODO: Right now there's no way to interact with the main thread. This function should be
-    ///       extended with a second closure to do main thread things.
+    /// If whatever happens on the audio thread caused main-thread callback requests to be emited,
+    /// then those will be handled concurrently.
     pub fn on_audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
         &'a self,
         f: F,
@@ -190,9 +190,11 @@ impl<'lib> Plugin<'lib> {
             )
         }
 
-        let unsafe_self_wrapper = PluginSendWrapper(self);
         crossbeam::scope(|s| {
-            s.spawn(move |_| {
+            let unsafe_self_wrapper = PluginSendWrapper(self);
+            let callback_task_sender = self.host_instance.host.callback_task_sender.clone();
+
+            let audio_thread = s.spawn(move |_| {
                 // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
                 //         `PluginAudioThread` to prevent them from being shared with other
                 //         threads. But we'll need to temporarily lift that restriction in order
@@ -206,10 +208,16 @@ impl<'lib> Plugin<'lib> {
                 let result = f(PluginAudioThread::new(this));
                 this.host_instance.audio_thread.store(None);
 
+                // The main thread should unblock when the audio thread is done
+                callback_task_sender.send(CallbackTask::Stop).unwrap();
+
                 result
-            })
-            .join()
-            .expect("Audio thread panicked")
+            });
+
+            // Handle callbacks requests on the main thread whle the aduio thread is running
+            self.host_instance.host.handle_callbacks_blocking();
+
+            audio_thread.join().expect("Audio thread panicked")
         })
         .expect("Audio thread panicked")
     }

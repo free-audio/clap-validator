@@ -56,6 +56,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                         })
                     }
                 };
+                host.handle_callbacks_once();
 
                 let param_infos = params
                     .info()
@@ -85,6 +86,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     .collect::<Result<BTreeMap<clap_id, f64>>>()?;
 
                 let state_file = state.save()?;
+                host.handle_callbacks_once();
 
                 (state_file, expected_param_values)
             };
@@ -124,8 +126,11 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     })
                 }
             };
+            host.handle_callbacks_once();
 
             state.load(&first_state_file)?;
+            host.handle_callbacks_once();
+
             let actual_param_values: BTreeMap<clap_id, f64> = expected_param_values
                 .iter()
                 .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
@@ -151,6 +156,8 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
 
             // Now for the monent of truth
             let second_state_file = state.save()?;
+            host.handle_callbacks_once();
+
             if second_state_file == first_state_file {
                 Ok(TestStatus::Success { details: None })
             } else {
@@ -205,6 +212,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                         })
                     }
                 };
+                host.handle_callbacks_once();
 
                 let param_infos = params
                     .info()
@@ -227,6 +235,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 *input_events.events.lock() = random_param_set_events.clone();
                 let output_events = EventQueue::new_output();
                 params.flush(&input_events, &output_events)?;
+                host.handle_callbacks_once();
 
                 // We'll compare against these values in that second pass
                 let expected_param_values: BTreeMap<clap_id, f64> = param_infos
@@ -234,6 +243,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
                     .collect::<Result<BTreeMap<clap_id, f64>>>()?;
                 let state_file = state.save()?;
+                host.handle_callbacks_once();
 
                 // Plugins with no parameters at all should of course not trigger this error
                 if expected_param_values == initial_param_values && !param_infos.is_empty() {
@@ -284,6 +294,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     })
                 }
             };
+            host.handle_callbacks_once();
 
             // In the previous pass we used flush, and here we use the process funciton
             let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
@@ -317,6 +328,8 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             }
 
             let second_state_file = state.save()?;
+            host.handle_callbacks_once();
+
             if second_state_file == first_state_file {
                 Ok(TestStatus::Success { details: None })
             } else {
@@ -404,6 +417,7 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                         })
                     }
                 };
+                host.handle_callbacks_once();
 
                 let param_infos = params
                     .info()
@@ -429,6 +443,7 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                 // implementsq this correctly, so we can check if it handles buffered streams
                 // correctly by treating this as the ground truth.
                 let state_file = state.save()?;
+                host.handle_callbacks_once();
 
                 (state_file, expected_param_values)
             };
@@ -463,10 +478,13 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                     })
                 }
             };
+            host.handle_callbacks_once();
 
             // This is a buffered load that only loads 17 bytes at a time. Why 17? Because.
             const BUFFERED_LOAD_MAX_BYTES: usize = 17;
             state.load_buffered(&first_state_file, BUFFERED_LOAD_MAX_BYTES)?;
+            host.handle_callbacks_once();
+
             let actual_param_values: BTreeMap<clap_id, f64> = expected_param_values
                 .iter()
                 .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
@@ -494,6 +512,8 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
             // Because we're mean, we'll use a different prime number for the saving
             const BUFFERED_SAVE_MAX_BYTES: usize = 23;
             let second_state_file = state.save_buffered(BUFFERED_SAVE_MAX_BYTES)?;
+            host.handle_callbacks_once();
+
             if second_state_file == first_state_file {
                 Ok(TestStatus::Success { details: None })
             } else {

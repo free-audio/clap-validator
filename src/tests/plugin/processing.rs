@@ -44,6 +44,9 @@ impl<'a> ProcessingTest<'a> {
     ///
     /// The `Preprocess` closure is called before each processing cycle to allow the process data to be
     /// modified for the next process cycle.
+    ///
+    /// Main-thread callbacks that were made to the plugin while the audio thread was active are
+    /// handled implicitly.
     pub fn run<Preprocess>(
         &'a mut self,
         num_iters: usize,
@@ -128,12 +131,18 @@ impl<'a> ProcessingTest<'a> {
             self.plugin.deactivate()?;
         }
 
+        // Handle callbacks the plugin may have made during deactivate
+        self.plugin.host_instance.host.handle_callbacks_once();
+
         Ok(())
     }
 
     /// Run the standard audio processing test for a still **deactivated** plugin. This is identical
     /// to the [`run()`][Self::run()] function, except that it does exactly one processing cycle and
     /// thus non-copy values can be moved into the closure.
+    ///
+    /// Main-thread callbacks that were made to the plugin while the audio thread was active are
+    /// handled implicitly.
     pub fn run_once<Preprocess>(
         &'a mut self,
         process_config: ProcessConfig,
@@ -180,7 +189,12 @@ impl<'a> ProcessingTest<'a> {
             plugin.stop_processing()
         })?;
 
-        self.plugin.deactivate()
+        let result = self.plugin.deactivate();
+
+        // Handle callbacks the plugin may have made during deactivate
+        self.plugin.host_instance.host.handle_callbacks_once();
+
+        result
     }
 }
 
@@ -191,7 +205,6 @@ pub fn test_basic_out_of_place_audio_processing(
 ) -> TestStatus {
     let mut prng = new_prng();
 
-    // The host doesn't need to do anything special for this test
     let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
@@ -211,6 +224,10 @@ pub fn test_basic_out_of_place_audio_processing(
                     })
                 }
             };
+            // Handle callbacks the plugin may have made during init or these queries. The
+            // `ProcessingTest::run*` functions will implicitly handle all outstanding callbacks
+            // before they return.
+            host.handle_callbacks_once();
 
             let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
@@ -279,6 +296,7 @@ pub fn test_basic_out_of_place_note_processing(
                     )),
                 });
             }
+            host.handle_callbacks_once();
 
             // We'll fill the input event queue with (consistent) random CLAP note and/or MIDI
             // events depending on what's supported by the plugin supports
@@ -352,6 +370,7 @@ pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &st
                     )),
                 });
             }
+            host.handle_callbacks_once();
 
             // This RNG (Random Note Generator) allows generates mismatching events
             let mut note_event_rng =
