@@ -163,7 +163,7 @@ impl InstanceState {
 
     /// Get a pointer to the `clap_host` struct for this instance. This uniquely identifies the
     /// instance.
-    pub fn as_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
+    pub fn host_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
         // The value will not move, since this `Host` can only be constructed as a
         // `Pin<Arc<InstanceState>>`
         &self.clap_host

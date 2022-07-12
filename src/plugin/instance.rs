@@ -32,7 +32,7 @@ pub struct Plugin<'lib> {
     handle: PluginHandle,
     /// Information about this plugin instance stored on the host. This keeps track of things like
     /// audio thread IDs, whether the plugin has pending callbacks, and what state it is in.
-    pub host_instance: Pin<Arc<InstanceState>>,
+    pub state: Pin<Arc<InstanceState>>,
 
     /// The CLAP plugin library this plugin instance was created from. This field is not used
     /// directly, but keeping a reference to the library here prevents the plugin instance from
@@ -73,7 +73,7 @@ impl<'lib> Deref for PluginSendWrapper<'lib> {
 impl Drop for Plugin<'_> {
     fn drop(&mut self) {
         match self
-            .host_instance
+            .state
             .state
             .compare_exchange(PluginState::Activated, PluginState::Deactivated)
         {
@@ -89,9 +89,7 @@ impl Drop for Plugin<'_> {
         //       plugin really shouldn't be making callbacks in deactivate()
         unsafe_clap_call! { self.as_ptr()=>destroy(self.as_ptr()) };
 
-        self.host_instance
-            .host
-            .unregister_instance(self.host_instance.clone());
+        self.state.host.unregister_instance(self.state.clone());
     }
 }
 
@@ -118,9 +116,9 @@ impl<'lib> Plugin<'lib> {
     ) -> Result<Self> {
         // The host can use this to keep track of things like audio threads and pending callbacks.
         // The instance is remvoed again when this object is dropped.
-        let host_instance = InstanceState::new(host.clone());
+        let state = InstanceState::new(host.clone());
         let plugin = unsafe_clap_call! {
-            factory=>create_plugin(factory, host_instance.as_ptr(), plugin_id.as_ptr())
+            factory=>create_plugin(factory, state.host_ptr(), plugin_id.as_ptr())
         };
         if plugin.is_null() {
             anyhow::bail!(
@@ -131,12 +129,12 @@ impl<'lib> Plugin<'lib> {
         // We can only register the plugin instance with the host now because we did not have a
         // plugin pointer before this.
         let handle = PluginHandle(NonNull::new(plugin as *mut clap_plugin).unwrap());
-        host_instance.plugin.store(Some(handle));
-        host.register_instance(host_instance.clone());
+        state.plugin.store(Some(handle));
+        host.register_instance(state.clone());
 
         Ok(Plugin {
             handle,
-            host_instance,
+            state,
 
             _library: library,
             _send_sync_marker: PhantomData,
@@ -150,7 +148,7 @@ impl<'lib> Plugin<'lib> {
 
     /// Whether this plugin is currently active.
     pub fn activated(&self) -> bool {
-        self.host_instance.state.load() >= PluginState::Activated
+        self.state.state.load() >= PluginState::Activated
     }
 
     /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
@@ -192,7 +190,7 @@ impl<'lib> Plugin<'lib> {
 
         crossbeam::scope(|s| {
             let unsafe_self_wrapper = PluginSendWrapper(self);
-            let callback_task_sender = self.host_instance.host.callback_task_sender.clone();
+            let callback_task_sender = self.state.host.callback_task_sender.clone();
 
             let audio_thread = s.spawn(move |_| {
                 // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
@@ -202,11 +200,11 @@ impl<'lib> Plugin<'lib> {
                 let this = unsafe { &**unsafe_self_wrapper };
 
                 // The host may use this to assert that calls are run from an audio thread
-                this.host_instance
+                this.state
                     .audio_thread
                     .store(Some(std::thread::current().id()));
                 let result = f(PluginAudioThread::new(this));
-                this.host_instance.audio_thread.store(None);
+                this.state.audio_thread.store(None);
 
                 // The main thread should unblock when the audio thread is done
                 callback_task_sender.send(CallbackTask::Stop).unwrap();
@@ -215,7 +213,7 @@ impl<'lib> Plugin<'lib> {
             });
 
             // Handle callbacks requests on the main thread whle the aduio thread is running
-            self.host_instance.host.handle_callbacks_blocking();
+            self.state.host.handle_callbacks_blocking();
 
             audio_thread.join().expect("Audio thread panicked")
         })
@@ -241,7 +239,7 @@ impl<'lib> Plugin<'lib> {
         max_buffer_size: usize,
     ) -> Result<()> {
         match self
-            .host_instance
+            .state
             .state
             .compare_exchange(PluginState::Deactivated, PluginState::Activated)
         {
@@ -277,7 +275,7 @@ impl<'lib> Plugin<'lib> {
     /// preconditions.
     pub fn deactivate(&self) -> Result<()> {
         match self
-            .host_instance
+            .state
             .state
             .compare_exchange(PluginState::Activated, PluginState::Deactivated)
         {

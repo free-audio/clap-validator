@@ -58,7 +58,7 @@ impl Deref for PluginAudioThread<'_> {
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
         match self
-            .host_instance()
+            .state()
             .state
             .compare_exchange(PluginState::Processing, PluginState::Activated)
         {
@@ -86,8 +86,8 @@ impl<'a> PluginAudioThread<'a> {
     }
 
     /// Get the underlying `Plugin`'s [`InstanceState`] object.
-    pub fn host_instance(&self) -> &Pin<Arc<InstanceState>> {
-        &self.plugin.host_instance
+    pub fn state(&self) -> &Pin<Arc<InstanceState>> {
+        &self.plugin.state
     }
 
     /// Get the _audio thread_ extension abstraction for the extension `T`, if the plugin supports
@@ -114,7 +114,7 @@ impl<'a> PluginAudioThread<'a> {
     /// preconditions.
     pub fn start_processing(&self) -> Result<()> {
         match self
-            .host_instance()
+            .state()
             .state
             .compare_exchange(PluginState::Activated, PluginState::Processing)
         {
@@ -166,7 +166,7 @@ impl<'a> PluginAudioThread<'a> {
     /// preconditions.
     pub fn stop_processing(&self) -> Result<()> {
         match self
-            .host_instance()
+            .state()
             .state
             .compare_exchange(PluginState::Processing, PluginState::Activated)
         {

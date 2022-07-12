@@ -57,7 +57,7 @@ impl<'a> ProcessingTest<'a> {
         Preprocess: FnMut(&mut ProcessData) -> Result<()> + Send,
     {
         self.plugin
-            .host_instance
+            .state
             .requested_restart
             .store(false, Ordering::SeqCst);
 
@@ -110,7 +110,7 @@ impl<'a> ProcessingTest<'a> {
 
                     // Restart processing as necesasry
                     if plugin
-                        .host_instance()
+                        .state()
                         .requested_restart
                         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
                         .is_ok()
@@ -132,7 +132,7 @@ impl<'a> ProcessingTest<'a> {
         }
 
         // Handle callbacks the plugin may have made during deactivate
-        self.plugin.host_instance.host.handle_callbacks_once();
+        self.plugin.state.host.handle_callbacks_once();
 
         Ok(())
     }
@@ -152,7 +152,7 @@ impl<'a> ProcessingTest<'a> {
         Preprocess: FnOnce(&mut ProcessData) -> Result<()> + Send,
     {
         self.plugin
-            .host_instance
+            .state
             .requested_restart
             .store(false, Ordering::SeqCst);
 
@@ -192,7 +192,7 @@ impl<'a> ProcessingTest<'a> {
         let result = self.plugin.deactivate();
 
         // Handle callbacks the plugin may have made during deactivate
-        self.plugin.host_instance.host.handle_callbacks_once();
+        self.plugin.state.host.handle_callbacks_once();
 
         result
     }
