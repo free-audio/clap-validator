@@ -269,7 +269,7 @@ impl Host {
     /// Checks whether this is the main thread. If it is not, then an error indicating this can be
     /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
-    pub fn assert_main_thread(&self, function_name: &str) {
+    fn assert_main_thread(&self, function_name: &str) {
         let mut thread_safety_error = self.thread_safety_error.borrow_mut();
         let current_thread_id = std::thread::current().id();
 
@@ -290,7 +290,7 @@ impl Host {
     /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
     #[allow(unused)]
-    pub fn assert_audio_thread(&self, function_name: &str) {
+    fn assert_audio_thread(&self, function_name: &str) {
         let current_thread_id = std::thread::current().id();
         if !self.is_audio_thread(current_thread_id) {
             let mut thread_safety_error = self.thread_safety_error.borrow_mut();
@@ -318,8 +318,7 @@ impl Host {
     /// Checks whether this is **not** the audio thread. If it is, then an error indicating this can
     /// be retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
-    #[allow(unused)]
-    pub fn assert_not_audio_thread(&self, function_name: &str) {
+    fn assert_not_audio_thread(&self, function_name: &str) {
         let current_thread_id = std::thread::current().id();
         if self.is_audio_thread(current_thread_id) {
             let mut thread_safety_error = self.thread_safety_error.borrow_mut();
