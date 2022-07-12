@@ -498,7 +498,7 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                 Ok(TestStatus::Success { details: None })
             } else {
                 Ok(TestStatus::Failed {
-                    details: Some(String::from(
+                    details: Some(format!(
                         "Re-saving the loaded state resulted in a different state file. The \
                          original state file being compared to was written unbuffered, reloaded \
                          by allowing the plugin to read only {BUFFERED_LOAD_MAX_BYTES} bytes at a \
