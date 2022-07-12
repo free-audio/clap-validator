@@ -13,6 +13,7 @@ use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
 use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
+use clap_sys::plugin::clap_plugin;
 use clap_sys::version::CLAP_VERSION;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::channel;
@@ -26,7 +27,7 @@ use std::sync::Arc;
 use std::thread::ThreadId;
 
 use crate::plugin::instance::{PluginHandle, PluginState};
-use crate::util::check_null_ptr;
+use crate::util::{check_null_ptr, unsafe_clap_call};
 
 /// An abstraction for a CLAP plugin host. It handles callback requests made by the plugin, and it
 /// checks whether the calling thread matches up when any of its functions are called by the plugin.
@@ -116,7 +117,7 @@ pub enum CallbackTask {
     /// plugin calls `clap_host::request_callback()` ten times in a row, then we only need to call
     /// `clap_plugin::on_main()` once.
     Poll,
-    /// Stop blocking and return from [`ClapHost::handle_callbacks_blocking()`].
+    /// Stop blocking and return from [`Host::handle_callbacks_blocking()`].
     Stop,
 }
 
@@ -167,6 +168,19 @@ impl InstanceState {
         // `Pin<Arc<InstanceState>>`
         &self.clap_host
     }
+
+    /// Get a pointer to the `clap_plugin` struct for this instance.
+    ///
+    /// # Panics
+    ///
+    /// If the `plugin field has not yet been set.
+    pub fn plugin_ptr(&self) -> *const clap_plugin {
+        self.plugin
+            .load()
+            .expect("The 'plugin' field has not yet been set on this 'InstanceState'")
+            .0
+            .as_ptr()
+    }
 }
 
 impl Host {
@@ -182,7 +196,7 @@ impl Host {
         Arc::new(Host {
             main_thread_id: std::thread::current().id(),
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
-            // `None`. Otherwise this will be replaced by the first error.
+            // None`. Otherwise this will be replaced by the first error.
             thread_safety_error: RefCell::new(None),
 
             instances: RefCell::new(HashMap::new()),
@@ -255,6 +269,76 @@ impl Host {
                  clap-validator bug."
             )
         }
+    }
+
+    /// Handle main thread callbacks until [`CallbackTask::Stop`] is send to
+    /// [`Host::callback_task_sender`] from another thread.
+    pub fn handle_callbacks_blocking(&self) {
+        let mut should_stop = false;
+        loop {
+            if should_stop {
+                break;
+            }
+
+            let task = self.callback_task_receiver.recv().unwrap();
+            if matches!(task, CallbackTask::Stop) {
+                should_stop = true;
+            }
+
+            // Flush all poll messages, if the plugin rapid fired a bunch of callbacks at us. We
+            // only keep track of a single request per callback type to avoid these things from
+            // unnecessarily stacking up.
+            while let Ok(callback) = self.callback_task_receiver.try_recv() {
+                match callback {
+                    CallbackTask::Poll => (),
+                    CallbackTask::Stop => should_stop = true,
+                }
+            }
+
+            // This function will handle up to ten recursive callback requests. We'll do this even
+            // if the handler should be stopped to make sure we did not miss any outstanding events.
+            self.handle_callbacks_once();
+        }
+    }
+
+    /// Handle pending main thread callbacks. If a callback results in another callback, this is
+    /// allowed to loop up to ten times.
+    pub fn handle_callbacks_once(&self) {
+        let instances = self.instances.borrow();
+        for i in 0..10 {
+            if i > 0 {
+                log::trace!(
+                    "The plugin recursively requested callbacks {} times in a row",
+                    i + 1
+                )
+            }
+
+            let mut handled_callback = false;
+            for instance in instances.values() {
+                let plugin_ptr = instance.plugin_ptr();
+                if instance
+                    .requested_callback
+                    .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    log::trace!(
+                        "Calling 'clap_plugin::on_main_thread()' in response to a call to \
+                         'clap_host::request_restart()'",
+                    );
+                    unsafe_clap_call! { plugin_ptr=>on_main_thread(plugin_ptr) };
+                    handled_callback = true;
+                }
+            }
+
+            if !handled_callback {
+                return;
+            }
+        }
+
+        log::warn!(
+            "The plugin recursively called 'clap_host::on_main_thread()'. Aborted after ten \
+             iterations."
+        )
     }
 
     /// Check if any of the host's callbacks were called from the wrong thread. Returns the first
