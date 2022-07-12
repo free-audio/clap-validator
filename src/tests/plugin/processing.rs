@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use anyhow::{Context, Result};
 
-use crate::host::ClapHost;
+use crate::host::Host;
 use crate::plugin::audio_thread::process::{
     AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
 };
@@ -192,7 +192,7 @@ pub fn test_basic_out_of_place_audio_processing(
     let mut prng = new_prng();
 
     // The host doesn't need to do anything special for this test
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")
@@ -220,7 +220,7 @@ pub fn test_basic_out_of_place_audio_processing(
                     Ok(())
                 })?;
 
-            // The `ClapHost` contains built-in thread safety checks
+            // The `Host` contains built-in thread safety checks
             host.thread_safety_check()
                 .context("Thread safety checks failed")?;
 
@@ -244,7 +244,7 @@ pub fn test_basic_out_of_place_note_processing(
 ) -> TestStatus {
     let mut prng = new_prng();
 
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")
@@ -319,7 +319,7 @@ pub fn test_basic_out_of_place_note_processing(
 pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
 
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")

@@ -33,15 +33,15 @@ use crate::util::check_null_ptr;
 /// [`thread_safety_check()`][Self::thread_safety_check()] method.
 ///
 /// Multiple plugins can share this host instance. Because of that, we can't just cast the `*const
-/// clap_host` directly to a `*const ClapHost`, as that would make it impossible to figure out which
+/// clap_host` directly to a `*const Host`, as that would make it impossible to figure out which
 /// `*const clap_host` belongs to which plugin instance. Instead, every registered plugin instance
 /// gets their own `InstanceState` which provides a `clap_host` struct unique to that plugin
-/// instance. This can be linked back to both the plugin instance and the shared `ClapHost`.
+/// instance. This can be linked back to both the plugin instance and the shared `Host`.
 #[derive(Debug)]
-pub struct ClapHost {
+pub struct Host {
     /// The ID of the main thread.
     main_thread_id: ThreadId,
-    /// A description of the first thread safety error encountered by this `ClapHost`, if any. This
+    /// A description of the first thread safety error encountered by this `Host`, if any. This
     /// is used to check that the plugin called any host callbacks from the correct thread after the
     /// test has succeeded.
     thread_safety_error: RefCell<Option<String>>,
@@ -68,11 +68,11 @@ pub struct InstanceState {
     /// The vtable that's passed to the plugin. The `host_data` field is populated with a pointer to
     /// the
     clap_host: clap_host,
-    /// The host this `InstanceState` belongs to. This is needed to get back to the `ClapHost`
+    /// The host this `InstanceState` belongs to. This is needed to get back to the `Host`
     /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
-    pub host: Arc<ClapHost>,
+    pub host: Arc<Host>,
     /// The plugin this `InstanceState` is associated with. This is the same as they key in the
-    /// `ClapHost::instances` hash map, but it also needs to be stored here to make it possible to
+    /// `Host::instances` hash map, but it also needs to be stored here to make it possible to
     /// know what plugin instance a `*const clap_host` refers to.
     ///
     /// This is an `Option` because the plugin handle is only known after the plugin has been
@@ -101,7 +101,7 @@ impl InstanceState {
     /// `clap_host` vtable for this plugin instance, and keeps track of things like the instance's
     /// audio thread and pending callbacks. The `Pin` is necessary to prevent moving the object out
     /// of the `Box`, since that would break pointers to the `InstanceState`.
-    pub fn new(host: Arc<ClapHost>) -> Pin<Arc<Self>> {
+    pub fn new(host: Arc<Host>) -> Pin<Arc<Self>> {
         Arc::pin(Self {
             clap_host: clap_host {
                 clap_version: CLAP_VERSION,
@@ -112,10 +112,10 @@ impl InstanceState {
                 vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
                 url: b"https://github.com/robbert-vdh/clap-validator\0".as_ptr() as *const c_char,
                 version: b"0.1.0\0".as_ptr() as *const c_char,
-                get_extension: Some(ClapHost::get_extension),
-                request_restart: Some(ClapHost::request_restart),
-                request_process: Some(ClapHost::request_process),
-                request_callback: Some(ClapHost::request_callback),
+                get_extension: Some(Host::get_extension),
+                request_restart: Some(Host::request_restart),
+                request_process: Some(Host::request_process),
+                request_callback: Some(Host::request_callback),
             },
             host,
             plugin: AtomicCell::new(None),
@@ -128,9 +128,7 @@ impl InstanceState {
     }
 
     /// Get the `InstanceState` and the host from a valid `clap_host` pointer.
-    pub unsafe fn from_clap_host_ptr<'a>(
-        ptr: *const clap_host,
-    ) -> (&'a InstanceState, &'a ClapHost) {
+    pub unsafe fn from_clap_host_ptr<'a>(ptr: *const clap_host) -> (&'a InstanceState, &'a Host) {
         let this = &*(ptr as *const Self);
         (this, &*this.host)
     }
@@ -138,17 +136,17 @@ impl InstanceState {
     /// Get a pointer to the `clap_host` struct for this instance. This uniquely identifies the
     /// instance.
     pub fn as_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
-        // The value will not move, since this `ClapHost` can only be constructed as a
+        // The value will not move, since this `Host` can only be constructed as a
         // `Pin<Arc<InstanceState>>`
         &self.clap_host
     }
 }
 
-impl ClapHost {
+impl Host {
     /// Initialize a CLAP host. The thread this object is created on will be designated as the main
     /// thread for the purposes of the thread safety checks.
-    pub fn new() -> Arc<ClapHost> {
-        Arc::new(ClapHost {
+    pub fn new() -> Arc<Host> {
+        Arc::new(Host {
             main_thread_id: std::thread::current().id(),
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
             // `None`. Otherwise this will be replaced by the first error.

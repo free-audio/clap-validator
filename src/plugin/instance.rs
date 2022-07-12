@@ -13,7 +13,7 @@ use std::sync::Arc;
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
-use crate::host::{ClapHost, InstanceState};
+use crate::host::{Host, InstanceState};
 use crate::util::unsafe_clap_call;
 
 /// A `Send+Sync` wrapper around `*const clap_plugin`.
@@ -112,7 +112,7 @@ impl<'lib> Plugin<'lib> {
     /// unregistered when this object is dropped again.
     pub fn new(
         library: &'lib PluginLibrary,
-        host: Arc<ClapHost>,
+        host: Arc<Host>,
         factory: &clap_plugin_factory,
         plugin_id: &CStr,
     ) -> Result<Self> {

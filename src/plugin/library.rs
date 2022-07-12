@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::instance::Plugin;
-use crate::host::ClapHost;
+use crate::host::Host;
 use crate::util::{self, unsafe_clap_call};
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over
@@ -185,7 +185,7 @@ impl PluginLibrary {
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
     /// `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str, host: Arc<ClapHost>) -> Result<Plugin> {
+    pub fn create_plugin(&self, id: &str, host: Arc<Host>) -> Result<Plugin> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }

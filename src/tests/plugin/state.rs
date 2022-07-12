@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap_sys::id::clap_id;
 use std::collections::BTreeMap;
 
-use crate::host::ClapHost;
+use crate::host::Host;
 use crate::plugin::audio_thread::process::{EventQueue, ProcessConfig};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::{ParamInfo, Params};
@@ -21,7 +21,7 @@ use super::processing::ProcessingTest;
 pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
 
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")
@@ -174,7 +174,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
 pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
 
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")
@@ -370,7 +370,7 @@ fn format_mismatching_values(
 pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
 
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")

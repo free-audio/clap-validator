@@ -3,7 +3,7 @@
 use anyhow::Context;
 use rand::Rng;
 
-use crate::host::ClapHost;
+use crate::host::Host;
 use crate::plugin::ext::params::Params;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::new_prng;
@@ -13,7 +13,7 @@ use crate::tests::TestStatus;
 pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
 
-    let host = ClapHost::new();
+    let host = Host::new();
     let result = library
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")
