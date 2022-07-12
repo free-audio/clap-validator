@@ -316,13 +316,6 @@ impl Host {
     pub fn handle_callbacks_once(&self) {
         let instances = self.instances.borrow();
         for i in 0..10 {
-            if i > 0 {
-                log::trace!(
-                    "The plugin recursively requested callbacks {} times in a row",
-                    i + 1
-                )
-            }
-
             let mut handled_callback = false;
             for instance in instances.values() {
                 let plugin_ptr = instance.plugin_ptr();
@@ -341,6 +334,13 @@ impl Host {
             }
 
             if !handled_callback {
+                if i > 1 {
+                    log::trace!(
+                        "The plugin recursively requested callbacks {} times in a row",
+                        i
+                    )
+                }
+
                 return;
             }
         }
