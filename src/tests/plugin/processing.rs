@@ -1,5 +1,7 @@
 //! Contains most of the boilerplate around testing audio processing.
 
+use std::sync::atomic::Ordering;
+
 use anyhow::{Context, Result};
 
 use crate::host::ClapHost;
@@ -51,51 +53,82 @@ impl<'a> ProcessingTest<'a> {
     where
         Preprocess: FnMut(&mut ProcessData) -> Result<()> + Send,
     {
+        self.plugin
+            .host_instance
+            .requested_restart
+            .store(false, Ordering::SeqCst);
+
         let buffer_size = self.audio_buffers.len();
         let mut process_data = ProcessData::new(&mut self.audio_buffers, process_config);
 
-        self.plugin
-            .activate(process_config.sample_rate, 1, buffer_size)?;
+        // If the plugin requests a restart in the middle of processing, then the plugin will be
+        // stopped, deactivated, reactivated, and started again. Because of that, we need to keep
+        // track of the number of processed iterations manually instead of using a for loop.
+        let mut iters_done = 0;
+        while iters_done < num_iters {
+            self.plugin
+                .activate(process_config.sample_rate, 1, buffer_size)?;
 
-        self.plugin.on_audio_thread(|plugin| -> Result<()> {
-            plugin.start_processing()?;
+            self.plugin.on_audio_thread(|plugin| -> Result<()> {
+                plugin.start_processing()?;
 
-            // This test can be repeated a couple of times
-            // NOTE: We intentionally do not disable denormals here
-            for iteration in 0..num_iters {
-                preprocess(&mut process_data)?;
+                // This test can be repeated a couple of times
+                // NOTE: We intentionally do not disable denormals here
+                'processing: while iters_done < num_iters {
+                    iters_done += 1;
 
-                // We'll check that the plugin hasn't modified the input buffers after the
-                // test
-                let original_input_buffers = process_data.buffers.inputs_ref().to_owned();
+                    preprocess(&mut process_data)?;
 
-                plugin
-                    .process(&mut process_data)
-                    .context("Error during audio processing")?;
+                    // We'll check that the plugin hasn't modified the input buffers after the
+                    // test
+                    let original_input_buffers = process_data.buffers.inputs_ref().to_owned();
 
-                // When we add in-place processing this will need some slightly different checks
-                match process_data.buffers {
-                    AudioBuffers::OutOfPlace(_) => check_out_of_place_output_consistency(
-                        &process_data,
-                        &original_input_buffers,
-                    ),
+                    plugin
+                        .process(&mut process_data)
+                        .context("Error during audio processing")?;
+
+                    // When we add in-place processing this will need some slightly different checks
+                    match process_data.buffers {
+                        AudioBuffers::OutOfPlace(_) => check_out_of_place_output_consistency(
+                            &process_data,
+                            &original_input_buffers,
+                        ),
+                    }
+                    .with_context(|| {
+                        format!(
+                            "Failed during processing cycle {} out of {}",
+                            iters_done + 1,
+                            num_iters
+                        )
+                    })?;
+
+                    process_data.clear_events();
+                    process_data.advance_transport(buffer_size as u32);
+
+                    // Restart processing as necesasry
+                    if plugin
+                        .host_instance()
+                        .requested_restart
+                        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
+                        log::trace!(
+                            "Restarting the plugin during processing cycle {} out of {} after a \
+                             call to 'clap_host::request_restart()'",
+                            iters_done + 1,
+                            num_iters
+                        );
+                        break 'processing;
+                    }
                 }
-                .with_context(|| {
-                    format!(
-                        "Failed during processing cycle {} out of {}",
-                        iteration + 1,
-                        num_iters
-                    )
-                })?;
 
-                process_data.clear_events();
-                process_data.advance_transport(buffer_size as u32);
-            }
+                plugin.stop_processing()
+            })?;
 
-            plugin.stop_processing()
-        })?;
+            self.plugin.deactivate()?;
+        }
 
-        self.plugin.deactivate()
+        Ok(())
     }
 
     /// Run the standard audio processing test for a still **deactivated** plugin. This is identical
@@ -109,6 +142,11 @@ impl<'a> ProcessingTest<'a> {
     where
         Preprocess: FnOnce(&mut ProcessData) -> Result<()> + Send,
     {
+        self.plugin
+            .host_instance
+            .requested_restart
+            .store(false, Ordering::SeqCst);
+
         let buffer_size = self.audio_buffers.len();
         let mut process_data = ProcessData::new(&mut self.audio_buffers, process_config);
 

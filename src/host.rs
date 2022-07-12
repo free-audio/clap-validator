@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::ThreadId;
 
@@ -79,6 +80,14 @@ pub struct HostPluginInstance {
 
     /// The plugin instance's audio thread, if it has one. Used for the audio thread checks.
     pub audio_thread: AtomicCell<Option<ThreadId>>,
+    /// Whether the plugin has called `clap_host::request_restart()` and expects the plugin to be
+    /// deactivated and subsequently reactivated.
+    ///
+    /// This flag is reset at the start of the `ProcessingTest::run*` functions, and it will cause
+    /// the multi-loop
+    /// [`ProcessingTest::run`][crate::testa::plugin::processing::ProcessingTest::run] function to
+    /// deactivate and reactivate.
+    pub requested_restart: AtomicBool,
 }
 
 impl HostPluginInstance {
@@ -108,6 +117,7 @@ impl HostPluginInstance {
             plugin: AtomicCell::new(None),
 
             audio_thread: AtomicCell::new(None),
+            requested_restart: AtomicBool::new(false),
         })
     }
 
@@ -312,8 +322,12 @@ impl ClapHost {
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
         check_null_ptr!((), host);
+        let (instance, _) = HostPluginInstance::from_clap_host_ptr(host);
 
-        log::debug!("TODO: Add callbacks for 'clap_host::request_restart()'");
+        // This flag will be reset at the start of one of the `ProcessingTest::run*` functions, and
+        // in the multi-iteration run function it will trigger a deactivate->reactivate cycle
+        log::trace!("'clap_host::request_restart()' was called by the plugin, setting the flag");
+        instance.requested_restart.store(true, Ordering::SeqCst);
     }
 
     unsafe extern "C" fn request_process(host: *const clap_host) {
@@ -327,7 +341,7 @@ impl ClapHost {
     unsafe extern "C" fn request_callback(host: *const clap_host) {
         check_null_ptr!((), host);
 
-        log::debug!("TODO: Add callbacks for 'clap_host::request_callback()'");
+        log::debug!("TODO: Handle 'clap_host::request_callback()'");
     }
 
     unsafe extern "C" fn ext_audio_ports_is_rescan_flag_supported(
@@ -348,7 +362,7 @@ impl ClapHost {
         let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_audio_ports::rescan()");
-        log::debug!("TODO: Add callbacks for 'clap_host_audio_ports::rescan()'");
+        log::debug!("TODO: Handle 'clap_host_audio_ports::rescan()'");
     }
 
     unsafe extern "C" fn ext_note_ports_supported_dialects(
@@ -367,7 +381,7 @@ impl ClapHost {
         let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_note_ports::rescan()");
-        log::debug!("TODO: Add callbacks for 'clap_host_note_ports::rescan()'");
+        log::debug!("TODO: Handle 'clap_host_note_ports::rescan()'");
     }
 
     unsafe extern "C" fn ext_params_rescan(
@@ -378,7 +392,7 @@ impl ClapHost {
         let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_params::rescan()");
-        log::debug!("TODO: Add callbacks for 'clap_host_params::rescan()'");
+        log::debug!("TODO: Handle 'clap_host_params::rescan()'");
     }
 
     unsafe extern "C" fn ext_params_clear(
@@ -390,7 +404,7 @@ impl ClapHost {
         let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_params::clear()");
-        log::debug!("TODO: Add callbacks for 'clap_host_params::clear()'");
+        log::debug!("TODO: Handle 'clap_host_params::clear()'");
     }
 
     unsafe extern "C" fn ext_params_request_flush(host: *const clap_host) {
@@ -398,7 +412,7 @@ impl ClapHost {
         let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
 
         this.assert_not_audio_thread("clap_host_params::request_flush()");
-        log::debug!("TODO: Add callbacks for 'clap_host_params::request_flush()'");
+        log::debug!("TODO: Handle 'clap_host_params::request_flush()'");
     }
 
     unsafe extern "C" fn ext_state_mark_dirty(host: *const clap_host) {
@@ -406,7 +420,7 @@ impl ClapHost {
         let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_state::mark_dirty()");
-        log::debug!("TODO: Add callbacks for 'clap_host_state::mark_dirty()'");
+        log::debug!("TODO: Handle 'clap_host_state::mark_dirty()'");
     }
 
     unsafe extern "C" fn ext_thread_check_is_main_thread(host: *const clap_host) -> bool {

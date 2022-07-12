@@ -33,7 +33,7 @@ pub struct Plugin<'lib> {
     handle: PluginHandle,
     /// Information about this plugin instance stored on the host. This keeps track of things like
     /// audio thread IDs and whether the plugin has pending callbacks.
-    host_instance: Pin<Arc<HostPluginInstance>>,
+    pub host_instance: Pin<Arc<HostPluginInstance>>,
 
     /// Whether the plugin is activated. If it is, then dropping this object will try to deactivate
     /// it.

@@ -9,8 +9,11 @@ use clap_sys::process::{
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::pin::Pin;
 use std::ptr::NonNull;
+use std::sync::Arc;
 
+use crate::host::HostPluginInstance;
 use crate::util::unsafe_clap_call;
 
 use self::process::ProcessData;
@@ -78,6 +81,11 @@ impl<'a> PluginAudioThread<'a> {
     /// Get the raw pointer to the `clap_plugin` instance.
     pub fn as_ptr(&self) -> *const clap_plugin {
         self.plugin.as_ptr()
+    }
+
+    /// Get the underlying `Plugin`'s [`HostPluginInstance`] object.
+    pub fn host_instance(&self) -> &Pin<Arc<HostPluginInstance>> {
+        &self.plugin.host_instance
     }
 
     /// Get the _audio thread_ extension abstraction for the extension `T`, if the plugin supports
