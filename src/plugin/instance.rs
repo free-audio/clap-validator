@@ -200,25 +200,29 @@ impl<'lib> Plugin<'lib> {
             let unsafe_self_wrapper = PluginSendWrapper(self);
             let callback_task_sender = self.host().callback_task_sender.clone();
 
-            let audio_thread = s.builder().name("audio-thread").spawn(move |_| {
-                // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
-                //         `PluginAudioThread` to prevent them from being shared with other
-                //         threads. But we'll need to temporarily lift that restriction in order
-                //         to create this `PluginAudioThread`.
-                let this = unsafe { &**unsafe_self_wrapper };
+            let audio_thread = s
+                .builder()
+                .name(String::from("audio-thread"))
+                .spawn(move |_| {
+                    // SAFETY: We artificially impose `!Send`+`!Sync` requirements on `Plugin` and
+                    //         `PluginAudioThread` to prevent them from being shared with other
+                    //         threads. But we'll need to temporarily lift that restriction in order
+                    //         to create this `PluginAudioThread`.
+                    let this = unsafe { &**unsafe_self_wrapper };
 
-                // The host may use this to assert that calls are run from an audio thread
-                this.state
-                    .audio_thread
-                    .store(Some(std::thread::current().id()));
-                let result = f(PluginAudioThread::new(this));
-                this.state.audio_thread.store(None);
+                    // The host may use this to assert that calls are run from an audio thread
+                    this.state
+                        .audio_thread
+                        .store(Some(std::thread::current().id()));
+                    let result = f(PluginAudioThread::new(this));
+                    this.state.audio_thread.store(None);
 
-                // The main thread should unblock when the audio thread is done
-                callback_task_sender.send(CallbackTask::Stop).unwrap();
+                    // The main thread should unblock when the audio thread is done
+                    callback_task_sender.send(CallbackTask::Stop).unwrap();
 
-                result
-            });
+                    result
+                })
+                .expect("Unable to spawn an audio thread");
 
             // Handle callbacks requests on the main thread whle the aduio thread is running
             self.host().handle_callbacks_blocking();
