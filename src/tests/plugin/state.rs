@@ -350,35 +350,6 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
     }
 }
 
-/// Build a string containing all different values between two sets of values.
-///
-/// # Panics
-///
-/// If the parameters in `actual_param_values` don't have corresponding entries in
-/// `expected_param_values` and `param_infos`.
-fn format_mismatching_values(
-    actual_param_values: BTreeMap<clap_id, f64>,
-    expected_param_values: &BTreeMap<clap_id, f64>,
-    param_infos: &ParamInfo,
-) -> String {
-    actual_param_values
-        .into_iter()
-        .filter_map(|(param_id, actual_value)| {
-            let expected_value = expected_param_values[&param_id];
-            if actual_value == expected_value {
-                None
-            } else {
-                let param_name = &param_infos[&param_id].name;
-                Some(format!(
-                    "parameter {param_id} ('{param_name}'), expected {expected_value:?}, actual \
-                     {actual_value:?}"
-                ))
-            }
-        })
-        .collect::<Vec<String>>()
-        .join(", ")
-}
-
 /// The test for `PluginTestCase::BufferedStateStreams`.
 pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
     let mut prng = new_prng();
@@ -535,4 +506,33 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
             details: Some(format!("{err:#}")),
         },
     }
+}
+
+/// Build a string containing all different values between two sets of values.
+///
+/// # Panics
+///
+/// If the parameters in `actual_param_values` don't have corresponding entries in
+/// `expected_param_values` and `param_infos`.
+fn format_mismatching_values(
+    actual_param_values: BTreeMap<clap_id, f64>,
+    expected_param_values: &BTreeMap<clap_id, f64>,
+    param_infos: &ParamInfo,
+) -> String {
+    actual_param_values
+        .into_iter()
+        .filter_map(|(param_id, actual_value)| {
+            let expected_value = expected_param_values[&param_id];
+            if actual_value == expected_value {
+                None
+            } else {
+                let param_name = &param_infos[&param_id].name;
+                Some(format!(
+                    "parameter {param_id} ('{param_name}'), expected {expected_value:?}, actual \
+                     {actual_value:?}"
+                ))
+            }
+        })
+        .collect::<Vec<String>>()
+        .join(", ")
 }
