@@ -35,7 +35,7 @@ use crate::util::check_null_ptr;
 /// Multiple plugins can share this host instance. Because of that, we can't just cast the `*const
 /// clap_host` directly to a `*const ClapHost`, as that would make it impossible to figure out which
 /// `*const clap_host` belongs to which plugin instance. Instead, every registered plugin instance
-/// gets their own `HostPluginInstance` which provides a `clap_host` struct unique to that plugin
+/// gets their own `InstanceState` which provides a `clap_host` struct unique to that plugin
 /// instance. This can be linked back to both the plugin instance and the shared `ClapHost`.
 #[derive(Debug)]
 pub struct ClapHost {
@@ -49,7 +49,7 @@ pub struct ClapHost {
     /// These are the plugin instances taht were registered on this host. They're added here when
     /// the `Plugin` object is created, and they're removed when the object is dropped. This is used
     /// to keep track of audio threads and pending callbacks.
-    instances: RefCell<HashMap<PluginHandle, Pin<Arc<HostPluginInstance>>>>,
+    instances: RefCell<HashMap<PluginHandle, Pin<Arc<InstanceState>>>>,
 
     // These are the vtables for the extensions supported by the host
     clap_host_audio_ports: clap_host_audio_ports,
@@ -60,17 +60,18 @@ pub struct ClapHost {
 }
 
 /// Runtime information about a plugin instance. This keeps track of pending callbacks and things
-/// like audio threads.
+/// like audio threads. It also contains the plugin's unique `clap_host` struct so host callbacks
+/// can be linked back to this specific plugin instance.
 #[derive(Debug)]
 #[repr(C)]
-pub struct HostPluginInstance {
+pub struct InstanceState {
     /// The vtable that's passed to the plugin. The `host_data` field is populated with a pointer to
     /// the
     clap_host: clap_host,
-    /// The host this `HostPluginInstance` belongs to. This is needed to get back to the `ClapHost`
+    /// The host this `InstanceState` belongs to. This is needed to get back to the `ClapHost`
     /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
     pub host: Arc<ClapHost>,
-    /// The plugin this `HostPluginInstance` is associated with. This is the same as they key in the
+    /// The plugin this `InstanceState` is associated with. This is the same as they key in the
     /// `ClapHost::instances` hash map, but it also needs to be stored here to make it possible to
     /// know what plugin instance a `*const clap_host` refers to.
     ///
@@ -93,18 +94,18 @@ pub struct HostPluginInstance {
     pub requested_restart: AtomicBool,
 }
 
-impl HostPluginInstance {
-    /// Construct a new plugin instance object. The [`HostPluginInstance::plugin`] field must be set
+impl InstanceState {
+    /// Construct a new plugin instance object. The [`InstanceState::plugin`] field must be set
     /// later because the `clap_host` struct needs to be passed to `clap_factory::create_plugin()`,
     /// and the plugin instance pointer is only known after that point. This contains the
     /// `clap_host` vtable for this plugin instance, and keeps track of things like the instance's
     /// audio thread and pending callbacks. The `Pin` is necessary to prevent moving the object out
-    /// of the `Box`, since that would break pointers to the `HostPluginInstance`.
+    /// of the `Box`, since that would break pointers to the `InstanceState`.
     pub fn new(host: Arc<ClapHost>) -> Pin<Arc<Self>> {
         Arc::pin(Self {
             clap_host: clap_host {
                 clap_version: CLAP_VERSION,
-                // We can directly cast the `*const clap_host` to a `*const HostPluginInstance` because
+                // We can directly cast the `*const clap_host` to a `*const InstanceState` because
                 // it's stored as the first field of a pinned `#[repr(C)]` struct
                 host_data: std::ptr::null_mut(),
                 name: b"clap-validator\0".as_ptr() as *const c_char,
@@ -126,19 +127,19 @@ impl HostPluginInstance {
         })
     }
 
-    /// Get the `HostPluginInstance` and the host from a valid `clap_host` pointer.
+    /// Get the `InstanceState` and the host from a valid `clap_host` pointer.
     pub unsafe fn from_clap_host_ptr<'a>(
         ptr: *const clap_host,
-    ) -> (&'a HostPluginInstance, &'a ClapHost) {
+    ) -> (&'a InstanceState, &'a ClapHost) {
         let this = &*(ptr as *const Self);
         (this, &*this.host)
     }
 
     /// Get a pointer to the `clap_host` struct for this instance. This uniquely identifies the
     /// instance.
-    pub fn as_ptr(self: &Pin<Arc<HostPluginInstance>>) -> *const clap_host {
+    pub fn as_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
         // The value will not move, since this `ClapHost` can only be constructed as a
-        // `Pin<Arc<HostPluginInstance>>`
+        // `Pin<Arc<InstanceState>>`
         &self.clap_host
     }
 }
@@ -188,11 +189,11 @@ impl ClapHost {
     /// # Panics
     ///
     /// Panics if `instance.plugin` is `None`, or if the instance has already been registered.
-    pub fn register_instance(&self, instance: Pin<Arc<HostPluginInstance>>) {
+    pub fn register_instance(&self, instance: Pin<Arc<InstanceState>>) {
         let previous_instance = self.instances.borrow_mut().insert(
             instance.plugin.load().expect(
-                "'HostPluginInstance::plugin' should contain the plugin's handle when registering \
-                 it with the host",
+                "'InstanceState::plugin' should contain the plugin's handle when registering it \
+                 with the host",
             ),
             instance.clone(),
         );
@@ -203,18 +204,16 @@ impl ClapHost {
     }
 
     /// Remove a plugin from the list of registered plugins.
-    pub fn unregister_instance(&self, instance: Pin<Arc<HostPluginInstance>>) {
-        let removed_instance = self
-            .instances
+    pub fn unregister_instance(&self, instance: Pin<Arc<InstanceState>>) {
+        self.instances
             .borrow_mut()
             .remove(&instance.plugin.load().expect(
-                "'HostPluginInstance::plugin' should contain the plugin's handle when \
-                 unregistering it with the host",
-            ));
-        assert!(
-            removed_instance.is_some(),
-            "Tried unregistering a plugin instance that has not been registered with the host"
-        )
+                "'InstanceState::plugin' should contain the plugin's handle when unregistering it \
+                 with the host",
+            ))
+            .expect(
+                "Tried unregistering a plugin instance that has not been registered with the host",
+            );
     }
 
     /// Check if any of the host's callbacks were called from the wrong thread. Returns the first
@@ -297,7 +296,7 @@ impl ClapHost {
         extension_id: *const c_char,
     ) -> *const c_void {
         check_null_ptr!(std::ptr::null(), host, extension_id);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         // Right now there's no way to have the host only expose certain extensions. We can always
         // add that when test cases need it.
@@ -327,7 +326,7 @@ impl ClapHost {
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
         check_null_ptr!((), host);
-        let (instance, _) = HostPluginInstance::from_clap_host_ptr(host);
+        let (instance, _) = InstanceState::from_clap_host_ptr(host);
 
         // This flag will be reset at the start of one of the `ProcessingTest::run*` functions, and
         // in the multi-iteration run function it will trigger a deactivate->reactivate cycle
@@ -354,7 +353,7 @@ impl ClapHost {
         _flag: u32,
     ) -> bool {
         check_null_ptr!(false, host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_audio_ports::is_rescan_flag_supported()");
         log::debug!("TODO: Handle 'clap_host_audio_ports::is_rescan_flag_supported()'");
@@ -364,7 +363,7 @@ impl ClapHost {
 
     unsafe extern "C" fn ext_audio_ports_rescan(host: *const clap_host, _flags: u32) {
         check_null_ptr!((), host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_audio_ports::rescan()");
         log::debug!("TODO: Handle 'clap_host_audio_ports::rescan()'");
@@ -374,7 +373,7 @@ impl ClapHost {
         host: *const clap_host,
     ) -> clap_note_dialect {
         check_null_ptr!(0, host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_note_ports::supported_dialects()");
 
@@ -383,7 +382,7 @@ impl ClapHost {
 
     unsafe extern "C" fn ext_note_ports_rescan(host: *const clap_host, _flags: u32) {
         check_null_ptr!((), host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_note_ports::rescan()");
         log::debug!("TODO: Handle 'clap_host_note_ports::rescan()'");
@@ -394,7 +393,7 @@ impl ClapHost {
         _flags: clap_param_rescan_flags,
     ) {
         check_null_ptr!((), host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_params::rescan()");
         log::debug!("TODO: Handle 'clap_host_params::rescan()'");
@@ -406,7 +405,7 @@ impl ClapHost {
         _flags: clap_param_clear_flags,
     ) {
         check_null_ptr!((), host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_params::clear()");
         log::debug!("TODO: Handle 'clap_host_params::clear()'");
@@ -414,7 +413,7 @@ impl ClapHost {
 
     unsafe extern "C" fn ext_params_request_flush(host: *const clap_host) {
         check_null_ptr!((), host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_not_audio_thread("clap_host_params::request_flush()");
         log::debug!("TODO: Handle 'clap_host_params::request_flush()'");
@@ -422,7 +421,7 @@ impl ClapHost {
 
     unsafe extern "C" fn ext_state_mark_dirty(host: *const clap_host) {
         check_null_ptr!((), host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_state::mark_dirty()");
         log::debug!("TODO: Handle 'clap_host_state::mark_dirty()'");
@@ -430,14 +429,14 @@ impl ClapHost {
 
     unsafe extern "C" fn ext_thread_check_is_main_thread(host: *const clap_host) -> bool {
         check_null_ptr!(false, host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         std::thread::current().id() == this.main_thread_id
     }
 
     unsafe extern "C" fn ext_thread_check_is_audio_thread(host: *const clap_host) -> bool {
         check_null_ptr!(false, host);
-        let (_, this) = HostPluginInstance::from_clap_host_ptr(host);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.is_audio_thread(std::thread::current().id())
     }

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
-use crate::host::{ClapHost, HostPluginInstance};
+use crate::host::{ClapHost, InstanceState};
 use crate::util::unsafe_clap_call;
 
 /// A `Send+Sync` wrapper around `*const clap_plugin`.
@@ -32,7 +32,7 @@ pub struct Plugin<'lib> {
     handle: PluginHandle,
     /// Information about this plugin instance stored on the host. This keeps track of things like
     /// audio thread IDs, whether the plugin has pending callbacks, and what state it is in.
-    pub host_instance: Pin<Arc<HostPluginInstance>>,
+    pub host_instance: Pin<Arc<InstanceState>>,
 
     /// The CLAP plugin library this plugin instance was created from. This field is not used
     /// directly, but keeping a reference to the library here prevents the plugin instance from
@@ -118,7 +118,7 @@ impl<'lib> Plugin<'lib> {
     ) -> Result<Self> {
         // The host can use this to keep track of things like audio threads and pending callbacks.
         // The instance is remvoed again when this object is dropped.
-        let host_instance = HostPluginInstance::new(host.clone());
+        let host_instance = InstanceState::new(host.clone());
         let plugin = unsafe_clap_call! {
             factory=>create_plugin(factory, host_instance.as_ptr(), plugin_id.as_ptr())
         };

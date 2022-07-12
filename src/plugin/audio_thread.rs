@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use crate::host::HostPluginInstance;
+use crate::host::InstanceState;
 use crate::util::unsafe_clap_call;
 
 use self::process::ProcessData;
@@ -85,8 +85,8 @@ impl<'a> PluginAudioThread<'a> {
         self.plugin.as_ptr()
     }
 
-    /// Get the underlying `Plugin`'s [`HostPluginInstance`] object.
-    pub fn host_instance(&self) -> &Pin<Arc<HostPluginInstance>> {
+    /// Get the underlying `Plugin`'s [`InstanceState`] object.
+    pub fn host_instance(&self) -> &Pin<Arc<InstanceState>> {
         &self.plugin.host_instance
     }
 
