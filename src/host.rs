@@ -15,6 +15,7 @@ use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
 use clap_sys::version::CLAP_VERSION;
 use crossbeam::atomic::AtomicCell;
+use crossbeam::channel;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{c_void, CStr};
@@ -51,6 +52,14 @@ pub struct Host {
     /// to keep track of audio threads and pending callbacks.
     instances: RefCell<HashMap<PluginHandle, Pin<Arc<InstanceState>>>>,
 
+    /// Allows waking up the main thread for callbacks while running
+    /// [`handle_callbacks_blocking()`][Self::handle_callbacks_blocking()]. Other threads can also
+    /// use this to cause the function to return.
+    pub callback_task_sender: channel::Sender<CallbackTask>,
+    /// Used for handling callbacks on the main thread during
+    /// [`handle_callbacks_blocking()`][Self::handle_callbacks_blocking()].
+    callback_task_receiver: channel::Receiver<CallbackTask>,
+
     // These are the vtables for the extensions supported by the host
     clap_host_audio_ports: clap_host_audio_ports,
     clap_host_note_ports: clap_host_note_ports,
@@ -84,6 +93,9 @@ pub struct InstanceState {
 
     /// The plugin instance's audio thread, if it has one. Used for the audio thread checks.
     pub audio_thread: AtomicCell<Option<ThreadId>>,
+    /// Whether the plugin has called `clap_host::request_callback()` and expects
+    /// `clap_plugin::on_main_thread()` to be called on the main thread.
+    pub requested_callback: AtomicBool,
     /// Whether the plugin has called `clap_host::request_restart()` and expects the plugin to be
     /// deactivated and subsequently reactivated.
     ///
@@ -92,6 +104,20 @@ pub struct InstanceState {
     /// [`ProcessingTest::run`][crate::testa::plugin::processing::ProcessingTest::run] function to
     /// deactivate and reactivate.
     pub requested_restart: AtomicBool,
+}
+
+/// When the host is handling callbacks in a blocking fashion, other threads can send tasks over the
+/// channel to either wake up the main thread to make it check for outstanding work, or to have it
+/// return and stop blocking.
+pub enum CallbackTask {
+    /// Check the registered plugin instances for outstanding callbacks and perform them as needed.
+    /// The combined use of polling and channels may seem a bit odd, but this is done to have a
+    /// thread-safe way to avoid multiple sequential callback requests from stacking up. If the
+    /// plugin calls `clap_host::request_callback()` ten times in a row, then we only need to call
+    /// `clap_plugin::on_main()` once.
+    Poll,
+    /// Stop blocking and return from [`ClapHost::handle_callbacks_blocking()`].
+    Stop,
 }
 
 impl InstanceState {
@@ -123,6 +149,7 @@ impl InstanceState {
             state: AtomicCell::new(PluginState::Deactivated),
 
             audio_thread: AtomicCell::new(None),
+            requested_callback: AtomicBool::new(false),
             requested_restart: AtomicBool::new(false),
         })
     }
@@ -146,6 +173,12 @@ impl Host {
     /// Initialize a CLAP host. The thread this object is created on will be designated as the main
     /// thread for the purposes of the thread safety checks.
     pub fn new() -> Arc<Host> {
+        // Normally you'd of course use bounded channel to avoid unnecessary allocations, but since
+        // we're a validator it's probably better to not have to deal with the possibility that a
+        // queue is full. These are used for handling callbacks on the main thread while the audio
+        // thread is active.
+        let (callback_task_sender, callback_task_receiver) = channel::unbounded();
+
         Arc::new(Host {
             main_thread_id: std::thread::current().id(),
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
@@ -153,6 +186,8 @@ impl Host {
             thread_safety_error: RefCell::new(None),
 
             instances: RefCell::new(HashMap::new()),
+            callback_task_sender,
+            callback_task_receiver,
 
             clap_host_audio_ports: clap_host_audio_ports {
                 is_rescan_flag_supported: Some(Self::ext_audio_ports_is_rescan_flag_supported),
@@ -203,7 +238,8 @@ impl Host {
 
     /// Remove a plugin from the list of registered plugins.
     pub fn unregister_instance(&self, instance: Pin<Arc<InstanceState>>) {
-        self.instances
+        let removed_instance = self
+            .instances
             .borrow_mut()
             .remove(&instance.plugin.load().expect(
                 "'InstanceState::plugin' should contain the plugin's handle when unregistering it \
@@ -212,6 +248,13 @@ impl Host {
             .expect(
                 "Tried unregistering a plugin instance that has not been registered with the host",
             );
+
+        if removed_instance.requested_callback.load(Ordering::SeqCst) {
+            log::warn!(
+                "A plugin still had unhandled callbacks when it was removed. This is a \
+                 clap-validator bug."
+            )
+        }
     }
 
     /// Check if any of the host's callbacks were called from the wrong thread. Returns the first
@@ -342,8 +385,14 @@ impl Host {
 
     unsafe extern "C" fn request_callback(host: *const clap_host) {
         check_null_ptr!((), host);
+        let (instance, this) = InstanceState::from_clap_host_ptr(host);
 
-        log::debug!("TODO: Handle 'clap_host::request_callback()'");
+        // This this is either handled by `handle_callbacks_blocking()` while the audio thread is
+        // active, or by an explicit call to `handle_callbacks_once()`. We print a warning if the
+        // callback is not handled before the plugin is destroyed.
+        log::trace!("'clap_host::request_callback()' was called by the plugin, setting the flag");
+        instance.requested_callback.store(true, Ordering::SeqCst);
+        this.callback_task_sender.send(CallbackTask::Poll).unwrap();
     }
 
     unsafe extern "C" fn ext_audio_ports_is_rescan_flag_supported(
