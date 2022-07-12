@@ -5,7 +5,7 @@ use clap_sys::id::clap_id;
 use std::collections::BTreeMap;
 
 use crate::host::Host;
-use crate::plugin::audio_thread::process::{EventQueue, ProcessConfig};
+use crate::plugin::audio_thread::process::{Event, EventQueue, ProcessConfig};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::{ParamInfo, Params};
 use crate::plugin::ext::state::State;
@@ -188,8 +188,9 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
         .and_then(|plugin| {
             // We'll drop and reinitialize the plugin later. This first pass sets the values using
             // the flush function, and the second pass we'll compare this to uses the process
-            // function.
-            let (first_state_file, random_param_set_events, expected_param_values) = {
+            // function. We'll reuse the parameter set events, but the cookies need to be updated
+            // first or they'll point to old data.
+            let (first_state_file, old_random_param_set_events, expected_param_values) = {
                 plugin.init().context("Error during initialization")?;
 
                 let params = match plugin.get_extension::<Params>() {
@@ -296,11 +297,40 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             };
             host.handle_callbacks_once();
 
+            // NOTE: We can reuse random parameter set events, except that the cookie pointers may
+            //       be different if the plugin uses those. So we need to update these cookies
+            //       first.
+            let param_infos = params
+                .info()
+                .context("Failure while fetching the plugin's parameters")?;
+            let new_random_param_set_events = old_random_param_set_events
+                .into_iter()
+                .map(|mut event| {
+                    match &mut event {
+                        Event::ParamValue(event) => {
+                            event.cookie = param_infos
+                                .get(&event.param_id)
+                                .with_context(|| {
+                                    format!(
+                                        "Expected the plugin to have a parameter with ID {}, but \
+                                         the parameter is missing",
+                                        event.param_id,
+                                    )
+                                })?
+                                .cookie;
+                        }
+                        event => panic!("Unexpected event {event:?}, this is a clap-validator bug"),
+                    }
+
+                    Ok(event)
+                })
+                .collect::<Result<Vec<Event>>>()?;
+
             // In the previous pass we used flush, and here we use the process funciton
             let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
             ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
                 .run_once(ProcessConfig::default(), move |process_data| {
-                    *process_data.input_events.events.lock() = random_param_set_events;
+                    *process_data.input_events.events.lock() = new_random_param_set_events;
 
                     Ok(())
                 })?;
