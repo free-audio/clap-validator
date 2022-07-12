@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
@@ -16,8 +16,27 @@ mod validator;
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 struct Cli {
+    /// clap-validator's own logging verbosity.
+    ///
+    /// This can be used to silence all non-essential output, or to enable more in depth tracing.
+    #[clap(value_parser, short, long, default_value = "debug")]
+    verbosity: Verbosity,
+
     #[clap(subcommand)]
     command: Commands,
+}
+
+/// The verbosity level. Set to `Debug` by default. `Trace` can be used to get more information on
+/// what the validator is actually doing.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Verbosity {
+    /// Suppress all logging output from the validator itself.
+    Quiet,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
 }
 
 /// The validator's subcommands. To be able to also add scanning functionality later (because why
@@ -43,21 +62,28 @@ enum Commands {
 }
 
 fn main() -> ExitCode {
+    let cli = Cli::parse();
+
     // For now logging everything to the terminal is fine. In the future it may be useful to have
     // CLI options for things like the verbosity level.
     simplelog::TermLogger::init(
         simplelog::LevelFilter::Trace,
         simplelog::ConfigBuilder::new()
             .set_thread_mode(simplelog::ThreadLogMode::Both)
-            .set_location_level(simplelog::LevelFilter::Debug)
+            .set_location_level(match cli.verbosity {
+                Verbosity::Quiet => simplelog::LevelFilter::Off,
+                Verbosity::Error => simplelog::LevelFilter::Error,
+                Verbosity::Warn => simplelog::LevelFilter::Warn,
+                Verbosity::Info => simplelog::LevelFilter::Info,
+                Verbosity::Debug => simplelog::LevelFilter::Debug,
+                Verbosity::Trace => simplelog::LevelFilter::Trace,
+            })
             .build(),
         simplelog::TerminalMode::Stderr,
         simplelog::ColorChoice::Auto,
     )
     .expect("Could not initialize logger");
     log_panics::init();
-
-    let cli = Cli::parse();
 
     match &cli.command {
         Commands::Validate(settings) => match validator::validate(settings) {
