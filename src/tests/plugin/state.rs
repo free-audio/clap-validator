@@ -386,10 +386,10 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 Ok(TestStatus::Success { details: None })
             } else {
                 let (expected_state_file_path, mut expected_state_file) =
-                    PluginTestCase::BasicStateReproducibility
+                    PluginTestCase::FlushStateReproducibility
                         .temporary_file(EXPECTED_STATE_FILE_NAME)?;
                 let (actual_state_file_path, mut actual_state_file) =
-                    PluginTestCase::BasicStateReproducibility
+                    PluginTestCase::FlushStateReproducibility
                         .temporary_file(ACTUAL_STATE_FILE_NAME)?;
 
                 expected_state_file.write_all(&expected_state)?;
@@ -551,11 +551,10 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                 Ok(TestStatus::Success { details: None })
             } else {
                 let (expected_state_file_path, mut expected_state_file) =
-                    PluginTestCase::BasicStateReproducibility
+                    PluginTestCase::BufferedStateStreams
                         .temporary_file(EXPECTED_STATE_FILE_NAME)?;
                 let (actual_state_file_path, mut actual_state_file) =
-                    PluginTestCase::BasicStateReproducibility
-                        .temporary_file(ACTUAL_STATE_FILE_NAME)?;
+                    PluginTestCase::BufferedStateStreams.temporary_file(ACTUAL_STATE_FILE_NAME)?;
 
                 expected_state_file.write_all(&expected_state)?;
                 actual_state_file.write_all(&actual_state)?;
