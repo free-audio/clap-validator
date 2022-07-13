@@ -325,28 +325,24 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             let param_infos = params
                 .info()
                 .context("Failure while fetching the plugin's parameters")?;
-            let new_random_param_set_events = old_random_param_set_events
-                .into_iter()
-                .map(|mut event| {
-                    match &mut event {
-                        Event::ParamValue(event) => {
-                            event.cookie = param_infos
-                                .get(&event.param_id)
-                                .with_context(|| {
-                                    format!(
-                                        "Expected the plugin to have a parameter with ID {}, but \
-                                         the parameter is missing",
-                                        event.param_id,
-                                    )
-                                })?
-                                .cookie;
-                        }
-                        event => panic!("Unexpected event {event:?}, this is a clap-validator bug"),
+            let mut new_random_param_set_events = old_random_param_set_events;
+            for event in new_random_param_set_events.iter_mut() {
+                match event {
+                    Event::ParamValue(event) => {
+                        event.cookie = param_infos
+                            .get(&event.param_id)
+                            .with_context(|| {
+                                format!(
+                                    "Expected the plugin to have a parameter with ID {}, but the \
+                                     parameter is missing",
+                                    event.param_id,
+                                )
+                            })?
+                            .cookie;
                     }
-
-                    Ok(event)
-                })
-                .collect::<Result<Vec<Event>>>()?;
+                    event => panic!("Unexpected event {event:?}, this is a clap-validator bug"),
+                }
+            }
 
             // In the previous pass we used flush, and here we use the process funciton
             let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
