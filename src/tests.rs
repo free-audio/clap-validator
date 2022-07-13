@@ -156,10 +156,13 @@ pub trait TestCase<'a>: Sized + 'static {
     }
 
     /// Get a writable temporary file handle for this test case. The file will be located at
-    /// `$TMP_DIR/clap-validator/$test_name/$file_name`. The temporary files directory is cleared on
-    /// a new validator run, but the files will persist until then.
-    fn temporary_file(&self, name: &str) -> Result<(PathBuf, fs::File)> {
-        let path = util::validator_temp_dir().join(self.as_str()).join(name);
+    /// `$TMP_DIR/clap-validator/$plugin_id/$test_name/$file_name`. The temporary files directory is
+    /// cleared on a new validator run, but the files will persist until then.
+    fn temporary_file(&self, plugin_id: &str, name: &str) -> Result<(PathBuf, fs::File)> {
+        let path = util::validator_temp_dir()
+            .join(plugin_id)
+            .join(self.as_str())
+            .join(name);
         if path.exists() {
             panic!(
                 "Tried to create a temporary file at '{}', but this file already exists. This is \
