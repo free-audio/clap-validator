@@ -72,15 +72,6 @@ pub trait TestCase<'a>: Sized + 'static {
     /// but it may consist of multiple sentences.
     fn description(&self) -> String;
 
-    /// Create a [`TestResult`] for this test case.
-    fn create_result(&self, status: TestStatus) -> TestResult {
-        TestResult {
-            name: self.as_str().to_string(),
-            description: self.description(),
-            status,
-        }
-    }
-
     /// Set the arguments for `clap-validator run-single-test` to run this test with the specified
     /// arguments. This way the [`run_out_of_process()`][Self::run_out_of_process()] method can be
     /// defined in a way that works for all `TestCase`s.
@@ -159,6 +150,15 @@ pub trait TestCase<'a>: Sized + 'static {
             .context("Could not parse the child process output to JSON")?;
 
         Ok(result)
+    }
+
+    /// Create a [`TestResult`] for this test case.
+    fn create_result(&self, status: TestStatus) -> TestResult {
+        TestResult {
+            name: self.as_str().to_string(),
+            description: self.description(),
+            status,
+        }
     }
 }
 
