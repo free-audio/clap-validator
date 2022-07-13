@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use crate::plugin::library::PluginLibrary;
 use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult, TestStatus};
+use crate::util;
 
 /// The results of running the validation test suite on one or more plugins. Use the
 /// [`tally()`][Self::tally()] method to compute the number of successful and failed tests.
@@ -119,6 +120,12 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
         plugin_library_tests: BTreeMap::new(),
         plugin_tests: BTreeMap::new(),
     };
+
+    // Before doing anything, we need to make sure any temporary artifact files from the previous
+    // run are cleaned up. These are used for things like state dumps when one of the state tests
+    // fail. This is allowed to fail since the directory may not exist and even if it does and we
+    // cannot remove it, then that may not be a problem.
+    let _ = std::fs::remove_dir_all(util::validator_temp_dir());
 
     // TODO: We now gather all the results and print everything in one go at the end. This is the
     //       only way to do JSON, but for the human readable version printing things as we go could

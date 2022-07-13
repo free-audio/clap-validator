@@ -13,7 +13,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+
+use crate::util;
 
 mod plugin;
 mod plugin_library;
@@ -150,6 +153,27 @@ pub trait TestCase<'a>: Sized + 'static {
             .context("Could not parse the child process output to JSON")?;
 
         Ok(result)
+    }
+
+    /// Get a writable temporary file handle for this test case. The file will be located at
+    /// `$TMP_DIR/clap-validator/$test_name/$file_name`. The temporary files directory is cleared on
+    /// a new validator run, but the files will persist until then.
+    fn temporary_file(&self, name: &str) -> Result<(PathBuf, fs::File)> {
+        let path = util::validator_temp_dir().join(self.as_str()).join(name);
+        if path.exists() {
+            panic!(
+                "Tried to create a temporary file at '{}', but this file already exists. This is \
+                 a bug in clap-validator.",
+                path.display()
+            )
+        }
+
+        fs::create_dir_all(path.parent().unwrap())
+            .context("Could not create the directory for the test's temporary files")?;
+        let file =
+            fs::File::create(&path).context("Could not create a temporary file for the test")?;
+
+        Ok((path, file))
     }
 
     /// Create a [`TestResult`] for this test case.

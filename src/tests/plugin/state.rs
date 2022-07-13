@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use clap_sys::id::clap_id;
 use std::collections::BTreeMap;
+use std::io::Write;
 
 use crate::host::Host;
 use crate::plugin::audio_thread::process::{Event, EventQueue, ProcessConfig};
@@ -11,9 +12,15 @@ use crate::plugin::ext::params::{ParamInfo, Params};
 use crate::plugin::ext::state::State;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, ParamFuzzer};
-use crate::tests::TestStatus;
+use crate::tests::{TestCase, TestStatus};
 
 use super::processing::ProcessingTest;
+use super::PluginTestCase;
+
+/// The file name we'll use to dump the expected state when a test fails.
+const EXPECTED_STATE_FILE_NAME: &str = "state-expected";
+/// The file name we'll use to dump the actual state when a test fails.
+const ACTUAL_STATE_FILE_NAME: &str = "state-actual";
 
 /// The test for `PluginTestCase::BasicStateReproducibility`. See the description of this test for a
 /// detailed explanation, but we essentially check if saving a loaded state results in the same
@@ -27,7 +34,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
         .context("Could not create the plugin instance")
         .and_then(|plugin| {
             // We'll drop and reinitialize the plugin later
-            let (first_state_file, expected_param_values) = {
+            let (expected_state, expected_param_values) = {
                 plugin.init().context("Error during initialization")?;
 
                 let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
@@ -85,10 +92,10 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
                     .collect::<Result<BTreeMap<clap_id, f64>>>()?;
 
-                let state_file = state.save()?;
+                let expected_state = state.save()?;
                 host.handle_callbacks_once();
 
-                (state_file, expected_param_values)
+                (expected_state, expected_param_values)
             };
 
             // Now we'll recreate the plugin instance, load the state, and check whether
@@ -128,7 +135,7 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             };
             host.handle_callbacks_once();
 
-            state.load(&first_state_file)?;
+            state.load(&expected_state)?;
             host.handle_callbacks_once();
 
             let actual_param_values: BTreeMap<clap_id, f64> = expected_param_values
@@ -155,17 +162,28 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             }
 
             // Now for the monent of truth
-            let second_state_file = state.save()?;
+            let actual_state = state.save()?;
             host.handle_callbacks_once();
 
-            if second_state_file == first_state_file {
+            if actual_state == expected_state {
                 Ok(TestStatus::Success { details: None })
             } else {
-                Ok(TestStatus::Failed {
-                    details: Some(String::from(
-                        "Re-saving the loaded state resulted in a different state file.",
-                    )),
-                })
+                let (expected_state_file_path, mut expected_state_file) =
+                    PluginTestCase::BasicStateReproducibility
+                        .temporary_file(EXPECTED_STATE_FILE_NAME)?;
+                let (actual_state_file_path, mut actual_state_file) =
+                    PluginTestCase::BasicStateReproducibility
+                        .temporary_file(ACTUAL_STATE_FILE_NAME)?;
+
+                expected_state_file.write_all(&expected_state)?;
+                actual_state_file.write_all(&actual_state)?;
+
+                anyhow::bail!(
+                    "Re-saving the loaded state resulted in a different state file. Expected: \
+                     '{}'. Actual: '{}'.",
+                    expected_state_file_path.display(),
+                    actual_state_file_path.display(),
+                )
             }
         });
 
@@ -190,7 +208,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
             // the flush function, and the second pass we'll compare this to uses the process
             // function. We'll reuse the parameter set events, but the cookies need to be updated
             // first or they'll point to old data.
-            let (first_state_file, old_random_param_set_events, expected_param_values) = {
+            let (expected_state, old_random_param_set_events, expected_param_values) = {
                 plugin.init().context("Error during initialization")?;
 
                 let params = match plugin.get_extension::<Params>() {
@@ -243,7 +261,7 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     .iter()
                     .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
                     .collect::<Result<BTreeMap<clap_id, f64>>>()?;
-                let state_file = state.save()?;
+                let expected_state = state.save()?;
                 host.handle_callbacks_once();
 
                 // Plugins with no parameters at all should of course not trigger this error
@@ -254,7 +272,11 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                     )
                 }
 
-                (state_file, random_param_set_events, expected_param_values)
+                (
+                    expected_state,
+                    random_param_set_events,
+                    expected_param_values,
+                )
             };
 
             // This works the same as the basic state reproducibility test, except that we load the
@@ -357,18 +379,28 @@ pub fn test_flush_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 );
             }
 
-            let second_state_file = state.save()?;
+            let actual_state = state.save()?;
             host.handle_callbacks_once();
 
-            if second_state_file == first_state_file {
+            if actual_state == expected_state {
                 Ok(TestStatus::Success { details: None })
             } else {
-                Ok(TestStatus::Failed {
-                    details: Some(String::from(
-                        "Sending the same parameter values to two different instances of the \
-                         plugin resulted in different state files.",
-                    )),
-                })
+                let (expected_state_file_path, mut expected_state_file) =
+                    PluginTestCase::BasicStateReproducibility
+                        .temporary_file(EXPECTED_STATE_FILE_NAME)?;
+                let (actual_state_file_path, mut actual_state_file) =
+                    PluginTestCase::BasicStateReproducibility
+                        .temporary_file(ACTUAL_STATE_FILE_NAME)?;
+
+                expected_state_file.write_all(&expected_state)?;
+                actual_state_file.write_all(&actual_state)?;
+
+                anyhow::bail!(
+                    "Sending the same parameter values to two different instances of the plugin \
+                     resulted in different state files. Expected: '{}'. Actual: '{}'.",
+                    expected_state_file_path.display(),
+                    actual_state_file_path.display(),
+                )
             }
         });
 
@@ -389,7 +421,7 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
         .create_plugin(plugin_id, host.clone())
         .context("Could not create the plugin instance")
         .and_then(|plugin| {
-            let (first_state_file, expected_param_values) = {
+            let (expected_state, expected_param_values) = {
                 plugin.init().context("Error during initialization")?;
 
                 let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
@@ -443,10 +475,10 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
                 // This state file is saved without buffered writes. It's expected that the plugin
                 // implementsq this correctly, so we can check if it handles buffered streams
                 // correctly by treating this as the ground truth.
-                let state_file = state.save()?;
+                let expected_stae = state.save()?;
                 host.handle_callbacks_once();
 
-                (state_file, expected_param_values)
+                (expected_stae, expected_param_values)
             };
 
             // Now we'll recreate the plugin instance, load the state using buffered reads, check
@@ -483,7 +515,7 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
 
             // This is a buffered load that only loads 17 bytes at a time. Why 17? Because.
             const BUFFERED_LOAD_MAX_BYTES: usize = 17;
-            state.load_buffered(&first_state_file, BUFFERED_LOAD_MAX_BYTES)?;
+            state.load_buffered(&expected_state, BUFFERED_LOAD_MAX_BYTES)?;
             host.handle_callbacks_once();
 
             let actual_param_values: BTreeMap<clap_id, f64> = expected_param_values
@@ -512,21 +544,31 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
 
             // Because we're mean, we'll use a different prime number for the saving
             const BUFFERED_SAVE_MAX_BYTES: usize = 23;
-            let second_state_file = state.save_buffered(BUFFERED_SAVE_MAX_BYTES)?;
+            let actual_state = state.save_buffered(BUFFERED_SAVE_MAX_BYTES)?;
             host.handle_callbacks_once();
 
-            if second_state_file == first_state_file {
+            if actual_state == expected_state {
                 Ok(TestStatus::Success { details: None })
             } else {
-                Ok(TestStatus::Failed {
-                    details: Some(format!(
-                        "Re-saving the loaded state resulted in a different state file. The \
-                         original state file being compared to was written unbuffered, reloaded \
-                         by allowing the plugin to read only {BUFFERED_LOAD_MAX_BYTES} bytes at a \
-                         time, and then written again by allowing the plugin to write only \
-                         {BUFFERED_SAVE_MAX_BYTES} bytes at a time.",
-                    )),
-                })
+                let (expected_state_file_path, mut expected_state_file) =
+                    PluginTestCase::BasicStateReproducibility
+                        .temporary_file(EXPECTED_STATE_FILE_NAME)?;
+                let (actual_state_file_path, mut actual_state_file) =
+                    PluginTestCase::BasicStateReproducibility
+                        .temporary_file(ACTUAL_STATE_FILE_NAME)?;
+
+                expected_state_file.write_all(&expected_state)?;
+                actual_state_file.write_all(&actual_state)?;
+
+                anyhow::bail!(
+                    "Re-saving the loaded state resulted in a different state file. The original \
+                     state file being compared to was written unbuffered, reloaded by allowing \
+                     the plugin to read only {BUFFERED_LOAD_MAX_BYTES} bytes at a time, and then \
+                     written again by allowing the plugin to write only {BUFFERED_SAVE_MAX_BYTES} \
+                     bytes at a time. Expected: '{}'. Actual: '{}'.",
+                    expected_state_file_path.display(),
+                    actual_state_file_path.display(),
+                )
             }
         });
 

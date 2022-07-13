@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::path::PathBuf;
 
 // TODO: Remove these attributes once we start implementing host interfaces
 
@@ -114,4 +115,21 @@ pub fn c_char_slice_to_string(slice: &[c_char]) -> Result<String> {
         .to_str()
         .context("Error while parsing UTF-8")
         .map(String::from)
+}
+
+/// [`std::env::temp_dir`], but taking `XDG_RUNTIME_DIR` on Linux into account.
+fn temp_dir() -> PathBuf {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR").map(PathBuf::from) {
+        if dir.is_dir() {
+            return dir;
+        }
+    }
+
+    std::env::temp_dir()
+}
+
+/// A temporary directory used by the validator. This is cleared when launching the validator.
+pub fn validator_temp_dir() -> PathBuf {
+    temp_dir().join("clap-validator")
 }
