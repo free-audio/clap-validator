@@ -14,6 +14,7 @@ const BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-ba
 const BASIC_OUT_OF_PLACE_NOTE_PROCESSING: &str = "process-note-out-of-place-basic";
 const INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
 const CONVERT_PARAMS: &str = "param-conversions";
+const WRONG_NAMESPACE_SET_PARAMS: &str = "param-set-wrong-namespace";
 const BASIC_STATE_REPRODUCIBILITY: &str = "state-reproducibility-basic";
 const FLUSH_STATE_REPRODUCIBILITY: &str = "state-reproducibility-flush";
 const BUFFERED_STATE_STREAMS: &str = "state-buffered-streams";
@@ -25,6 +26,7 @@ pub enum PluginTestCase {
     BasicOutOfPlaceNoteProcessing,
     InconsistentNoteProcessing,
     ConvertParams,
+    WrongNamespaceSetParams,
     BasicStateReproducibility,
     FlushStateReproducibility,
     BufferedStateStreams,
@@ -40,6 +42,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
         PluginTestCase::BasicOutOfPlaceNoteProcessing,
         PluginTestCase::InconsistentNoteProcessing,
         PluginTestCase::ConvertParams,
+        PluginTestCase::WrongNamespaceSetParams,
         PluginTestCase::BasicStateReproducibility,
         PluginTestCase::FlushStateReproducibility,
         PluginTestCase::BufferedStateStreams,
@@ -55,6 +58,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             }
             INCONSISTENT_NOTE_PROCESSING => Some(PluginTestCase::InconsistentNoteProcessing),
             CONVERT_PARAMS => Some(PluginTestCase::ConvertParams),
+            WRONG_NAMESPACE_SET_PARAMS => Some(PluginTestCase::WrongNamespaceSetParams),
             BASIC_STATE_REPRODUCIBILITY => Some(PluginTestCase::BasicStateReproducibility),
             FLUSH_STATE_REPRODUCIBILITY => Some(PluginTestCase::FlushStateReproducibility),
             BUFFERED_STATE_STREAMS => Some(PluginTestCase::BufferedStateStreams),
@@ -68,6 +72,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::BasicOutOfPlaceNoteProcessing => BASIC_OUT_OF_PLACE_NOTE_PROCESSING,
             PluginTestCase::InconsistentNoteProcessing => INCONSISTENT_NOTE_PROCESSING,
             PluginTestCase::ConvertParams => CONVERT_PARAMS,
+            PluginTestCase::WrongNamespaceSetParams => WRONG_NAMESPACE_SET_PARAMS,
             PluginTestCase::BasicStateReproducibility => BASIC_STATE_REPRODUCIBILITY,
             PluginTestCase::FlushStateReproducibility => FLUSH_STATE_REPRODUCIBILITY,
             PluginTestCase::BufferedStateStreams => BUFFERED_STATE_STREAMS,
@@ -95,6 +100,11 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 "Asserts that value to string and string to value conversions are supported for \
                  ether all or none of the plugin's parameters, and that conversions between \
                  values and strings roundtrip consistently.",
+            ),
+            PluginTestCase::WrongNamespaceSetParams => String::from(
+                "Sends events to the plugin with the 'CLAP_EVENT_PARAM_VALUE' event tyep but with \
+                 a mismatching namespace ID. Asserts that the plugin's parameter values don't \
+                 change.",
             ),
             PluginTestCase::BasicStateReproducibility => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
@@ -145,6 +155,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 processing::test_inconsistent_note_processing(library, plugin_id)
             }
             PluginTestCase::ConvertParams => params::test_convert_params(library, plugin_id),
+            PluginTestCase::WrongNamespaceSetParams => {
+                params::test_wrong_namespace_set_params(library, plugin_id)
+            }
             PluginTestCase::BasicStateReproducibility => {
                 state::test_basic_state_reproducibility(library, plugin_id)
             }

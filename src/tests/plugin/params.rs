@@ -1,12 +1,18 @@
 //! Tests that focus on parameters.
 
-use anyhow::Context;
+use anyhow::{Context, Result};
+use clap_sys::events::CLAP_EVENT_PARAM_VALUE;
+use clap_sys::id::clap_id;
 use rand::Rng;
+use std::collections::BTreeMap;
 
+use super::processing::ProcessingTest;
 use crate::host::Host;
+use crate::plugin::audio_thread::process::{Event, ProcessConfig};
+use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::Params;
 use crate::plugin::library::PluginLibrary;
-use crate::tests::rng::new_prng;
+use crate::tests::rng::{new_prng, ParamFuzzer};
 use crate::tests::TestStatus;
 
 /// The test for `ProcessingTest::ConvertParams`.
@@ -149,6 +155,95 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> TestStat
                 })
             } else {
                 Ok(TestStatus::Success { details: None })
+            }
+        });
+
+    match result {
+        Ok(status) => status,
+        Err(err) => TestStatus::Failed {
+            details: Some(format!("{err:#}")),
+        },
+    }
+}
+
+/// The test for `ProcessingTest::WrongNamespaceSetParams`.
+pub fn test_wrong_namespace_set_params(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+    let mut prng = new_prng();
+
+    let host = Host::new();
+    let result = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance")
+        .and_then(|plugin| {
+            plugin.init().context("Error during initialization")?;
+
+            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+                Some(audio_ports) => audio_ports
+                    .config()
+                    .context("Error while querying 'audio-ports' IO configuration")?,
+                None => AudioPortConfig::default(),
+            };
+            let params = match plugin.get_extension::<Params>() {
+                Some(params) => params,
+                None => {
+                    return Ok(TestStatus::Skipped {
+                        details: Some(String::from(
+                            "The plugin does not support the 'params' extension.",
+                        )),
+                    })
+                }
+            };
+            host.handle_callbacks_once();
+
+            let param_infos = params
+                .info()
+                .context("Failure while fetching the plugin's parameters")?;
+            let initial_param_values: BTreeMap<clap_id, f64> = param_infos
+                .iter()
+                .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
+                .collect::<Result<BTreeMap<clap_id, f64>>>()?;
+
+            // We'll generate random parameter set events, but we'll change the namespace ID to
+            // something else. The plugin's parameter values should thus not update its parameter
+            // values.
+            const INCORRECT_NAMESPACE_ID: u16 = 0xb33f;
+            let param_fuzzer = ParamFuzzer::new(&param_infos);
+            let mut random_param_set_events: Vec<_> =
+                param_fuzzer.randomize_params_at(&mut prng, 0).collect();
+            for event in random_param_set_events.iter_mut() {
+                match event {
+                    Event::ParamValue(event) => event.header.space_id = INCORRECT_NAMESPACE_ID,
+                    event => panic!("Unexpected event {event:?}, this is a clap-validator bug"),
+                }
+            }
+
+            let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
+            ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
+                .run_once(ProcessConfig::default(), move |process_data| {
+                    *process_data.input_events.events.lock() = random_param_set_events;
+
+                    Ok(())
+                })?;
+
+            // We'll check that the plugin has these sames values after reloading
+            // the state. These values are rounded to the tenth decimal to provide
+            // some leeway in the serialization and deserializatoin process.
+            let actual_param_values: BTreeMap<clap_id, f64> = param_infos
+                .iter()
+                .map(|(param_id, _)| params.get(*param_id).map(|value| (*param_id, value)))
+                .collect::<Result<BTreeMap<clap_id, f64>>>()?;
+
+            if actual_param_values == initial_param_values {
+                Ok(TestStatus::Success { details: None })
+            } else {
+                Ok(TestStatus::Failed {
+                    details: Some(format!(
+                        "Sending events with type ID {CLAP_EVENT_PARAM_VALUE} \
+                         (CLAP_EVENT_PARAM_VALUE) and namespace ID {INCORRECT_NAMESPACE_ID:#x} to \
+                         the plugin caused its parameter values to change. This should not \
+                         happen. The plugin may not be checking the event's namespace ID."
+                    )),
+                })
             }
         });
 
