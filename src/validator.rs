@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use clap::{Args, ValueEnum};
 use clap_sys::version::clap_version_is_compatible;
+use regex::RegexBuilder;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
@@ -55,11 +56,12 @@ pub struct ValidatorSettings {
     /// Print the test output as JSON instead of human readable text.
     #[clap(value_parser, short, long)]
     pub json: bool,
-    /// Only run the tests that match this string.
-    ///
-    /// This is case-sensitive, and does not match regular expressions.
+    /// Only run the tests that match this case-insensitive regular expression.
     #[clap(value_parser, short = 'f', long)]
     pub test_filter: Option<String>,
+    /// Changes the behavior of -f/--test-filter to skip matching tests instead.
+    #[clap(value_parser, short = 'v', long)]
+    pub invert_filter: bool,
     /// When running the validation out-of-process, hide the plugin's output.
     ///
     /// This can be useful for validating noisy plugins.
@@ -126,6 +128,16 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     // fail. This is allowed to fail since the directory may not exist and even if it does and we
     // cannot remove it, then that may not be a problem.
     let _ = std::fs::remove_dir_all(util::validator_temp_dir());
+    let test_filter_re = settings
+        .test_filter
+        .as_deref()
+        .map(|filter| {
+            RegexBuilder::new(filter)
+                .case_insensitive(true)
+                .build()
+                .context("The test filter is not a valid regular expression")
+        })
+        .transpose()?;
 
     // TODO: We now gather all the results and print everything in one go at the end. This is the
     //       only way to do JSON, but for the human readable version printing things as we go could
@@ -140,8 +152,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
         // libraries that may still be loaded in the process.
         let mut plugin_library_results = Vec::new();
         for test in PluginLibraryTestCase::ALL {
-            match &settings.test_filter {
-                Some(test_filter) if !test.as_str().contains(test_filter) => continue,
+            match (&test_filter_re, settings.invert_filter) {
+                (Some(test_filter_re), false) if !test_filter_re.is_match(test.as_str()) => {
+                    continue
+                }
+                (Some(test_filter_re), true) if test_filter_re.is_match(test.as_str()) => continue,
                 _ => (),
             }
 
@@ -197,8 +212,13 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 
             let mut plugin_test_results = Vec::new();
             for test in PluginTestCase::ALL {
-                match &settings.test_filter {
-                    Some(test_filter) if !test.as_str().contains(test_filter) => continue,
+                match (&test_filter_re, settings.invert_filter) {
+                    (Some(test_filter_re), false) if !test_filter_re.is_match(test.as_str()) => {
+                        continue
+                    }
+                    (Some(test_filter_re), true) if test_filter_re.is_match(test.as_str()) => {
+                        continue
+                    }
                     _ => (),
                 }
 
