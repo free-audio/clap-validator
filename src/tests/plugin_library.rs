@@ -207,12 +207,13 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                         }
                     };
 
+                    // This should return an error/null-pointer instead of actually instantiating a
+                    // plugin
                     match library.create_plugin(&fake_plugin_id, Host::new()) {
                         Ok(_) => anyhow::bail!(
                             "Creating a plugin instance with a non-existent plugin ID \
                              '{fake_plugin_id}' should return a null pointer, but it did not."
                         ),
-                        // This should return an error/null-pointer instead of actually instantiating a plugin
                         Err(_) => Ok(TestStatus::Success { details: None }),
                     }
                 });
