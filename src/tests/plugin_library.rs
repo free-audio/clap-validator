@@ -8,11 +8,13 @@ use anyhow::Context;
 use clap::ValueEnum;
 use clap_sys::version::clap_version_is_compatible;
 
+use crate::host::Host;
 use crate::plugin::library::PluginLibrary;
 
 use super::{TestCase, TestResult, TestStatus};
 
 const TEST_SCAN_TIME: &str = "scan-time";
+const TEST_CREATE_ID_WITH_TRAILING_GARBAGE: &str = "create-id-with-trailing-garbage";
 
 const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 
@@ -21,17 +23,24 @@ const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 /// description of each test case.
 pub enum PluginLibraryTestCase {
     ScanTime,
+    CreateIdWithTrailingGarbage,
 }
 
 impl<'a> TestCase<'a> for PluginLibraryTestCase {
     /// The path to a CLAP plugin library.
     type TestArgs = &'a Path;
 
-    const ALL: &'static [Self] = &[PluginLibraryTestCase::ScanTime];
+    const ALL: &'static [Self] = &[
+        PluginLibraryTestCase::ScanTime,
+        PluginLibraryTestCase::CreateIdWithTrailingGarbage,
+    ];
 
     fn from_str(string: &str) -> Option<Self> {
         match string {
             TEST_SCAN_TIME => Some(PluginLibraryTestCase::ScanTime),
+            TEST_CREATE_ID_WITH_TRAILING_GARBAGE => {
+                Some(PluginLibraryTestCase::CreateIdWithTrailingGarbage)
+            }
             _ => None,
         }
     }
@@ -39,6 +48,9 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     fn as_str(&self) -> &'static str {
         match self {
             PluginLibraryTestCase::ScanTime => TEST_SCAN_TIME,
+            PluginLibraryTestCase::CreateIdWithTrailingGarbage => {
+                TEST_CREATE_ID_WITH_TRAILING_GARBAGE
+            }
         }
     }
 
@@ -47,6 +59,10 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             PluginLibraryTestCase::ScanTime => format!(
                 "Tests whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
+            ),
+            PluginLibraryTestCase::CreateIdWithTrailingGarbage => String::from(
+                "Attempts to create a plugin instance using an existing plugin ID with some extra \
+                 text appended to the end. This should return a null pointer.",
             ),
         }
     }
@@ -77,13 +93,13 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                 {
                     // The library will be unloaded when this object is dropped, so that is part of
                     // the measurement
-                    let plugin_library = PluginLibrary::load(library_path)
+                    let library = PluginLibrary::load(library_path)
                         .with_context(|| format!("Could not load '{}'", library_path.display()));
 
                     // This goes through all plugins and builds a data structure containing
                     // information for all of those plugins, mimicing most of a DAW's plugin
                     // scanning process
-                    let metadata = plugin_library.and_then(|plugin_library| {
+                    let metadata = library.and_then(|plugin_library| {
                         plugin_library
                             .metadata()
                             .context("Could not query the plugin's metadata")
@@ -133,6 +149,79 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                             init_duration.as_millis()
                         )),
                     }
+                }
+            }
+            PluginLibraryTestCase::CreateIdWithTrailingGarbage => {
+                let library = PluginLibrary::load(library_path)
+                    .with_context(|| format!("Could not load '{}'", library_path.display()));
+
+                let status = library.and_then(|library| {
+                    let metadata = library
+                        .metadata()
+                        .context("Could not query the plugin's metadata")?;
+                    if !clap_version_is_compatible(metadata.clap_version()) {
+                        return Ok(TestStatus::Skipped {
+                            details: Some(format!(
+                                "'{}' uses an unsupported CLAP version ({}.{}.{})",
+                                library_path.display(),
+                                metadata.version.0,
+                                metadata.version.1,
+                                metadata.version.2
+                            )),
+                        });
+                    }
+
+                    // We'll ask the plugin to create an instance of a plugin with the same ID as
+                    // the first one from the factory, but with some additional data appended to the
+                    // end. Since the plugin doesn't exist, this should return a null pointer.
+                    let fake_plugin_id = match metadata.plugins.first() {
+                        Some(descriptor) => {
+                            // The x makes it cooler. And we'll try 100 versions in case the cooler
+                            // verion of the plugin already exists.
+                            let fake_plugin_id = (1..=100)
+                                .map(|n| format!("{}x{n}", descriptor.id))
+                                .find(|candidate| {
+                                    !metadata.plugins.iter().any(|d| &d.id == candidate)
+                                });
+
+                            match fake_plugin_id {
+                                Some(fake_plugin_id) => fake_plugin_id,
+                                // This obviously should never be triggered unless someone is
+                                // intentionally triggering it
+                                None => {
+                                    return Ok(TestStatus::Skipped {
+                                        details: Some(String::from(
+                                            "All of the coolest plugins already exists. In other \
+                                             words, could not come up a fake unused plugin ID.",
+                                        )),
+                                    })
+                                }
+                            }
+                        }
+                        None => {
+                            return Ok(TestStatus::Skipped {
+                                details: Some(String::from(
+                                    "The plugin library does not expose any plugins",
+                                )),
+                            })
+                        }
+                    };
+
+                    match library.create_plugin(&fake_plugin_id, Host::new()) {
+                        Ok(_) => anyhow::bail!(
+                            "Creating a plugin instance with a non-existent plugin ID \
+                             '{fake_plugin_id}' should return a null pointer, but it did not."
+                        ),
+                        // This should return an error/null-pointer instead of actually instantiating a plugin
+                        Err(_) => Ok(TestStatus::Success { details: None }),
+                    }
+                });
+
+                match status {
+                    Ok(status) => status,
+                    Err(err) => TestStatus::Failed {
+                        details: Some(err.to_string()),
+                    },
                 }
             }
         };
