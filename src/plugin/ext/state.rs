@@ -144,7 +144,7 @@ impl<'a> InputStream<'a> {
         check_null_ptr!(0, stream, buffer);
         let this = &*(stream as *const Self);
 
-        // The writes may be limited to a certain buffering size to test the plugin's capabilities
+        // The reads may be limited to a certain buffering size to test the plugin's capabilities
         let size = match this.max_read_size {
             Some(max_read_size) => size.min(max_read_size as u64),
             None => size,
