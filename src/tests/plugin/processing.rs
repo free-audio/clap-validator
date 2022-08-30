@@ -420,7 +420,7 @@ fn check_out_of_place_output_consistency(
     let output_buffers = process_data.buffers.outputs_ref();
     if input_buffers != original_input_buffers {
         anyhow::bail!(
-            "The plugin has overwritten the input buffers during out-of-place processing"
+            "The plugin has overwritten the input buffers during out-of-place processing."
         );
     }
     for (port_idx, channel_slices) in output_buffers.iter().enumerate() {
@@ -429,12 +429,12 @@ fn check_out_of_place_output_consistency(
                 if !sample.is_finite() {
                     anyhow::bail!(
                         "The sample written to output port {port_idx}, channel {channel_idx}, and \
-                         sample index {sample_idx} is {sample:?}"
+                         sample index {sample_idx} is {sample:?}."
                     );
                 } else if sample.is_subnormal() {
                     anyhow::bail!(
                         "The sample written to output port {port_idx}, channel {channel_idx}, and \
-                         sample index {sample_idx} is subnormal ({sample:?})"
+                         sample index {sample_idx} is subnormal ({sample:?})."
                     );
                 }
             }
@@ -448,7 +448,7 @@ fn check_out_of_place_output_consistency(
         if event_time < last_event_time {
             anyhow::bail!(
                 "The plugin output an event for sample {event_time} after it had previously \
-                 output an event for sample {last_event_time}"
+                 output an event for sample {last_event_time}."
             )
         }
 
@@ -458,7 +458,7 @@ fn check_out_of_place_output_consistency(
     if last_event_time >= num_samples {
         anyhow::bail!(
             "The plugin output an event for sample {last_event_time} but the audio buffer only \
-             contains {num_samples} samples"
+             contains {num_samples} samples."
         )
     }
 
