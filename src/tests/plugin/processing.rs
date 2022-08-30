@@ -415,6 +415,7 @@ fn check_out_of_place_output_consistency(
 ) -> Result<()> {
     // The input buffer must not be overwritten during out of place processing, and the outputs
     // should not contain any non-finite or denormal values
+    let num_samples = process_data.buffers.len() as u32;
     let input_buffers = process_data.buffers.inputs_ref();
     let output_buffers = process_data.buffers.outputs_ref();
     if input_buffers != original_input_buffers {
@@ -452,6 +453,13 @@ fn check_out_of_place_output_consistency(
         }
 
         last_event_time = event_time;
+    }
+
+    if last_event_time >= num_samples {
+        anyhow::bail!(
+            "The plugin output an event for sample {last_event_time} but the audio buffer only \
+             contains {num_samples} samples"
+        )
     }
 
     Ok(())
