@@ -10,15 +10,15 @@ mod params;
 mod processing;
 mod state;
 
-const BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-basic";
-const BASIC_OUT_OF_PLACE_NOTE_PROCESSING: &str = "process-note-out-of-place-basic";
-const INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
-const CONVERT_PARAMS: &str = "param-conversions";
-const WRONG_NAMESPACE_SET_PARAMS: &str = "param-set-wrong-namespace";
-const BASIC_STATE_REPRODUCIBILITY: &str = "state-reproducibility-basic";
-const NULL_COOKIES_STATE_REPRODUCIBILITY: &str = "state-reproducibility-null-cookies";
-const FLUSH_STATE_REPRODUCIBILITY: &str = "state-reproducibility-flush";
-const BUFFERED_STATE_STREAMS: &str = "state-buffered-streams";
+const TEST_BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-basic";
+const TEST_BASIC_OUT_OF_PLACE_NOTE_PROCESSING: &str = "process-note-out-of-place-basic";
+const TEST_INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
+const TEST_CONVERT_PARAMS: &str = "param-conversions";
+const TEST_WRONG_NAMESPACE_SET_PARAMS: &str = "param-set-wrong-namespace";
+const TEST_BASIC_STATE_REPRODUCIBILITY: &str = "state-reproducibility-basic";
+const TEST_NULL_COOKIES_STATE_REPRODUCIBILITY: &str = "state-reproducibility-null-cookies";
+const TEST_FLUSH_STATE_REPRODUCIBILITY: &str = "state-reproducibility-flush";
+const TEST_BUFFERED_STATE_STREAMS: &str = "state-buffered-streams";
 
 /// The tests for individual CLAP plugins. See the module's heading for more information, and the
 /// `description` function below for a description of each test case.
@@ -53,36 +53,42 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn from_str(string: &str) -> Option<Self> {
         match string {
-            BASIC_OUT_OF_PLACE_AUDIO_PROCESSING => {
+            TEST_BASIC_OUT_OF_PLACE_AUDIO_PROCESSING => {
                 Some(PluginTestCase::BasicOutOfPlaceAudioProcessing)
             }
-            BASIC_OUT_OF_PLACE_NOTE_PROCESSING => {
+            TEST_BASIC_OUT_OF_PLACE_NOTE_PROCESSING => {
                 Some(PluginTestCase::BasicOutOfPlaceNoteProcessing)
             }
-            INCONSISTENT_NOTE_PROCESSING => Some(PluginTestCase::InconsistentNoteProcessing),
-            CONVERT_PARAMS => Some(PluginTestCase::ConvertParams),
-            WRONG_NAMESPACE_SET_PARAMS => Some(PluginTestCase::WrongNamespaceSetParams),
-            BASIC_STATE_REPRODUCIBILITY => Some(PluginTestCase::BasicStateReproducibility),
-            NULL_COOKIES_STATE_REPRODUCIBILITY => {
+            TEST_INCONSISTENT_NOTE_PROCESSING => Some(PluginTestCase::InconsistentNoteProcessing),
+            TEST_CONVERT_PARAMS => Some(PluginTestCase::ConvertParams),
+            TEST_WRONG_NAMESPACE_SET_PARAMS => Some(PluginTestCase::WrongNamespaceSetParams),
+            TEST_BASIC_STATE_REPRODUCIBILITY => Some(PluginTestCase::BasicStateReproducibility),
+            TEST_NULL_COOKIES_STATE_REPRODUCIBILITY => {
                 Some(PluginTestCase::NullCookiesStateReproducibility)
             }
-            FLUSH_STATE_REPRODUCIBILITY => Some(PluginTestCase::FlushStateReproducibility),
-            BUFFERED_STATE_STREAMS => Some(PluginTestCase::BufferedStateStreams),
+            TEST_FLUSH_STATE_REPRODUCIBILITY => Some(PluginTestCase::FlushStateReproducibility),
+            TEST_BUFFERED_STATE_STREAMS => Some(PluginTestCase::BufferedStateStreams),
             _ => None,
         }
     }
 
     fn as_str(&self) -> &'static str {
         match self {
-            PluginTestCase::BasicOutOfPlaceAudioProcessing => BASIC_OUT_OF_PLACE_AUDIO_PROCESSING,
-            PluginTestCase::BasicOutOfPlaceNoteProcessing => BASIC_OUT_OF_PLACE_NOTE_PROCESSING,
-            PluginTestCase::InconsistentNoteProcessing => INCONSISTENT_NOTE_PROCESSING,
-            PluginTestCase::ConvertParams => CONVERT_PARAMS,
-            PluginTestCase::WrongNamespaceSetParams => WRONG_NAMESPACE_SET_PARAMS,
-            PluginTestCase::BasicStateReproducibility => BASIC_STATE_REPRODUCIBILITY,
-            PluginTestCase::NullCookiesStateReproducibility => NULL_COOKIES_STATE_REPRODUCIBILITY,
-            PluginTestCase::FlushStateReproducibility => FLUSH_STATE_REPRODUCIBILITY,
-            PluginTestCase::BufferedStateStreams => BUFFERED_STATE_STREAMS,
+            PluginTestCase::BasicOutOfPlaceAudioProcessing => {
+                TEST_BASIC_OUT_OF_PLACE_AUDIO_PROCESSING
+            }
+            PluginTestCase::BasicOutOfPlaceNoteProcessing => {
+                TEST_BASIC_OUT_OF_PLACE_NOTE_PROCESSING
+            }
+            PluginTestCase::InconsistentNoteProcessing => TEST_INCONSISTENT_NOTE_PROCESSING,
+            PluginTestCase::ConvertParams => TEST_CONVERT_PARAMS,
+            PluginTestCase::WrongNamespaceSetParams => TEST_WRONG_NAMESPACE_SET_PARAMS,
+            PluginTestCase::BasicStateReproducibility => TEST_BASIC_STATE_REPRODUCIBILITY,
+            PluginTestCase::NullCookiesStateReproducibility => {
+                TEST_NULL_COOKIES_STATE_REPRODUCIBILITY
+            }
+            PluginTestCase::FlushStateReproducibility => TEST_FLUSH_STATE_REPRODUCIBILITY,
+            PluginTestCase::BufferedStateStreams => TEST_BUFFERED_STATE_STREAMS,
         }
     }
 
@@ -120,9 +126,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
                  as before. The parameter values are updated using the process function.",
             ),
             PluginTestCase::NullCookiesStateReproducibility => format!(
-                "The exact same test as {BASIC_STATE_REPRODUCIBILITY}, but with all cookies in \
-                 the parameter events set to null pointers. The plugin should handle this in the \
-                 same way as the other test case.",
+                "The exact same test as {TEST_BASIC_STATE_REPRODUCIBILITY}, but with all cookies \
+                 in the parameter events set to null pointers. The plugin should handle this in \
+                 the same way as the other test case.",
             ),
             PluginTestCase::FlushStateReproducibility => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
@@ -133,8 +139,8 @@ impl<'a> TestCase<'a> for PluginTestCase {
             ),
             PluginTestCase::BufferedStateStreams => format!(
                 "Performs the same state and parameter reproducibility check as in \
-                 '{BASIC_STATE_REPRODUCIBILITY}', but this time the plugin is only allowed to \
-                 read a small prime number of bytes at a time when reloading and resaving the \
+                 '{TEST_BASIC_STATE_REPRODUCIBILITY}', but this time the plugin is only allowed \
+                 to read a small prime number of bytes at a time when reloading and resaving the \
                  state."
             ),
         }
