@@ -54,7 +54,7 @@ pub struct ValidatorSettings {
     #[arg(short = 'i', long)]
     pub plugin_id: Option<String>,
     /// Print the test output as JSON instead of human readable text.
-    #[arg(short, long)]
+    #[arg(long)]
     pub json: bool,
     /// Only run the tests that match this case-insensitive regular expression.
     #[arg(short = 'f', long)]
