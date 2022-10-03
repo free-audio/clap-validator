@@ -44,40 +44,40 @@ pub struct ValidationTally {
 #[derive(Debug, Args)]
 pub struct ValidatorSettings {
     /// Paths to one or more plugins that should be validated.
-    #[clap(value_parser, required(true))]
+    #[arg(required = true)]
     pub paths: Vec<PathBuf>,
     /// Only validate plugins with this ID.
     ///
     /// If the plugin library contains multiple plugins, then you can pass a single plugin's ID
     /// to this option to only validate that plugin. Otherwise all plugins in the library are
     /// validated.
-    #[clap(value_parser, short = 'i', long)]
+    #[arg(short = 'i', long)]
     pub plugin_id: Option<String>,
     /// Print the test output as JSON instead of human readable text.
-    #[clap(value_parser, short, long)]
+    #[arg(short, long)]
     pub json: bool,
     /// Only run the tests that match this case-insensitive regular expression.
-    #[clap(value_parser, short = 'f', long)]
+    #[arg(short = 'f', long)]
     pub test_filter: Option<String>,
     /// Changes the behavior of -f/--test-filter to skip matching tests instead.
-    #[clap(value_parser, short = 'v', long)]
+    #[arg(short = 'v', long)]
     pub invert_filter: bool,
     /// When running the validation out-of-process, hide the plugin's output.
     ///
     /// This can be useful for validating noisy plugins.
-    #[clap(value_parser, long)]
+    #[arg(long)]
     pub hide_output: bool,
     /// Only show failed tests.
     ///
     /// This affects both the human readable and the JSON output.
-    #[clap(value_parser, long)]
+    #[arg(long)]
     pub only_failed: bool,
     /// Run the tests within this process.
     ///
     /// Tests are normally run in separate processes in case the plugin crashes. Another benefit
     /// of the out-of-process validation is that the test always starts from a clean state.
     /// Using this option will remove those protections, but in turn the tests may run faster.
-    #[clap(value_parser, long)]
+    #[arg(long)]
     pub in_process: bool,
 }
 
@@ -85,21 +85,17 @@ pub struct ValidatorSettings {
 /// option is hidden from the CLI as it's merely an implementation detail.
 #[derive(Debug, Args)]
 pub struct SingleTestSettings {
-    #[clap(value_parser)]
     pub test_type: SingleTestType,
     /// The path to the plugin's library.
-    #[clap(value_parser)]
     pub path: PathBuf,
     /// The ID of the plugin within the library that needs to be tested.
-    #[clap(value_parser)]
     pub plugin_id: String,
     /// The name of the test to run. [`TestCase`]s can be converted to and from strings to
     /// facilitate this.
-    #[clap(value_parser)]
     pub name: String,
     /// The name of the file to write the test's JSON result to. This is not done through STDIO
     /// because the hosted plugin may also write things there.
-    #[clap(value_parser, long)]
+    #[arg(long)]
     pub output_file: PathBuf,
 }
 

@@ -13,16 +13,15 @@ mod util;
 mod validator;
 
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
+#[command(author, version, about, long_about = None, propagate_version = true)]
 struct Cli {
     /// clap-validator's own logging verbosity.
     ///
     /// This can be used to silence all non-essential output, or to enable more in depth tracing.
-    #[clap(value_parser, short, long, default_value = "debug")]
+    #[arg(short, long, default_value = "debug")]
     verbosity: Verbosity,
 
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: Commands,
 }
 
@@ -49,14 +48,14 @@ enum Commands {
     ///
     /// This is used for the out-of-process testing. Since it's merely an implementation detail, the
     /// option is not shown in the CLI.
-    #[clap(hide(true))]
+    #[command(hide = true)]
     RunSingleTest(SingleTestSettings),
     // TODO: A hidden subcommand for running a single test for a single plugin. Used by the out of
     //       process mode
     /// Lists basic information about all installed CLAP plugins.
     List {
         /// Print JSON instead of a human readable format.
-        #[clap(value_parser, short, long)]
+        #[arg(short, long)]
         json: bool,
     },
 }
