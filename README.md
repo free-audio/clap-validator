@@ -18,3 +18,12 @@ After installing [Rust](https://rustup.rs/), you can compile and run clap-valida
 ```shell
 cargo run --release
 ```
+
+If you are on an ARM mac you need to specify the target to ARM most likely.
+For instance, here's how to validate `Surge XT` if you have an ARM-only
+local build
+
+```
+cargo run --target aarch64-apple-darwin validate ~/Library/Audio/Plug-Ins/CLAP/Surge\ XT.clap
+```
+
