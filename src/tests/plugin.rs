@@ -16,6 +16,7 @@ const INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
 const CONVERT_PARAMS: &str = "param-conversions";
 const WRONG_NAMESPACE_SET_PARAMS: &str = "param-set-wrong-namespace";
 const BASIC_STATE_REPRODUCIBILITY: &str = "state-reproducibility-basic";
+const NULL_COOKIES_STATE_REPRODUCIBILITY: &str = "state-reproducibility-null-cookies";
 const FLUSH_STATE_REPRODUCIBILITY: &str = "state-reproducibility-flush";
 const BUFFERED_STATE_STREAMS: &str = "state-buffered-streams";
 
@@ -28,6 +29,7 @@ pub enum PluginTestCase {
     ConvertParams,
     WrongNamespaceSetParams,
     BasicStateReproducibility,
+    NullCookiesStateReproducibility,
     FlushStateReproducibility,
     BufferedStateStreams,
 }
@@ -44,6 +46,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
         PluginTestCase::ConvertParams,
         PluginTestCase::WrongNamespaceSetParams,
         PluginTestCase::BasicStateReproducibility,
+        PluginTestCase::NullCookiesStateReproducibility,
         PluginTestCase::FlushStateReproducibility,
         PluginTestCase::BufferedStateStreams,
     ];
@@ -60,6 +63,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
             CONVERT_PARAMS => Some(PluginTestCase::ConvertParams),
             WRONG_NAMESPACE_SET_PARAMS => Some(PluginTestCase::WrongNamespaceSetParams),
             BASIC_STATE_REPRODUCIBILITY => Some(PluginTestCase::BasicStateReproducibility),
+            NULL_COOKIES_STATE_REPRODUCIBILITY => {
+                Some(PluginTestCase::NullCookiesStateReproducibility)
+            }
             FLUSH_STATE_REPRODUCIBILITY => Some(PluginTestCase::FlushStateReproducibility),
             BUFFERED_STATE_STREAMS => Some(PluginTestCase::BufferedStateStreams),
             _ => None,
@@ -74,6 +80,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::ConvertParams => CONVERT_PARAMS,
             PluginTestCase::WrongNamespaceSetParams => WRONG_NAMESPACE_SET_PARAMS,
             PluginTestCase::BasicStateReproducibility => BASIC_STATE_REPRODUCIBILITY,
+            PluginTestCase::NullCookiesStateReproducibility => NULL_COOKIES_STATE_REPRODUCIBILITY,
             PluginTestCase::FlushStateReproducibility => FLUSH_STATE_REPRODUCIBILITY,
             PluginTestCase::BufferedStateStreams => BUFFERED_STATE_STREAMS,
         }
@@ -111,6 +118,11 @@ impl<'a> TestCase<'a> for PluginTestCase {
                  instance, reloads the state, and then checks whether the parameter values are \
                  the same and whether saving the state once more results in the same state file \
                  as before. The parameter values are updated using the process function.",
+            ),
+            PluginTestCase::NullCookiesStateReproducibility => format!(
+                "The exact same test as {BASIC_STATE_REPRODUCIBILITY}, but with all cookies in \
+                 the parameter events set to null pointers. The plugin should handle this in the \
+                 same way as the other test case.",
             ),
             PluginTestCase::FlushStateReproducibility => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
@@ -159,7 +171,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 params::test_wrong_namespace_set_params(library, plugin_id)
             }
             PluginTestCase::BasicStateReproducibility => {
-                state::test_basic_state_reproducibility(library, plugin_id)
+                state::test_basic_state_reproducibility(library, plugin_id, false)
+            }
+            PluginTestCase::NullCookiesStateReproducibility => {
+                state::test_basic_state_reproducibility(library, plugin_id, true)
             }
             PluginTestCase::FlushStateReproducibility => {
                 state::test_flush_state_reproducibility(library, plugin_id)

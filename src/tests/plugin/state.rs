@@ -25,7 +25,15 @@ const ACTUAL_STATE_FILE_NAME: &str = "state-actual";
 /// The test for `PluginTestCase::BasicStateReproducibility`. See the description of this test for a
 /// detailed explanation, but we essentially check if saving a loaded state results in the same
 /// state file, and whether a plugin's parameters are the same after loading the state.
-pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+///
+/// The `zero_out_cookies` parameter offers an alternative on this test that sends parameter change
+/// events with all cookies set to null pointers. The plugin should behave identically when this
+/// happens.
+pub fn test_basic_state_reproducibility(
+    library: &PluginLibrary,
+    plugin_id: &str,
+    zero_out_cookies: bool,
+) -> TestStatus {
     let mut prng = new_prng();
 
     let host = Host::new();
@@ -72,8 +80,23 @@ pub fn test_basic_state_reproducibility(library: &PluginLibrary, plugin_id: &str
                 // We can't compare the values from these events direclty as the plugin
                 // may round the values during the parameter set
                 let param_fuzzer = ParamFuzzer::new(&param_infos);
-                let random_param_set_events: Vec<_> =
+                let mut random_param_set_events: Vec<_> =
                     param_fuzzer.randomize_params_at(&mut prng, 0).collect();
+
+                // This is a variation on the test that checks whether the plugin handles null
+                // pointer cookies correctly
+                if zero_out_cookies {
+                    for event in &mut random_param_set_events {
+                        match event {
+                            Event::ParamValue(event) => {
+                                event.cookie = std::ptr::null_mut();
+                            }
+                            event => {
+                                panic!("Unexpected event {event:?}, this is a clap-validator bug")
+                            }
+                        }
+                    }
+                }
 
                 let (mut input_buffers, mut output_buffers) =
                     audio_ports_config.create_buffers(512);
