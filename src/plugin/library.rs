@@ -181,6 +181,21 @@ impl PluginLibrary {
         Ok(metadata)
     }
 
+    /// Returns whether or not a factory with the specified ID exists. This is used in a test to
+    /// assert that querying a factory with a non-existent ID returns a null pointer instead of
+    /// always returning the plugin factory.
+    pub fn factory_exists(&self, factory_id: &str) -> bool {
+        let factory_id_cstring =
+            CString::new(factory_id).expect("The factory ID contained internal null bytes");
+
+        let entry_point = get_clap_entry_point(&self.library)
+            .expect("A Plugin was constructed for a plugin with no entry point");
+        let factory_pointer =
+            unsafe_clap_call! { entry_point=>get_factory(factory_id_cstring.as_ptr()) };
+
+        !factory_pointer.is_null()
+    }
+
     /// Try to create the plugin with the given ID, and using the provided host instance. The plugin
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and

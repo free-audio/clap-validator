@@ -14,6 +14,7 @@ use crate::plugin::library::PluginLibrary;
 use super::{TestCase, TestResult, TestStatus};
 
 const TEST_SCAN_TIME: &str = "scan-time";
+const TEST_QUERY_NONEXISTENT_FACTORY: &str = "query-factory-nonexistent";
 const TEST_CREATE_ID_WITH_TRAILING_GARBAGE: &str = "create-id-with-trailing-garbage";
 
 const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
@@ -23,6 +24,7 @@ const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 /// description of each test case.
 pub enum PluginLibraryTestCase {
     ScanTime,
+    QueryNonexistentFactory,
     CreateIdWithTrailingGarbage,
 }
 
@@ -32,12 +34,14 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
     const ALL: &'static [Self] = &[
         PluginLibraryTestCase::ScanTime,
+        PluginLibraryTestCase::QueryNonexistentFactory,
         PluginLibraryTestCase::CreateIdWithTrailingGarbage,
     ];
 
     fn from_str(string: &str) -> Option<Self> {
         match string {
             TEST_SCAN_TIME => Some(PluginLibraryTestCase::ScanTime),
+            TEST_QUERY_NONEXISTENT_FACTORY => Some(PluginLibraryTestCase::QueryNonexistentFactory),
             TEST_CREATE_ID_WITH_TRAILING_GARBAGE => {
                 Some(PluginLibraryTestCase::CreateIdWithTrailingGarbage)
             }
@@ -48,6 +52,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     fn as_str(&self) -> &'static str {
         match self {
             PluginLibraryTestCase::ScanTime => TEST_SCAN_TIME,
+            PluginLibraryTestCase::QueryNonexistentFactory => TEST_QUERY_NONEXISTENT_FACTORY,
             PluginLibraryTestCase::CreateIdWithTrailingGarbage => {
                 TEST_CREATE_ID_WITH_TRAILING_GARBAGE
             }
@@ -59,6 +64,10 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             PluginLibraryTestCase::ScanTime => format!(
                 "Tests whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
+            ),
+            PluginLibraryTestCase::QueryNonexistentFactory => String::from(
+                "Tries to query a factory from the plugin's entry point with a non-existent ID. \
+                 This should return a null pointer.",
             ),
             PluginLibraryTestCase::CreateIdWithTrailingGarbage => String::from(
                 "Attempts to create a plugin instance using an existing plugin ID with some extra \
@@ -149,6 +158,38 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
                             init_duration.as_millis()
                         )),
                     }
+                }
+            }
+            PluginLibraryTestCase::QueryNonexistentFactory => {
+                let library = PluginLibrary::load(library_path)
+                    .with_context(|| format!("Could not load '{}'", library_path.display()));
+
+                let status = library.and_then(|library| {
+                    // This should be actually random instead of using a fixed seed like the other
+                    // tests. This factory ID may not be used by anything.
+                    let nonexistent_factory_id = format!("foo-factory-{}", rand::random::<u64>());
+                    let nonexistent_factory_exists =
+                        library.factory_exists(&nonexistent_factory_id);
+
+                    // Since this factory doesn't exist, the plugin should always return a null
+                    // pointer.
+                    if nonexistent_factory_exists {
+                        anyhow::bail!(
+                            "Querying a factory with the non-existent factory ID \
+                             '{nonexistent_factory_id} should return a null pointer, but the \
+                             plugin returned a non-null pointer instead. The plugin may be \
+                             unconditionally returning the plugin factory."
+                        );
+                    } else {
+                        Ok(TestStatus::Success { details: None })
+                    }
+                });
+
+                match status {
+                    Ok(status) => status,
+                    Err(err) => TestStatus::Failed {
+                        details: Some(err.to_string()),
+                    },
                 }
             }
             PluginLibraryTestCase::CreateIdWithTrailingGarbage => {
