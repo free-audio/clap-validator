@@ -11,7 +11,7 @@ repository = "https://github.com/robbert-vdh/clap-validator"
 [dependencies]
 anyhow = "1.0.58"
 # All the claps!
-clap = { version = "3.2.6", features = ["derive"] }
+clap = { version = "4.0.8", features = ["derive"] }
 clap-sys = "0.3.0"
 colored = "2.0.0"
 crossbeam = "0.8.1"
