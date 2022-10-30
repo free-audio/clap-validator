@@ -16,6 +16,7 @@ use clap_sys::string_sizes::CLAP_NAME_SIZE;
 use std::collections::BTreeMap;
 use std::ffi::{c_void, CStr, CString};
 use std::ops::RangeInclusive;
+use std::pin::Pin;
 use std::ptr::NonNull;
 
 use super::Extension;
@@ -302,8 +303,8 @@ impl Params<'_> {
     /// Perform a parameter flush. Returns an error if the plugin is active.
     pub fn flush(
         &self,
-        input_events: &EventQueue<clap_input_events>,
-        output_events: &EventQueue<clap_output_events>,
+        input_events: &Pin<Box<EventQueue<clap_input_events>>>,
+        output_events: &Pin<Box<EventQueue<clap_output_events>>>,
     ) -> Result<()> {
         if self.plugin.activated() {
             anyhow::bail!(
@@ -315,8 +316,8 @@ impl Params<'_> {
         unsafe_clap_call! {
             self.params.as_ptr()=>flush(
                 self.plugin.as_ptr(),
-                &input_events.vtable,
-                &output_events.vtable,
+                input_events.vtable(),
+                output_events.vtable(),
             )
         };
 

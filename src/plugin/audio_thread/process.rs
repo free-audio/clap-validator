@@ -16,8 +16,8 @@ use clap_sys::process::clap_process;
 use parking_lot::Mutex;
 use rand::Rng;
 use rand_pcg::Pcg32;
+use std::ffi::c_void;
 use std::pin::Pin;
-use std::sync::Arc;
 
 use crate::util::check_null_ptr;
 
@@ -26,9 +26,9 @@ pub struct ProcessData<'a> {
     /// The input and output audio buffers.
     pub buffers: &'a mut AudioBuffers<'a>,
     /// The input events.
-    pub input_events: Pin<Arc<EventQueue<clap_input_events>>>,
+    pub input_events: Pin<Box<EventQueue<clap_input_events>>>,
     /// The output events.
-    pub output_events: Pin<Arc<EventQueue<clap_output_events>>>,
+    pub output_events: Pin<Box<EventQueue<clap_output_events>>>,
 
     config: ProcessConfig,
     /// The current transport information. This is populated when constructing this object, and the
@@ -92,17 +92,13 @@ unsafe impl Send for OutOfPlaceAudioBuffers<'_> {}
 unsafe impl Sync for OutOfPlaceAudioBuffers<'_> {}
 
 /// An event queue that can be used as either an input queue or an output queue. This is always
-/// allocated through a `Pin<Arc<EventQueue>>` so the pointers are stable. The `VTable` type
+/// allocated through a `Pin<Box<EventQueue>>` so the pointers are stable. The `VTable` type
 /// argument should be either `clap_input_events` or `clap_output_events`.
-//
-// NOTE: This is marked as non-exhaustive to prevent this from being constructed directly
 #[derive(Debug)]
-#[repr(C)]
-#[non_exhaustive]
 pub struct EventQueue<VTable> {
     /// The vtable for this event queue. This will be either `clap_input_events` or
     /// `clap_output_events`.
-    pub vtable: VTable,
+    vtable: VTable,
     /// The actual event queue. Since we're going for correctness over performance, this uses a very
     /// suboptimal memory layout by just using an `enum` instead of doing fancy bit packing.
     pub events: Mutex<Vec<Event>>,
@@ -379,11 +375,10 @@ impl<'a> OutOfPlaceAudioBuffers<'a> {
 
 impl EventQueue<clap_input_events> {
     /// Construct a new event queue. This can be used as both an input and an output queue.
-    pub fn new_input() -> Pin<Arc<Self>> {
-        Arc::pin(EventQueue {
+    pub fn new_input() -> Pin<Box<Self>> {
+        let mut queue = Box::pin(EventQueue {
             vtable: clap_input_events {
-                // This is not used as we can directly cast the pointer to `*const Self` because
-                // this vtable is always at the start of the struct
+                // This is set to point to this object below
                 ctx: std::ptr::null_mut(),
                 size: Some(Self::size),
                 get: Some(Self::get),
@@ -391,31 +386,42 @@ impl EventQueue<clap_input_events> {
             // Using a mutex here is obviously a terrible idea in a real host, but we're not a real
             // host
             events: Mutex::new(Vec::new()),
-        })
+        });
+
+        queue.vtable.ctx = &*queue as *const Self as *mut c_void;
+
+        queue
     }
 }
 
 impl EventQueue<clap_output_events> {
     /// Construct a new output event queue.
-    pub fn new_output() -> Pin<Arc<Self>> {
-        Arc::pin(EventQueue {
+    pub fn new_output() -> Pin<Box<Self>> {
+        let mut queue = Box::pin(EventQueue {
             vtable: clap_output_events {
-                // This is not used as we can directly cast the pointer to `*const Self` because
-                // this vtable is always at the start of the struct
+                // This is set to point to this object below
                 ctx: std::ptr::null_mut(),
                 try_push: Some(Self::try_push),
             },
             // Using a mutex here is obviously a terrible idea in a real host, but we're not a real
             // host
             events: Mutex::new(Vec::new()),
-        })
+        });
+
+        queue.vtable.ctx = &*queue as *const Self as *mut c_void;
+
+        queue
     }
 }
 
 impl<VTable> EventQueue<VTable> {
+    pub fn vtable(self: &Pin<Box<Self>>) -> *const VTable {
+        &self.vtable
+    }
+
     unsafe extern "C" fn size(list: *const clap_input_events) -> u32 {
-        check_null_ptr!(0, list);
-        let this = &*(list as *const Self);
+        check_null_ptr!(0, list, (*list).ctx);
+        let this = &*((*list).ctx as *const Self);
 
         this.events.lock().len() as u32
     }
@@ -424,8 +430,8 @@ impl<VTable> EventQueue<VTable> {
         list: *const clap_input_events,
         index: u32,
     ) -> *const clap_event_header {
-        check_null_ptr!(std::ptr::null(), list);
-        let this = &*(list as *const Self);
+        check_null_ptr!(std::ptr::null(), list, (*list).ctx);
+        let this = &*((*list).ctx as *const Self);
 
         let events = this.events.lock();
         match events.get(index as usize) {
@@ -444,8 +450,8 @@ impl<VTable> EventQueue<VTable> {
         list: *const clap_output_events,
         event: *const clap_event_header,
     ) -> bool {
-        check_null_ptr!(false, list, event);
-        let this = &*(list as *const Self);
+        check_null_ptr!(false, list, (*list).ctx, event);
+        let this = &*((*list).ctx as *const Self);
 
         // The monotonicity of the plugin's event insertion order is checked as part of the output
         // consistency checks
