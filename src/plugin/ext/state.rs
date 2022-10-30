@@ -21,10 +21,10 @@ pub struct State<'a> {
 }
 
 /// An input stream backed by a slice.
-#[repr(C)]
 #[derive(Debug)]
 struct InputStream<'a> {
-    pub vtable: clap_istream,
+    // The `ctx` pointer is set to this struct after creating the object
+    vtable: clap_istream,
 
     buffer: &'a [u8],
     /// The current position when reading from the buffer. This is needed because the plugin
@@ -37,10 +37,10 @@ struct InputStream<'a> {
 }
 
 /// An output stream backed by a vector.
-#[repr(C)]
 #[derive(Debug)]
 struct OutputStream {
-    pub vtable: clap_ostream,
+    // The `ctx` pointer is set to this struct after creating the object
+    vtable: clap_ostream,
 
     // In Rust-land this function is object is only used from a single thread and there's absolutely
     // no reason for the plugin to be calling the stream read and write methods from multiple
@@ -82,7 +82,7 @@ impl State<'_> {
     pub fn save_buffered(&self, max_bytes: usize) -> Result<Vec<u8>> {
         let stream = OutputStream::new().with_buffering(max_bytes);
 
-        if unsafe_clap_call! { self.state.as_ptr()=>save(self.plugin.as_ptr(), &stream.vtable) } {
+        if unsafe_clap_call! { self.state.as_ptr()=>save(self.plugin.as_ptr(), stream.vtable()) } {
             Ok(stream.into_vec())
         } else {
             anyhow::bail!(
@@ -96,7 +96,7 @@ impl State<'_> {
     pub fn load(&self, state: &[u8]) -> Result<()> {
         let stream = InputStream::new(state);
 
-        if unsafe_clap_call! { self.state.as_ptr()=>load(self.plugin.as_ptr(), &stream.vtable) } {
+        if unsafe_clap_call! { self.state.as_ptr()=>load(self.plugin.as_ptr(), stream.vtable()) } {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin_state::load()' returned false.");
@@ -122,8 +122,9 @@ impl State<'_> {
 impl<'a> InputStream<'a> {
     /// Create a new input stream backed by a slice.
     pub fn new(buffer: &'a [u8]) -> Pin<Box<Self>> {
-        Box::pin(InputStream {
+        let mut stream = Box::pin(InputStream {
             vtable: clap_istream {
+                // This is set to point to this object below
                 ctx: std::ptr::null_mut(),
                 read: Some(Self::read),
             },
@@ -131,7 +132,16 @@ impl<'a> InputStream<'a> {
             buffer,
             read_position: AtomicUsize::new(0),
             max_read_size: None,
-        })
+        });
+
+        stream.vtable.ctx = &*stream as *const Self as *mut c_void;
+
+        stream
+    }
+
+    /// The stream's `clap_istream` vtable.
+    pub fn vtable(self: &Pin<Box<Self>>) -> *const clap_istream {
+        &self.vtable
     }
 
     /// Only allow `max_bytes` bytes to be read at a time. Useful for simulating buffered streams.
@@ -141,8 +151,8 @@ impl<'a> InputStream<'a> {
     }
 
     unsafe extern "C" fn read(stream: *const clap_istream, buffer: *mut c_void, size: u64) -> i64 {
-        check_null_ptr!(0, stream, buffer);
-        let this = &*(stream as *const Self);
+        check_null_ptr!(0, stream, (*stream).ctx, buffer);
+        let this = &*((*stream).ctx as *const Self);
 
         // The reads may be limited to a certain buffering size to test the plugin's capabilities
         let size = match this.max_read_size {
@@ -165,15 +175,25 @@ impl<'a> InputStream<'a> {
 impl OutputStream {
     /// Create a new output stream backed by a vector.
     pub fn new() -> Pin<Box<Self>> {
-        Box::pin(OutputStream {
+        let mut stream = Box::pin(OutputStream {
             vtable: clap_ostream {
+                // This is set to point to this object below
                 ctx: std::ptr::null_mut(),
                 write: Some(Self::write),
             },
 
             buffer: Mutex::new(Vec::new()),
             max_write_size: None,
-        })
+        });
+
+        stream.vtable.ctx = &*stream as *const Self as *mut c_void;
+
+        stream
+    }
+
+    /// The stream's `clap_ostream` vtable.
+    pub fn vtable(self: &Pin<Box<Self>>) -> *const clap_ostream {
+        &self.vtable
     }
 
     /// Only allow `max_bytes` bytes to be written at a time. Useful for simulating buffered
@@ -196,8 +216,8 @@ impl OutputStream {
         buffer: *const c_void,
         size: u64,
     ) -> i64 {
-        check_null_ptr!(0, stream, buffer);
-        let this = &*(stream as *const Self);
+        check_null_ptr!(0, stream, (*stream).ctx, buffer);
+        let this = &*((*stream).ctx as *const Self);
 
         // The writes may be limited to a certain buffering size to test the plugin's capabilities
         let size = match this.max_write_size {
