@@ -17,6 +17,7 @@ use clap_sys::plugin::clap_plugin;
 use clap_sys::version::CLAP_VERSION;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::channel;
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{c_void, CStr};
@@ -73,14 +74,7 @@ pub struct Host {
 /// like audio threads. It also contains the plugin's unique `clap_host` struct so host callbacks
 /// can be linked back to this specific plugin instance.
 #[derive(Debug)]
-#[repr(C)]
 pub struct InstanceState {
-    /// The vtable that's passed to the plugin. The `host_data` field is populated with a pointer to
-    /// the
-    clap_host: clap_host,
-    /// The host this `InstanceState` belongs to. This is needed to get back to the `Host`
-    /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
-    host: Arc<Host>,
     /// The plugin this `InstanceState` is associated with. This is the same as they key in the
     /// `Host::instances` hash map, but it also needs to be stored here to make it possible to
     /// know what plugin instance a `*const clap_host` refers to.
@@ -88,6 +82,13 @@ pub struct InstanceState {
     /// This is an `Option` because the plugin handle is only known after the plugin has been
     /// created, and the factory's `create_plugin()` function requires a pointer to the `clap_host`.
     pub plugin: AtomicCell<Option<PluginHandle>>,
+    /// The host this `InstanceState` belongs to. This is needed to get back to the `Host`
+    /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
+    host: Arc<Host>,
+
+    /// The vtable that's passed to the plugin. The `host_data` field is populated with a pointer to
+    /// the this object.
+    clap_host: Mutex<clap_host>,
 
     /// The plugin's current state in terms of activation and processing status.
     pub state: AtomicCell<PluginState>,
@@ -127,13 +128,15 @@ impl InstanceState {
     /// and the plugin instance pointer is only known after that point. This contains the
     /// `clap_host` vtable for this plugin instance, and keeps track of things like the instance's
     /// audio thread and pending callbacks. The `Pin` is necessary to prevent moving the object out
-    /// of the `Box`, since that would break pointers to the `InstanceState`.
+    /// of the `Arc`, since that would break pointers to the `InstanceState`.
     pub fn new(host: Arc<Host>) -> Pin<Arc<Self>> {
-        Arc::pin(Self {
-            clap_host: clap_host {
+        let instance = Arc::pin(Self {
+            plugin: AtomicCell::new(None),
+            host,
+
+            clap_host: Mutex::new(clap_host {
                 clap_version: CLAP_VERSION,
-                // We can directly cast the `*const clap_host` to a `*const InstanceState` because
-                // it's stored as the first field of a pinned `#[repr(C)]` struct
+                // This is populated with a pointer to the `Arc<Self>`'s data after creating the Arc
                 host_data: std::ptr::null_mut(),
                 name: b"clap-validator\0".as_ptr() as *const c_char,
                 vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
@@ -143,21 +146,29 @@ impl InstanceState {
                 request_restart: Some(Host::request_restart),
                 request_process: Some(Host::request_process),
                 request_callback: Some(Host::request_callback),
-            },
-            host,
-            plugin: AtomicCell::new(None),
+            }),
 
             state: AtomicCell::new(PluginState::Deactivated),
 
             audio_thread: AtomicCell::new(None),
             requested_callback: AtomicBool::new(false),
             requested_restart: AtomicBool::new(false),
-        })
+        });
+
+        // We need to get the pointer to the pinned `InstanceState` into the `clap_host::host_data`
+        // field
+        instance.clap_host.lock().host_data = &*instance as *const Self as *mut c_void;
+
+        instance
     }
 
     /// Get the `InstanceState` and the host from a valid `clap_host` pointer.
     pub unsafe fn from_clap_host_ptr<'a>(ptr: *const clap_host) -> (&'a InstanceState, &'a Host) {
-        let this = &*(ptr as *const Self);
+        // This should have already been asserted before calling this function, but this is a
+        // validator and you can never be too sure
+        assert!(!ptr.is_null() && !(*ptr).host_data.is_null());
+
+        let this = &*((*ptr).host_data as *const Self);
         (this, &*this.host)
     }
 
@@ -174,9 +185,8 @@ impl InstanceState {
     /// Get a pointer to the `clap_host` struct for this instance. This uniquely identifies the
     /// instance.
     pub fn clap_host_ptr(self: &Pin<Arc<InstanceState>>) -> *const clap_host {
-        // The value will not move, since this `Host` can only be constructed as a
-        // `Pin<Arc<InstanceState>>`
-        &self.clap_host
+        // The value will not move, so this is safe
+        self.clap_host.data_ptr()
     }
 
     /// Get a pointer to the `clap_plugin` struct for this instance.
@@ -429,7 +439,7 @@ impl Host {
         host: *const clap_host,
         extension_id: *const c_char,
     ) -> *const c_void {
-        check_null_ptr!(std::ptr::null(), host, extension_id);
+        check_null_ptr!(std::ptr::null(), host, (*host).host_data, extension_id);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         // Right now there's no way to have the host only expose certain extensions. We can always
@@ -459,7 +469,7 @@ impl Host {
     }
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (instance, _) = InstanceState::from_clap_host_ptr(host);
 
         // This flag will be reset at the start of one of the `ProcessingTest::run*` functions, and
@@ -469,7 +479,7 @@ impl Host {
     }
 
     unsafe extern "C" fn request_process(host: *const clap_host) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
 
         // Handling this within the context of the validator would be a bit messy. Do plugins use
         // this?
@@ -477,7 +487,7 @@ impl Host {
     }
 
     unsafe extern "C" fn request_callback(host: *const clap_host) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (instance, this) = InstanceState::from_clap_host_ptr(host);
 
         // This this is either handled by `handle_callbacks_blocking()` while the audio thread is
@@ -492,7 +502,7 @@ impl Host {
         host: *const clap_host,
         _flag: u32,
     ) -> bool {
-        check_null_ptr!(false, host);
+        check_null_ptr!(false, host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_audio_ports::is_rescan_flag_supported()");
@@ -502,7 +512,7 @@ impl Host {
     }
 
     unsafe extern "C" fn ext_audio_ports_rescan(host: *const clap_host, _flags: u32) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_audio_ports::rescan()");
@@ -512,7 +522,7 @@ impl Host {
     unsafe extern "C" fn ext_note_ports_supported_dialects(
         host: *const clap_host,
     ) -> clap_note_dialect {
-        check_null_ptr!(0, host);
+        check_null_ptr!(0, host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_note_ports::supported_dialects()");
@@ -521,7 +531,7 @@ impl Host {
     }
 
     unsafe extern "C" fn ext_note_ports_rescan(host: *const clap_host, _flags: u32) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_note_ports::rescan()");
@@ -532,7 +542,7 @@ impl Host {
         host: *const clap_host,
         _flags: clap_param_rescan_flags,
     ) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_params::rescan()");
@@ -544,7 +554,7 @@ impl Host {
         _param_id: clap_id,
         _flags: clap_param_clear_flags,
     ) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_params::clear()");
@@ -552,7 +562,7 @@ impl Host {
     }
 
     unsafe extern "C" fn ext_params_request_flush(host: *const clap_host) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_not_audio_thread("clap_host_params::request_flush()");
@@ -560,7 +570,7 @@ impl Host {
     }
 
     unsafe extern "C" fn ext_state_mark_dirty(host: *const clap_host) {
-        check_null_ptr!((), host);
+        check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.assert_main_thread("clap_host_state::mark_dirty()");
@@ -568,14 +578,14 @@ impl Host {
     }
 
     unsafe extern "C" fn ext_thread_check_is_main_thread(host: *const clap_host) -> bool {
-        check_null_ptr!(false, host);
+        check_null_ptr!(false, host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         std::thread::current().id() == this.main_thread_id
     }
 
     unsafe extern "C" fn ext_thread_check_is_audio_thread(host: *const clap_host) -> bool {
-        check_null_ptr!(false, host);
+        check_null_ptr!(false, host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
         this.is_audio_thread(std::thread::current().id())
