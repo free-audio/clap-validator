@@ -12,9 +12,12 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::str::FromStr;
+use strum::IntoEnumIterator;
 
 use crate::util;
 
@@ -56,20 +59,10 @@ pub enum TestStatus {
 
 /// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
 /// (per library and per plugin), and it's good to keep the interface uniform.
-pub trait TestCase<'a>: Sized + 'static {
+pub trait TestCase<'a>: Display + FromStr + IntoEnumIterator + Sized + 'static {
     /// The type of the arguments the test cases are parameterized over. This can be an instance of
     /// the plugin library and a plugin ID, or just the file path to the plugin library.
     type TestArgs;
-
-    /// All available test cases.
-    const ALL: &'static [Self];
-
-    /// Try to parse a test case's string representation as produced by
-    /// [`as_str()`][Self::as_str()]. Returns `None` if the test case name was not recognized.
-    fn from_str(string: &str) -> Option<Self>;
-
-    /// Get the string representation of this test case.
-    fn as_str(&self) -> &'static str;
 
     /// Get the textual description for a test case. This description won't contain any line breaks,
     /// but it may consist of multiple sentences.
@@ -133,7 +126,7 @@ pub trait TestCase<'a>: Sized + 'static {
             .context("Error while waiting on clap-validator to finish running the test")?;
         if !exit_status.success() {
             return Ok(TestResult {
-                name: self.as_str().to_string(),
+                name: self.to_string(),
                 description: self.description(),
                 status: TestStatus::Crashed {
                     details: exit_status.to_string(),
@@ -161,7 +154,7 @@ pub trait TestCase<'a>: Sized + 'static {
     fn temporary_file(&self, plugin_id: &str, name: &str) -> Result<(PathBuf, fs::File)> {
         let path = util::validator_temp_dir()
             .join(plugin_id)
-            .join(self.as_str())
+            .join(self.to_string())
             .join(name);
         if path.exists() {
             panic!(
@@ -182,7 +175,7 @@ pub trait TestCase<'a>: Sized + 'static {
     /// Create a [`TestResult`] for this test case.
     fn create_result(&self, status: TestStatus) -> TestResult {
         TestResult {
-            name: self.as_str().to_string(),
+            name: self.to_string(),
             description: self.description(),
             status,
         }

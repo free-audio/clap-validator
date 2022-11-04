@@ -13,51 +13,24 @@ use crate::plugin::library::PluginLibrary;
 
 use super::{TestCase, TestResult, TestStatus};
 
-const TEST_SCAN_TIME: &str = "scan-time";
-const TEST_QUERY_NONEXISTENT_FACTORY: &str = "query-factory-nonexistent";
-const TEST_CREATE_ID_WITH_TRAILING_GARBAGE: &str = "create-id-with-trailing-garbage";
-
 const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 
 /// Tests for entire CLAP libraries. These are mostly to ensure good plugin scanning practices. See
 /// the module's heading for more information, and the `description` function below for a
 /// description of each test case.
+#[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter)]
 pub enum PluginLibraryTestCase {
+    #[strum(serialize = "scan-time")]
     ScanTime,
+    #[strum(serialize = "query-factory-nonexistent")]
     QueryNonexistentFactory,
+    #[strum(serialize = "create-id-with-trailing-garbage")]
     CreateIdWithTrailingGarbage,
 }
 
 impl<'a> TestCase<'a> for PluginLibraryTestCase {
     /// The path to a CLAP plugin library.
     type TestArgs = &'a Path;
-
-    const ALL: &'static [Self] = &[
-        PluginLibraryTestCase::ScanTime,
-        PluginLibraryTestCase::QueryNonexistentFactory,
-        PluginLibraryTestCase::CreateIdWithTrailingGarbage,
-    ];
-
-    fn from_str(string: &str) -> Option<Self> {
-        match string {
-            TEST_SCAN_TIME => Some(PluginLibraryTestCase::ScanTime),
-            TEST_QUERY_NONEXISTENT_FACTORY => Some(PluginLibraryTestCase::QueryNonexistentFactory),
-            TEST_CREATE_ID_WITH_TRAILING_GARBAGE => {
-                Some(PluginLibraryTestCase::CreateIdWithTrailingGarbage)
-            }
-            _ => None,
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            PluginLibraryTestCase::ScanTime => TEST_SCAN_TIME,
-            PluginLibraryTestCase::QueryNonexistentFactory => TEST_QUERY_NONEXISTENT_FACTORY,
-            PluginLibraryTestCase::CreateIdWithTrailingGarbage => {
-                TEST_CREATE_ID_WITH_TRAILING_GARBAGE
-            }
-        }
-    }
 
     fn description(&self) -> String {
         match self {
@@ -77,7 +50,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     }
 
     fn set_out_of_process_args(&self, command: &mut Command, library_path: Self::TestArgs) {
-        let test_name = self.as_str();
+        let test_name = self.to_string();
 
         command
             .arg(

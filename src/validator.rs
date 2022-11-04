@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+use strum::IntoEnumIterator;
 
 use crate::plugin::library::PluginLibrary;
 use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult, TestStatus};
@@ -147,12 +148,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
         // mode makes a bit more sense. Otherwise we would be measuring plugin scanning time on
         // libraries that may still be loaded in the process.
         let mut plugin_library_results = Vec::new();
-        for test in PluginLibraryTestCase::ALL {
+        for test in PluginLibraryTestCase::iter() {
+            let test_name = test.to_string();
             match (&test_filter_re, settings.invert_filter) {
-                (Some(test_filter_re), false) if !test_filter_re.is_match(test.as_str()) => {
-                    continue
-                }
-                (Some(test_filter_re), true) if test_filter_re.is_match(test.as_str()) => continue,
+                (Some(test_filter_re), false) if !test_filter_re.is_match(&test_name) => continue,
+                (Some(test_filter_re), true) if test_filter_re.is_match(&test_name) => continue,
                 _ => (),
             }
 
@@ -207,14 +207,13 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
             }
 
             let mut plugin_test_results = Vec::new();
-            for test in PluginTestCase::ALL {
+            for test in PluginTestCase::iter() {
+                let test_name = test.to_string();
                 match (&test_filter_re, settings.invert_filter) {
-                    (Some(test_filter_re), false) if !test_filter_re.is_match(test.as_str()) => {
+                    (Some(test_filter_re), false) if !test_filter_re.is_match(&test_name) => {
                         continue
                     }
-                    (Some(test_filter_re), true) if test_filter_re.is_match(test.as_str()) => {
-                        continue
-                    }
+                    (Some(test_filter_re), true) if test_filter_re.is_match(&test_name) => continue,
                     _ => (),
                 }
 
@@ -248,7 +247,9 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
     let result = match settings.test_type {
         SingleTestType::PluginLibrary => {
-            let test_case = PluginLibraryTestCase::from_str(&settings.name)
+            let test_case = settings
+                .name
+                .parse::<PluginLibraryTestCase>()
                 .with_context(|| format!("Unknown test name: {}", &settings.name))?;
 
             test_case.run_in_process(&settings.path)
@@ -256,7 +257,9 @@ pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
         SingleTestType::Plugin => {
             let plugin_library = PluginLibrary::load(&settings.path)
                 .with_context(|| format!("Could not load '{}'", settings.path.display()))?;
-            let test_case = PluginTestCase::from_str(&settings.name)
+            let test_case = settings
+                .name
+                .parse::<PluginTestCase>()
                 .with_context(|| format!("Unknown test name: {}", &settings.name))?;
 
             test_case.run_in_process((&plugin_library, &settings.plugin_id))
