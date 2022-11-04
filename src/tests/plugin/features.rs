@@ -5,6 +5,7 @@ use clap_sys::plugin_features::{
     CLAP_PLUGIN_FEATURE_ANALYZER, CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_INSTRUMENT,
     CLAP_PLUGIN_FEATURE_NOTE_EFFECT,
 };
+use std::collections::HashSet;
 
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
@@ -35,6 +36,30 @@ pub fn test_category_features(library: &PluginLibrary, plugin_id: &str) -> TestS
                  \"{instrument_feature}\", \"{audio_effect_feature}\", \"{note_effect_feature}\", \
                  or \"{analyzer_feature}\""
             )
+        }
+    });
+
+    match result {
+        Ok(status) => status,
+        Err(err) => TestStatus::Failed {
+            details: Some(format!("{err:#}")),
+        },
+    }
+}
+
+/// Confirm that the plugin does not have any duplicate features.
+pub fn test_duplicate_features(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+    let result = plugin_features(library, plugin_id).and_then(|mut features| {
+        let unique_features: HashSet<&str> =
+            features.iter().map(|feature| feature.as_str()).collect();
+
+        if unique_features.len() == features.len() {
+            Ok(TestStatus::Success { details: None })
+        } else {
+            // We'll sort the features first to make spotting the duplicates easier
+            features.sort_unstable();
+
+            anyhow::bail!("The plugin has duplicate features: {features:?}")
         }
     });
 

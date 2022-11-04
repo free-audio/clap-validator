@@ -12,6 +12,7 @@ mod processing;
 mod state;
 
 const TEST_CATEGORY_FEATURES: &str = "features-categories";
+const TEST_DUPLICATE_FEATURES: &str = "features-duplicates";
 const TEST_BASIC_OUT_OF_PLACE_AUDIO_PROCESSING: &str = "process-audio-out-of-place-basic";
 const TEST_BASIC_OUT_OF_PLACE_NOTE_PROCESSING: &str = "process-note-out-of-place-basic";
 const TEST_INCONSISTENT_NOTE_PROCESSING: &str = "process-note-inconsistent";
@@ -26,6 +27,7 @@ const TEST_BUFFERED_STATE_STREAMS: &str = "state-buffered-streams";
 /// `description` function below for a description of each test case.
 pub enum PluginTestCase {
     CategoryFeatures,
+    DuplicateFeatures,
     BasicOutOfPlaceAudioProcessing,
     BasicOutOfPlaceNoteProcessing,
     InconsistentNoteProcessing,
@@ -44,6 +46,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     const ALL: &'static [Self] = &[
         PluginTestCase::CategoryFeatures,
+        PluginTestCase::DuplicateFeatures,
         PluginTestCase::BasicOutOfPlaceAudioProcessing,
         PluginTestCase::BasicOutOfPlaceNoteProcessing,
         PluginTestCase::InconsistentNoteProcessing,
@@ -58,6 +61,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
     fn from_str(string: &str) -> Option<Self> {
         match string {
             TEST_CATEGORY_FEATURES => Some(PluginTestCase::CategoryFeatures),
+            TEST_DUPLICATE_FEATURES => Some(PluginTestCase::DuplicateFeatures),
             TEST_BASIC_OUT_OF_PLACE_AUDIO_PROCESSING => {
                 Some(PluginTestCase::BasicOutOfPlaceAudioProcessing)
             }
@@ -80,6 +84,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
     fn as_str(&self) -> &'static str {
         match self {
             PluginTestCase::CategoryFeatures => TEST_CATEGORY_FEATURES,
+            PluginTestCase::DuplicateFeatures => TEST_DUPLICATE_FEATURES,
             PluginTestCase::BasicOutOfPlaceAudioProcessing => {
                 TEST_BASIC_OUT_OF_PLACE_AUDIO_PROCESSING
             }
@@ -103,6 +108,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::CategoryFeatures => String::from(
                 "The plugin needs to have at least one of the main CLAP category features.",
             ),
+            PluginTestCase::DuplicateFeatures => {
+                String::from("The plugin's features array should not contain any duplicates.")
+            }
             PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from(
                 "Processes random audio through the plugin with its default parameter values and \
                  tests whether the output does not contain any non-finite or subnormal values. \
@@ -174,6 +182,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
         let status = match self {
             PluginTestCase::CategoryFeatures => {
                 features::test_category_features(library, plugin_id)
+            }
+            PluginTestCase::DuplicateFeatures => {
+                features::test_duplicate_features(library, plugin_id)
             }
             PluginTestCase::BasicOutOfPlaceAudioProcessing => {
                 processing::test_basic_out_of_place_audio_processing(library, plugin_id)
