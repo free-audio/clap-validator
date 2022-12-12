@@ -6,7 +6,7 @@ license = "MIT"
 
 description = "A validator and automatic test suite for CLAP plugins"
 readme = "README.md"
-repository = "https://github.com/robbert-vdh/clap-validator"
+repository = "https://github.com/free-audio/clap-validator"
 
 [dependencies]
 anyhow = "1.0.58"
