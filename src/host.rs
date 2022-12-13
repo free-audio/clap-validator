@@ -140,7 +140,7 @@ impl InstanceState {
                 host_data: std::ptr::null_mut(),
                 name: b"clap-validator\0".as_ptr() as *const c_char,
                 vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
-                url: b"https://github.com/robbert-vdh/clap-validator\0".as_ptr() as *const c_char,
+                url: b"https://github.com/free-audio/clap-validator\0".as_ptr() as *const c_char,
                 version: b"0.1.0\0".as_ptr() as *const c_char,
                 get_extension: Some(Host::get_extension),
                 request_restart: Some(Host::request_restart),
