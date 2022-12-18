@@ -172,12 +172,16 @@ pub trait TestCase<'a>: Display + FromStr + IntoEnumIterator + Sized + 'static {
         Ok((path, file))
     }
 
-    /// Create a [`TestResult`] for this test case.
-    fn create_result(&self, status: TestStatus) -> TestResult {
+    /// Create a [`TestResult`] for this test case. The test status is wrapped in an anyhow
+    /// [`Result`] to make writing test cases more ergonomic using the question mark operator. `Err`
+    /// values are converted to [`TestStatus::Failed`] statuses containing the full error backtrace.
+    fn create_result(&self, status: Result<TestStatus>) -> TestResult {
         TestResult {
             name: self.to_string(),
             description: self.description(),
-            status,
+            status: status.unwrap_or_else(|err| TestStatus::Failed {
+                details: Some(format!("{err:#}")),
+            }),
         }
     }
 }

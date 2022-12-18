@@ -286,9 +286,8 @@ impl ValidationResult {
         let mut num_skipped = 0;
         for test in self
             .plugin_library_tests
-            .iter()
-            .map(|(_, test)| test)
-            .chain(self.plugin_tests.iter().map(|(_, test)| test))
+            .values()
+            .chain(self.plugin_tests.values())
             .flatten()
         {
             match test.status {

@@ -202,54 +202,48 @@ impl<'a> ProcessingTest<'a> {
 pub fn test_basic_out_of_place_audio_processing(
     library: &PluginLibrary,
     plugin_id: &str,
-) -> TestStatus {
+) -> Result<TestStatus> {
     let mut prng = new_prng();
 
     let host = Host::new();
-    let result = library
+    let plugin = library
         .create_plugin(plugin_id, host.clone())
-        .context("Could not create the plugin instance")
-        .and_then(|plugin| {
-            plugin.init().context("Error during initialization")?;
+        .context("Could not create the plugin instance")?;
+    plugin.init().context("Error during initialization")?;
 
-            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                Some(audio_ports) => audio_ports
-                    .config()
-                    .context("Error while querying 'audio-ports' IO configuration")?,
-                None => {
-                    return Ok(TestStatus::Skipped {
-                        details: Some(String::from(
-                            "The plugin does not support the 'audio-ports' extension.",
-                        )),
-                    })
-                }
-            };
-            // Handle callbacks the plugin may have made during init or these queries. The
-            // `ProcessingTest::run*` functions will implicitly handle all outstanding callbacks
-            // before they return.
-            host.handle_callbacks_once();
+    let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+        Some(audio_ports) => audio_ports
+            .config()
+            .context("Error while querying 'audio-ports' IO configuration")?,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(String::from(
+                    "The plugin does not support the 'audio-ports' extension.",
+                )),
+            })
+        }
+    };
+    // Handle callbacks the plugin may have made during init or these queries. The
+    // `ProcessingTest::run*` functions will implicitly handle all outstanding callbacks before they
+    // return.
+    host.handle_callbacks_once();
 
-            let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
-            ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
-                .run(5, ProcessConfig::default(), |process_data| {
-                    process_data.buffers.randomize(&mut prng);
+    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
+    ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?.run(
+        5,
+        ProcessConfig::default(),
+        |process_data| {
+            process_data.buffers.randomize(&mut prng);
 
-                    Ok(())
-                })?;
-
-            // The `Host` contains built-in thread safety checks
-            host.thread_safety_check()
-                .context("Thread safety checks failed")?;
-
-            Ok(TestStatus::Success { details: None })
-        });
-
-    match result {
-        Ok(status) => status,
-        Err(err) => TestStatus::Failed {
-            details: Some(format!("{err:#}")),
+            Ok(())
         },
-    }
+    )?;
+
+    // The `Host` contains built-in thread safety checks
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
+
+    Ok(TestStatus::Success { details: None })
 }
 
 /// The test for `ProcessingTest::BasicOutOfPlaceNoteProcessing`. This test is very similar to
@@ -258,152 +252,139 @@ pub fn test_basic_out_of_place_audio_processing(
 pub fn test_basic_out_of_place_note_processing(
     library: &PluginLibrary,
     plugin_id: &str,
-) -> TestStatus {
+) -> Result<TestStatus> {
     let mut prng = new_prng();
 
     let host = Host::new();
-    let result = library
+    let plugin = library
         .create_plugin(plugin_id, host.clone())
-        .context("Could not create the plugin instance")
-        .and_then(|plugin| {
-            plugin.init().context("Error during initialization")?;
+        .context("Could not create the plugin instance")?;
+    plugin.init().context("Error during initialization")?;
 
-            // You can have note/MIDI-only plugins, so not having any audio ports is perfectly fine
-            // here
-            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                Some(audio_ports) => audio_ports
-                    .config()
-                    .context("Error while querying 'audio-ports' IO configuration")?,
-                None => AudioPortConfig::default(),
-            };
-            let note_port_config = match plugin.get_extension::<NotePorts>() {
-                Some(note_ports) => note_ports
-                    .config()
-                    .context("Error while querying 'note-ports' IO configuration")?,
-                None => {
-                    return Ok(TestStatus::Skipped {
-                        details: Some(String::from(
-                            "The plugin does not implement the 'note-ports' extension.",
-                        )),
-                    })
-                }
-            };
-            if note_port_config.inputs.is_empty() {
-                return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin implements the 'note-ports' extension but it does not have \
-                         any input note ports.",
-                    )),
-                });
-            }
-            host.handle_callbacks_once();
-
-            // We'll fill the input event queue with (consistent) random CLAP note and/or MIDI
-            // events depending on what's supported by the plugin supports
-            let mut note_event_rng = NoteGenerator::new(note_port_config);
-
-            const BUFFER_SIZE: usize = 512;
-            let (mut input_buffers, mut output_buffers) =
-                audio_ports_config.create_buffers(BUFFER_SIZE);
-            ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
-                .run(5, ProcessConfig::default(), |process_data| {
-                    note_event_rng.fill_event_queue(
-                        &mut prng,
-                        &process_data.input_events,
-                        BUFFER_SIZE as u32,
-                    )?;
-                    process_data.buffers.randomize(&mut prng);
-
-                    Ok(())
-                })?;
-
-            host.thread_safety_check()
-                .context("Thread safety checks failed")?;
-
-            Ok(TestStatus::Success { details: None })
+    // You can have note/MIDI-only plugins, so not having any audio ports is perfectly fine here
+    let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+        Some(audio_ports) => audio_ports
+            .config()
+            .context("Error while querying 'audio-ports' IO configuration")?,
+        None => AudioPortConfig::default(),
+    };
+    let note_port_config = match plugin.get_extension::<NotePorts>() {
+        Some(note_ports) => note_ports
+            .config()
+            .context("Error while querying 'note-ports' IO configuration")?,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(String::from(
+                    "The plugin does not implement the 'note-ports' extension.",
+                )),
+            })
+        }
+    };
+    if note_port_config.inputs.is_empty() {
+        return Ok(TestStatus::Skipped {
+            details: Some(String::from(
+                "The plugin implements the 'note-ports' extension but it does not have any input \
+                 note ports.",
+            )),
         });
-
-    match result {
-        Ok(status) => status,
-        Err(err) => TestStatus::Failed {
-            details: Some(format!("{err:#}")),
-        },
     }
+    host.handle_callbacks_once();
+
+    // We'll fill the input event queue with (consistent) random CLAP note and/or MIDI
+    // events depending on what's supported by the plugin supports
+    let mut note_event_rng = NoteGenerator::new(note_port_config);
+
+    const BUFFER_SIZE: usize = 512;
+    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
+    ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?.run(
+        5,
+        ProcessConfig::default(),
+        |process_data| {
+            note_event_rng.fill_event_queue(
+                &mut prng,
+                &process_data.input_events,
+                BUFFER_SIZE as u32,
+            )?;
+            process_data.buffers.randomize(&mut prng);
+
+            Ok(())
+        },
+    )?;
+
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
+
+    Ok(TestStatus::Success { details: None })
 }
 
 /// The test for `ProcessingTest::InconsistentNoteProcessing`. This is the same test as
 /// `BasicOutOfPlaceNoteProcessing`, but without requiring matched note on/off pairs and similar
 /// invariants
-pub fn test_inconsistent_note_processing(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
+pub fn test_inconsistent_note_processing(
+    library: &PluginLibrary,
+    plugin_id: &str,
+) -> Result<TestStatus> {
     let mut prng = new_prng();
 
     let host = Host::new();
-    let result = library
+    let plugin = library
         .create_plugin(plugin_id, host.clone())
-        .context("Could not create the plugin instance")
-        .and_then(|plugin| {
-            plugin.init().context("Error during initialization")?;
+        .context("Could not create the plugin instance")?;
+    plugin.init().context("Error during initialization")?;
 
-            let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
-                Some(audio_ports) => audio_ports
-                    .config()
-                    .context("Error while querying 'audio-ports' IO configuration")?,
-                None => AudioPortConfig::default(),
-            };
-            let note_port_config = match plugin.get_extension::<NotePorts>() {
-                Some(note_ports) => note_ports
-                    .config()
-                    .context("Error while querying 'note-ports' IO configuration")?,
-                None => {
-                    return Ok(TestStatus::Skipped {
-                        details: Some(String::from(
-                            "The plugin does not implement the 'note-ports' extension.",
-                        )),
-                    })
-                }
-            };
-            if note_port_config.inputs.is_empty() {
-                return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin implements the 'note-ports' extension but it does not have \
-                         any input note ports.",
-                    )),
-                });
-            }
-            host.handle_callbacks_once();
-
-            // This RNG (Random Note Generator) allows generates mismatching events
-            let mut note_event_rng =
-                NoteGenerator::new(note_port_config).with_inconsistent_events();
-
-            // TODO: Use in-place processing for this test
-            const BUFFER_SIZE: usize = 512;
-            let (mut input_buffers, mut output_buffers) =
-                audio_ports_config.create_buffers(BUFFER_SIZE);
-            ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
-                .run(5, ProcessConfig::default(), |process_data| {
-                    note_event_rng.fill_event_queue(
-                        &mut prng,
-                        &process_data.input_events,
-                        BUFFER_SIZE as u32,
-                    )?;
-                    process_data.buffers.randomize(&mut prng);
-
-                    Ok(())
-                })?;
-
-            host.thread_safety_check()
-                .context("Thread safety checks failed")?;
-
-            Ok(TestStatus::Success { details: None })
+    let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+        Some(audio_ports) => audio_ports
+            .config()
+            .context("Error while querying 'audio-ports' IO configuration")?,
+        None => AudioPortConfig::default(),
+    };
+    let note_port_config = match plugin.get_extension::<NotePorts>() {
+        Some(note_ports) => note_ports
+            .config()
+            .context("Error while querying 'note-ports' IO configuration")?,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(String::from(
+                    "The plugin does not implement the 'note-ports' extension.",
+                )),
+            })
+        }
+    };
+    if note_port_config.inputs.is_empty() {
+        return Ok(TestStatus::Skipped {
+            details: Some(String::from(
+                "The plugin implements the 'note-ports' extension but it does not have any input \
+                 note ports.",
+            )),
         });
-
-    match result {
-        Ok(status) => status,
-        Err(err) => TestStatus::Failed {
-            details: Some(format!("{err:#}")),
-        },
     }
+    host.handle_callbacks_once();
+
+    // This RNG (Random Note Generator) allows generates mismatching events
+    let mut note_event_rng = NoteGenerator::new(note_port_config).with_inconsistent_events();
+
+    // TODO: Use in-place processing for this test
+    const BUFFER_SIZE: usize = 512;
+    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
+    ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?.run(
+        5,
+        ProcessConfig::default(),
+        |process_data| {
+            note_event_rng.fill_event_queue(
+                &mut prng,
+                &process_data.input_events,
+                BUFFER_SIZE as u32,
+            )?;
+            process_data.buffers.randomize(&mut prng);
+
+            Ok(())
+        },
+    )?;
+
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
+
+    Ok(TestStatus::Success { details: None })
 }
 
 /// The process for consistency. This verifies that the output buffer doesn't contain any NaN,

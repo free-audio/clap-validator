@@ -12,62 +12,46 @@ use crate::tests::TestStatus;
 
 /// Check whether the plugin's categories are consistent. Currently this just makes sure that the
 /// plugin has one of the four main plugin category features.
-pub fn test_category_features(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
-    let result = plugin_features(library, plugin_id).and_then(|features| {
-        // These are stored in the bindings as C-compatible null terminated strings, but we'll
-        // need them as regular string slices so we can compare them to
-        let instrument_feature = CLAP_PLUGIN_FEATURE_INSTRUMENT.to_str().unwrap();
-        let audio_effect_feature = CLAP_PLUGIN_FEATURE_AUDIO_EFFECT.to_str().unwrap();
-        let note_effect_feature = CLAP_PLUGIN_FEATURE_NOTE_EFFECT.to_str().unwrap();
-        let analyzer_feature = CLAP_PLUGIN_FEATURE_ANALYZER.to_str().unwrap();
+pub fn test_category_features(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+    let features = plugin_features(library, plugin_id)?;
 
-        let has_main_category = features.iter().any(|feature| -> bool {
-            feature == instrument_feature
-                || feature == audio_effect_feature
-                || feature == note_effect_feature
-                || feature == analyzer_feature
-        });
+    // These are stored in the bindings as C-compatible null terminated strings, but we'll need them
+    // as regular string slices so we can compare them to
+    let instrument_feature = CLAP_PLUGIN_FEATURE_INSTRUMENT.to_str().unwrap();
+    let audio_effect_feature = CLAP_PLUGIN_FEATURE_AUDIO_EFFECT.to_str().unwrap();
+    let note_effect_feature = CLAP_PLUGIN_FEATURE_NOTE_EFFECT.to_str().unwrap();
+    let analyzer_feature = CLAP_PLUGIN_FEATURE_ANALYZER.to_str().unwrap();
 
-        if has_main_category {
-            Ok(TestStatus::Success { details: None })
-        } else {
-            anyhow::bail!(
-                "The plugin needs to have at least one of thw following plugin category features: \
-                 \"{instrument_feature}\", \"{audio_effect_feature}\", \"{note_effect_feature}\", \
-                 or \"{analyzer_feature}\""
-            )
-        }
+    let has_main_category = features.iter().any(|feature| -> bool {
+        feature == instrument_feature
+            || feature == audio_effect_feature
+            || feature == note_effect_feature
+            || feature == analyzer_feature
     });
 
-    match result {
-        Ok(status) => status,
-        Err(err) => TestStatus::Failed {
-            details: Some(format!("{err:#}")),
-        },
+    if has_main_category {
+        Ok(TestStatus::Success { details: None })
+    } else {
+        anyhow::bail!(
+            "The plugin needs to have at least one of thw following plugin category features: \
+             \"{instrument_feature}\", \"{audio_effect_feature}\", \"{note_effect_feature}\", or \
+             \"{analyzer_feature}\""
+        )
     }
 }
 
 /// Confirm that the plugin does not have any duplicate features.
-pub fn test_duplicate_features(library: &PluginLibrary, plugin_id: &str) -> TestStatus {
-    let result = plugin_features(library, plugin_id).and_then(|mut features| {
-        let unique_features: HashSet<&str> =
-            features.iter().map(|feature| feature.as_str()).collect();
+pub fn test_duplicate_features(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+    let mut features = plugin_features(library, plugin_id)?;
+    let unique_features: HashSet<&str> = features.iter().map(|feature| feature.as_str()).collect();
 
-        if unique_features.len() == features.len() {
-            Ok(TestStatus::Success { details: None })
-        } else {
-            // We'll sort the features first to make spotting the duplicates easier
-            features.sort_unstable();
+    if unique_features.len() == features.len() {
+        Ok(TestStatus::Success { details: None })
+    } else {
+        // We'll sort the features first to make spotting the duplicates easier
+        features.sort_unstable();
 
-            anyhow::bail!("The plugin has duplicate features: {features:?}")
-        }
-    });
-
-    match result {
-        Ok(status) => status,
-        Err(err) => TestStatus::Failed {
-            details: Some(format!("{err:#}")),
-        },
+        anyhow::bail!("The plugin has duplicate features: {features:?}")
     }
 }
 
