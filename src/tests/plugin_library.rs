@@ -32,7 +32,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     fn description(&self) -> String {
         match self {
             PluginLibraryTestCase::ScanTime => format!(
-                "Tests whether the plugin can be scanned in under {} milliseconds.",
+                "Checks whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
             ),
             PluginLibraryTestCase::QueryNonexistentFactory => String::from(

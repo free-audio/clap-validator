@@ -55,10 +55,13 @@ pub fn test_scan_time(library_path: &Path) -> Result<TestStatus> {
             )),
         })
     } else {
-        // TODO: This should be a non-fatal warning instead
-        anyhow::bail!(
-            "The plugin took {} milliseconds to scan",
-            init_duration.as_millis()
-        );
+        // This should not be treated as a fatal error since the scanning time will dependon the
+        // system
+        Ok(TestStatus::Warning {
+            details: Some(format!(
+                "The plugin took {} milliseconds to scan",
+                init_duration.as_millis()
+            )),
+        })
     }
 }
