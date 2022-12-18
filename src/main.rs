@@ -146,6 +146,7 @@ fn main() -> ExitCode {
                             tests::TestStatus::Crashed { .. } => "CRASHED".red().bold(),
                             tests::TestStatus::Failed { .. } => "FAILED".red(),
                             tests::TestStatus::Skipped { .. } => "SKIPPED".yellow(),
+                            tests::TestStatus::Warning { .. } => "WARNING".yellow(),
                         };
                         let test_result = match test.status.details() {
                             Some(reason) => format!("     {}: {}", status_text, reason),
@@ -186,12 +187,13 @@ fn main() -> ExitCode {
 
                     let num_tests = tally.total();
                     println!(
-                        "{} {} run, {} passed, {} failed, {} skipped",
+                        "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
                         num_tests,
                         if num_tests == 1 { "test" } else { "tests" },
                         tally.num_passed,
                         tally.num_failed,
-                        tally.num_skipped
+                        tally.num_skipped,
+                        tally.num_warnings
                     )
                 }
 

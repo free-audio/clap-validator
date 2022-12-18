@@ -55,6 +55,10 @@ pub enum TestStatus {
     Failed { details: Option<String> },
     /// Preconditions for running the test were not met, so the test has been skipped.
     Skipped { details: Option<String> },
+    /// The test did not succeed, but this should not be treated as a hard failure. This is reserved
+    /// for tests involving runtime performance that might otherwise yield different results
+    /// depending on the target system.
+    Warning { details: Option<String> },
 }
 
 /// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
@@ -190,7 +194,9 @@ impl TestStatus {
     /// Returns `true` if this status should be considered as a failure.
     pub fn failed(&self) -> bool {
         match self {
-            TestStatus::Success { .. } | TestStatus::Skipped { .. } => false,
+            TestStatus::Success { .. }
+            | TestStatus::Skipped { .. }
+            | TestStatus::Warning { .. } => false,
             TestStatus::Crashed { .. } | TestStatus::Failed { .. } => true,
         }
     }
@@ -200,7 +206,8 @@ impl TestStatus {
         match self {
             TestStatus::Success { details }
             | TestStatus::Failed { details }
-            | TestStatus::Skipped { details } => details.as_deref(),
+            | TestStatus::Skipped { details }
+            | TestStatus::Warning { details } => details.as_deref(),
             TestStatus::Crashed { details } => Some(details),
         }
     }

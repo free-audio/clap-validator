@@ -39,6 +39,8 @@ pub struct ValidationTally {
     pub num_failed: u32,
     /// The number of skipped test cases.
     pub num_skipped: u32,
+    /// The number of test cases resulting in a warning.
+    pub num_warnings: u32,
 }
 
 /// Options for the validator.
@@ -284,6 +286,7 @@ impl ValidationResult {
         let mut num_passed = 0;
         let mut num_failed = 0;
         let mut num_skipped = 0;
+        let mut num_warnings = 0;
         for test in self
             .plugin_library_tests
             .values()
@@ -294,6 +297,7 @@ impl ValidationResult {
                 TestStatus::Success { .. } => num_passed += 1,
                 TestStatus::Crashed { .. } | TestStatus::Failed { .. } => num_failed += 1,
                 TestStatus::Skipped { .. } => num_skipped += 1,
+                TestStatus::Warning { .. } => num_warnings += 1,
             }
         }
 
@@ -301,6 +305,7 @@ impl ValidationResult {
             num_passed,
             num_failed,
             num_skipped,
+            num_warnings,
         }
     }
 }
