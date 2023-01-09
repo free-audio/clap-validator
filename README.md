@@ -6,8 +6,13 @@ A validator and automatic test suite for [CLAP](https://github.com/free-audio/cl
 
 ## Download
 
-Prebuilt binaries can be found
+Prebuilt binaries can be found on the [releases
+page](https://github.com/free-audio/clap-validator/releases). Development builds
+can be found
 [here](https://nightly.link/free-audio/clap-validator/workflows/build/master).
+The macOS builds are unsigned and may require Gatekeeper to be disabled or the
+quarantine bit to be removed
+([instructions](https://disable-gatekeeper.github.io/)).
 
 ### Usage
 
