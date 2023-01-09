@@ -160,8 +160,8 @@ fn main() -> ExitCode {
                             tests::TestStatus::Warning { .. } => "WARNING".yellow(),
                         };
                         let test_result = match test.status.details() {
-                            Some(reason) => format!("     {}: {}", status_text, reason),
-                            None => format!("     {}", status_text),
+                            Some(reason) => format!("     {status_text}: {reason}"),
+                            None => format!("     {status_text}"),
                         };
                         print_wrapped(test_result);
                     };
@@ -185,7 +185,7 @@ fn main() -> ExitCode {
                         println!("Plugin tests:");
                         for (plugin_id, tests) in result.plugin_tests {
                             println!();
-                            println!(" - {}", plugin_id);
+                            println!(" - {plugin_id}");
 
                             for test in tests {
                                 println!();
@@ -261,7 +261,7 @@ fn main() -> ExitCode {
                         // Whether it makes sense to always show optional fields or not depends on
                         // the field
                         if let Some(description) = plugin.description {
-                            println!("   {}", description);
+                            println!("   {description}");
                         }
                         println!();
                         println!(
@@ -269,10 +269,10 @@ fn main() -> ExitCode {
                             plugin.vendor.as_deref().unwrap_or("(unknown)"),
                         );
                         if let Some(manual_url) = plugin.manual_url {
-                            println!("   manual url: {}", manual_url);
+                            println!("   manual url: {manual_url}");
                         }
                         if let Some(support_url) = plugin.support_url {
-                            println!("   support url: {}", support_url);
+                            println!("   support url: {support_url}");
                         }
                         println!("   features: [{}]", plugin.features.join(", "));
                     }

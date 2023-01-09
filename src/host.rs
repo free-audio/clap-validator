@@ -402,16 +402,14 @@ impl Host {
             match *thread_safety_error {
                 None if current_thread_id == self.main_thread_id => {
                     *thread_safety_error = Some(format!(
-                        "'{}' may only be called from an audio thread, but it was called from the \
-                         main thread",
-                        function_name,
+                        "'{function_name}' may only be called from an audio thread, but it was \
+                         called from the main thread"
                     ))
                 }
                 None => {
                     *thread_safety_error = Some(format!(
-                        "'{}' may only be called from an audio thread, but it was called from an \
-                         unknown thread",
-                        function_name,
+                        "'{function_name}' may only be called from an audio thread, but it was \
+                         called from an unknown thread"
                     ))
                 }
                 _ => (),
@@ -428,8 +426,7 @@ impl Host {
             let mut thread_safety_error = self.thread_safety_error.borrow_mut();
             if thread_safety_error.is_none() {
                 *thread_safety_error = Some(format!(
-                    "'{}' was called from an audio thread, this is not allowed",
-                    function_name,
+                    "'{function_name}' was called from an audio thread, this is not allowed",
                 ))
             }
         }
