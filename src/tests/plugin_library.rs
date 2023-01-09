@@ -19,6 +19,8 @@ const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 pub enum PluginLibraryTestCase {
     #[strum(serialize = "scan-time")]
     ScanTime,
+    #[strum(serialize = "scan-rtld-now")]
+    ScanRtldNow,
     #[strum(serialize = "query-factory-nonexistent")]
     QueryNonexistentFactory,
     #[strum(serialize = "create-id-with-trailing-garbage")]
@@ -34,6 +36,10 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             PluginLibraryTestCase::ScanTime => format!(
                 "Checks whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
+            ),
+            PluginLibraryTestCase::ScanRtldNow => String::from(
+                "Checks whether the plugin loads correctly when loaded using 'dlopen(..., \
+                 RTLD_LOCAL | RTLD_NOW)'. Only run on Unix-like platforms.",
             ),
             PluginLibraryTestCase::QueryNonexistentFactory => String::from(
                 "Tries to query a factory from the plugin's entry point with a non-existent ID. \
@@ -67,6 +73,7 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
         let status = match self {
             PluginLibraryTestCase::ScanTime => scanning::test_scan_time(library_path),
+            PluginLibraryTestCase::ScanRtldNow => scanning::test_scan_rtld_now(library_path),
             PluginLibraryTestCase::QueryNonexistentFactory => {
                 factories::test_query_nonexistent_factory(library_path)
             }

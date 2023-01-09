@@ -65,3 +65,36 @@ pub fn test_scan_time(library_path: &Path) -> Result<TestStatus> {
         })
     }
 }
+
+/// The test for `PluginLibraryTestCase::ScanRtldNow`.
+#[cfg(unix)]
+pub fn test_scan_rtld_now(library_path: &Path) -> Result<TestStatus> {
+    // The plugin may have issues resolving certain symbols. This should help catch this upfront.
+    PluginLibrary::load_with(library_path, |path| {
+        unsafe {
+            libloading::os::unix::Library::open(
+                Some(path),
+                libloading::os::unix::RTLD_LOCAL | libloading::os::unix::RTLD_NOW,
+            )
+        }
+        .map(libloading::Library::from)
+        .context("Could not load the plugin library using 'RTLD_LOCAL | RTLD_NOW'")
+    })
+    .with_context(|| {
+        format!(
+            "Could not load '{}' using 'RTLD_NOW",
+            library_path.display()
+        )
+    })?;
+
+    Ok(TestStatus::Success { details: None })
+}
+
+#[cfg(not(unix))]
+pub fn test_scan_rtld_now(library_path: &Path) -> Result<TestStatus> {
+    Ok(TestStatus::Skipped {
+        details: Some(String::from(
+            "This test is only relevant to Unix-like platforms",
+        )),
+    })
+}
