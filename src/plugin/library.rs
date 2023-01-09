@@ -61,6 +61,17 @@ impl PluginLibrary {
     /// Load a CLAP plugin from a path to a `.clap` file or bundle. This will return an error if the
     /// plugin could not be loaded.
     pub fn load(path: impl AsRef<Path>) -> Result<PluginLibrary> {
+        Self::load_with(path, |path| {
+            unsafe { libloading::Library::new(path) }.context("Could not load the plugin library")
+        })
+    }
+
+    /// The same as [`load()`][`Self::load()`], but with a custom library loading function. Useful
+    /// for testing different `dlopen()` options.
+    pub fn load_with(
+        path: impl AsRef<Path>,
+        load: impl FnOnce(&Path) -> Result<libloading::Library>,
+    ) -> Result<PluginLibrary> {
         // NOTE: We'll always make sure `path` is either relative to the current directory or
         //       absolute. Otherwise the system libraries may be searched instead which would lead
         //       to unexpected behavior. Joining an absolute path to a relative directory gets you
@@ -86,8 +97,7 @@ impl PluginLibrary {
                 .to_path()
                 .context("Could not convert bundle executable path")?
         };
-        let library = unsafe { libloading::Library::new(&path) }
-            .context("Could not load the plugin library")?;
+        let library = load(&path)?;
 
         // The entry point needs to be initialized before it can be used. It will be deinitialized
         // when the `Plugin` object is dropped.
