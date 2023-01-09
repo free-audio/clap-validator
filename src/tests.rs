@@ -61,7 +61,7 @@ pub enum TestStatus {
     Warning { details: Option<String> },
 }
 
-/// Stores all of the available tests. Used solely for pretty printing purposes in `clapvalidator
+/// Stores all of the available tests. Used solely for pretty printing purposes in `clap-validator
 /// list tests`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
