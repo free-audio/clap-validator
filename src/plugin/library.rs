@@ -71,24 +71,21 @@ impl PluginLibrary {
 
         // NOTE: Apple says you can dlopen() bundles. This is a lie.
         #[cfg(target_os = "macos")]
-        let library = {
+        let path = {
             use core_foundation::bundle::CFBundle;
             use core_foundation::url::CFURL;
 
             let bundle =
-                CFBundle::new(CFURL::from_path(&path, true).context("Could not create CFURL")?)
+                CFBundle::new(CFURL::from_path(path, true).context("Could not create CFURL")?)
                     .context("Could not open bundle")?;
             let executable = bundle
                 .executable_url()
                 .context("Could not get executable URL within bundle")?;
 
-            let executable_path = executable
+            executable
                 .to_path()
-                .context("Could not convert bundle executable path")?;
-            unsafe { libloading::Library::new(&executable_path) }
-                .context("Could not load the plugin library in the bundle")?
+                .context("Could not convert bundle executable path")?
         };
-        #[cfg(not(target_os = "macos"))]
         let library = unsafe { libloading::Library::new(&path) }
             .context("Could not load the plugin library")?;
 
