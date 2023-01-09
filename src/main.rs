@@ -38,8 +38,7 @@ enum Verbosity {
     Trace,
 }
 
-/// The validator's subcommands. To be able to also add scanning functionality later (because why
-/// not?), validate is a subcommand.
+/// The validator's subcommands.
 #[derive(Subcommand)]
 enum Commands {
     /// Validate one or more plugins.
@@ -50,10 +49,16 @@ enum Commands {
     /// option is not shown in the CLI.
     #[command(hide = true)]
     RunSingleTest(SingleTestSettings),
-    // TODO: A hidden subcommand for running a single test for a single plugin. Used by the out of
-    //       process mode
+    /// Subcommands for listing data about the tests or the installed plugins.
+    #[command(subcommand)]
+    List(ListCommands),
+}
+
+/// Subcommands for listing data about the tests or the installed plugins.
+#[derive(Subcommand)]
+enum ListCommands {
     /// Lists basic information about all installed CLAP plugins.
-    List {
+    Plugins {
         /// Print JSON instead of a human readable format.
         #[arg(short, long)]
         json: bool,
@@ -210,7 +215,7 @@ fn main() -> ExitCode {
             Ok(()) => (),
             Err(err) => log::error!("Could not run test the case: {err:#}"),
         },
-        Commands::List { json } => {
+        Commands::List(ListCommands::Plugins { json }) => {
             let plugin_index = index::index();
 
             if *json {

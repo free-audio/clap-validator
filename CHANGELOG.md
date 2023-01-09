@@ -12,6 +12,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The test verifying that the plugin can be scanned in under 100 milliseconds
   now emits a non-fatal warning on failure rather than an error.
+- The `clap-validator list` command to print a list of installed plugins is now
+  `clap-validator list plugins`.
 
 ## [0.1.0] - 2022-12-12
 
