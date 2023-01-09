@@ -49,6 +49,8 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<T
 
     let mut num_supported_value_to_text = 0;
     let mut num_supported_text_to_value = 0;
+    let mut failed_value_to_text_calls: Vec<(String, f64)> = Vec::new();
+    let mut failed_text_to_value_calls: Vec<(String, String)> = Vec::new();
     'param_loop: for (param_id, param_info) in param_infos {
         let param_name = &param_info.name;
 
@@ -69,7 +71,10 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<T
             // representation
             let starting_text = match params.value_to_text(param_id, starting_value)? {
                 Some(text) => text,
-                None => continue 'param_loop,
+                None => {
+                    failed_value_to_text_calls.push((param_name.to_owned(), starting_value));
+                    continue 'param_loop;
+                }
             };
             num_supported_value_to_text += 1;
             let reconverted_value = match params.text_to_value(param_id, &starting_text)? {
@@ -78,7 +83,10 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<T
                 // value provided by the plugin, but if the plugin doesn't
                 // support this then we should still continue testing
                 // whether the value to text conversion works consistently
-                None => continue 'value_loop,
+                None => {
+                    failed_text_to_value_calls.push((param_name.to_owned(), starting_text));
+                    continue 'value_loop;
+                }
             };
             num_supported_text_to_value += 1;
 
@@ -124,14 +132,16 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<T
         anyhow::bail!(
             "'clap_plugin_params::value_to_text()' returned true for \
              {num_supported_value_to_text} out of {expected_conversions} calls. This function is \
-             expected to be supported for either none of the parameters or for all of them."
+             expected to be supported for either none of the parameters or for all of them. \
+             Examples of failing conversions were: {failed_value_to_text_calls:#?}"
         );
     }
     if !(num_supported_text_to_value == 0 || num_supported_text_to_value == expected_conversions) {
         anyhow::bail!(
             "'clap_plugin_params::text_to_value()' returned true for \
              {num_supported_text_to_value} out of {expected_conversions} calls. This function is \
-             expected to be supported for either none of the parameters or for all of them."
+             expected to be supported for either none of the parameters or for all of them. \
+             Examples of failing conversions were: {failed_text_to_value_calls:#?}"
         );
     }
 
