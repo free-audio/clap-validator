@@ -49,12 +49,12 @@ enum Command {
     /// option is not shown in the CLI.
     #[command(hide = true)]
     RunSingleTest(SingleTestSettings),
-    /// Subcommands for listing data about the tests or the installed plugins.
+
     #[command(subcommand)]
     List(ListCommand),
 }
 
-/// Subcommands for listing data about the tests or the installed plugins.
+/// Commands for listing tests and data realted to the installed plugins.
 #[derive(Subcommand)]
 enum ListCommand {
     /// Lists basic information about all installed CLAP plugins.
