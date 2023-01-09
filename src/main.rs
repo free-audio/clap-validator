@@ -22,7 +22,7 @@ struct Cli {
     verbosity: Verbosity,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Command,
 }
 
 /// The verbosity level. Set to `Debug` by default. `Trace` can be used to get more information on
@@ -40,7 +40,7 @@ enum Verbosity {
 
 /// The validator's subcommands.
 #[derive(Subcommand)]
-enum Commands {
+enum Command {
     /// Validate one or more plugins.
     Validate(ValidatorSettings),
     /// Run a single test.
@@ -51,12 +51,12 @@ enum Commands {
     RunSingleTest(SingleTestSettings),
     /// Subcommands for listing data about the tests or the installed plugins.
     #[command(subcommand)]
-    List(ListCommands),
+    List(ListCommand),
 }
 
 /// Subcommands for listing data about the tests or the installed plugins.
 #[derive(Subcommand)]
-enum ListCommands {
+enum ListCommand {
     /// Lists basic information about all installed CLAP plugins.
     Plugins {
         /// Print JSON instead of a human readable format.
@@ -90,7 +90,7 @@ fn main() -> ExitCode {
     log_panics::init();
 
     match &cli.command {
-        Commands::Validate(settings) => match validator::validate(settings) {
+        Command::Validate(settings) => match validator::validate(settings) {
             Ok(mut result) => {
                 let tally = result.tally();
 
@@ -209,13 +209,13 @@ fn main() -> ExitCode {
             }
             Err(err) => log::error!("Could not run the validator: {err:#}"),
         },
-        Commands::RunSingleTest(settings) => match validator::run_single_test(settings) {
+        Command::RunSingleTest(settings) => match validator::run_single_test(settings) {
             // The result has been serialized as JSON and written to a file so the main validator
             // process can read it
             Ok(()) => (),
             Err(err) => log::error!("Could not run test the case: {err:#}"),
         },
-        Commands::List(ListCommands::Plugins { json }) => {
+        Command::List(ListCommand::Plugins { json }) => {
             let plugin_index = index::index();
 
             if *json {
