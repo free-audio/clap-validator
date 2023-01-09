@@ -61,6 +61,15 @@ pub enum TestStatus {
     Warning { details: Option<String> },
 }
 
+/// Stores all of the available tests. Used solely for pretty printing purposes in `clapvalidator
+/// list tests`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct TestList {
+    pub plugin_library_tests: Vec<String>,
+    pub plugin_tests: Vec<String>,
+}
+
 /// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
 /// (per library and per plugin), and it's good to keep the interface uniform.
 pub trait TestCase<'a>: Display + FromStr + IntoEnumIterator + Sized + 'static {
@@ -210,5 +219,23 @@ impl TestStatus {
             | TestStatus::Warning { details } => details.as_deref(),
             TestStatus::Crashed { details } => Some(details),
         }
+    }
+}
+
+impl Default for TestList {
+    fn default() -> Self {
+        let mut list = Self {
+            plugin_library_tests: PluginLibraryTestCase::iter()
+                .map(|c| c.to_string())
+                .collect(),
+            plugin_tests: PluginTestCase::iter().map(|c| c.to_string()).collect(),
+        };
+
+        // These should already be sorted, but since the validator results are also sorted we'll add
+        // a sort here just in caseq
+        list.plugin_library_tests.sort_unstable();
+        list.plugin_tests.sort_unstable();
+
+        list
     }
 }

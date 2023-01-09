@@ -8,6 +8,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- There's a new command for listing the available tests available through
+  `clap-validator list tests`.
+
 ### Changed
 
 - The test verifying that the plugin can be scanned in under 100 milliseconds

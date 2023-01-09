@@ -63,6 +63,12 @@ enum ListCommand {
         #[arg(short, long)]
         json: bool,
     },
+    /// Lists all available test cases.
+    Tests {
+        /// Print JSON instead of a human readable format.
+        #[arg(short, long)]
+        json: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -270,6 +276,26 @@ fn main() -> ExitCode {
                         }
                         println!("   features: [{}]", plugin.features.join(", "));
                     }
+                }
+            }
+        }
+        Command::List(ListCommand::Tests { json }) => {
+            let list = tests::TestList::default();
+
+            if *json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&list).expect("Could not format JSON")
+                );
+            } else {
+                println!("Plugin library tests:");
+                for test_name in list.plugin_library_tests {
+                    eprintln!("- {test_name}");
+                }
+
+                println!("\nPlugin tests:");
+                for test_name in list.plugin_tests {
+                    eprintln!("- {test_name}");
                 }
             }
         }
