@@ -30,16 +30,21 @@ use std::thread::ThreadId;
 use crate::plugin::instance::{PluginHandle, PluginState};
 use crate::util::{check_null_ptr, unsafe_clap_call};
 
-/// An abstraction for a CLAP plugin host. It handles callback requests made by the plugin, and it
-/// checks whether the calling thread matches up when any of its functions are called by the plugin.
-/// A `Result` indicating the first failure, of any, can be retrieved by calling the
-/// [`thread_safety_check()`][Self::thread_safety_check()] method.
+/// An abstraction for a CLAP plugin host.
 ///
-/// Multiple plugins can share this host instance. Because of that, we can't just cast the `*const
-/// clap_host` directly to a `*const Host`, as that would make it impossible to figure out which
-/// `*const clap_host` belongs to which plugin instance. Instead, every registered plugin instance
-/// gets their own `InstanceState` which provides a `clap_host` struct unique to that plugin
-/// instance. This can be linked back to both the plugin instance and the shared `Host`.
+/// - It handles callback requests made by the plugin, and it checks whether the calling thread
+///   matches up when any of its functions are called by the plugin.  A `Result` indicating the
+///   first failure, of any, can be retrieved by calling the
+///   [`thread_safety_check()`][Self::thread_safety_check()] method.
+/// - In order for those calblacks to be handled correctly every CLAP function call where the plugin
+///   potentially requests a main thread callback [`Host::handle_callbacks_once()`] needs to be
+///   called. Alternatively [`Host::handle_callbacks_blocking()`] can be called on the main thread
+///   while other audio threads are doing their thing.
+/// - Multiple plugins can share this host instance. Because of that, we can't just cast the `*const
+///   clap_host` directly to a `*const Host`, as that would make it impossible to figure out which
+///   `*const clap_host` belongs to which plugin instance. Instead, every registered plugin instance
+///   gets their own `InstanceState` which provides a `clap_host` struct unique to that plugin
+///   instance. This can be linked back to both the plugin instance and the shared `Host`.
 #[derive(Debug)]
 pub struct Host {
     /// The ID of the main thread.
