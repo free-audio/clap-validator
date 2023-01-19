@@ -161,14 +161,18 @@ impl<'a> InputStream<'a> {
         };
 
         let current_pos = this.read_position.load(Ordering::Relaxed);
-        let bytes_to_read = (this.buffer.len() - current_pos).min(size as usize);
-        this.read_position
-            .fetch_add(bytes_to_read, Ordering::Relaxed);
+        if current_pos == this.buffer.len() {
+            -1
+        } else {
+            let bytes_to_read = (this.buffer.len() - current_pos).min(size as usize);
+            this.read_position
+                .fetch_add(bytes_to_read, Ordering::Relaxed);
 
-        std::slice::from_raw_parts_mut(buffer as *mut u8, bytes_to_read)
-            .copy_from_slice(&this.buffer[current_pos..current_pos + bytes_to_read]);
+            std::slice::from_raw_parts_mut(buffer as *mut u8, bytes_to_read)
+                .copy_from_slice(&this.buffer[current_pos..current_pos + bytes_to_read]);
 
-        bytes_to_read as i64
+            bytes_to_read as i64
+        }
     }
 }
 

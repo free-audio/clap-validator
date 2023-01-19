@@ -26,6 +26,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   the parameters and the failing inputs in the error message to help pinpoint
   the issue.
 
+### Fixed
+
+- The validator now correctly returns `-1` from `clap_istream::read()` when
+  reading at the end of the file.
+
 ## [0.2.0] - 2022-01-09
 
 ### Added
