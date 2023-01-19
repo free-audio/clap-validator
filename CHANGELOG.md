@@ -21,6 +21,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `clap-validator list tests [--json]` now includes test descriptions.
 - `clap-validator validate` now indents the wrapped output slightly less.
+- The `--only-failed` option now also shows tests that resulted in a warning in
+  addition to hard failures.
 - When a plugin supports text-to-value and/or value-to-text conversions for some
   but not all of its parameters, clap-validator will now include the names of
   the parameters and the failing inputs in the error message to help pinpoint

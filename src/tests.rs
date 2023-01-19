@@ -201,13 +201,14 @@ pub trait TestCase<'a>: Display + FromStr + IntoEnumIterator + Sized + 'static {
 }
 
 impl TestStatus {
-    /// Returns `true` if this status should be considered as a failure.
-    pub fn failed(&self) -> bool {
+    /// Returns `true` if tests with this status should be shown when running the validator with the
+    /// `--only-failed` option.
+    pub fn failed_or_warning(&self) -> bool {
         match self {
-            TestStatus::Success { .. }
-            | TestStatus::Skipped { .. }
-            | TestStatus::Warning { .. } => false,
-            TestStatus::Crashed { .. } | TestStatus::Failed { .. } => true,
+            TestStatus::Success { .. } | TestStatus::Skipped { .. } => false,
+            TestStatus::Warning { .. } | TestStatus::Crashed { .. } | TestStatus::Failed { .. } => {
+                true
+            }
         }
     }
 

@@ -110,7 +110,7 @@ fn main() -> ExitCode {
                         .filter_map(|(library_path, tests)| {
                             let tests: Vec<_> = tests
                                 .into_iter()
-                                .filter(|test| test.status.failed())
+                                .filter(|test| test.status.failed_or_warning())
                                 .collect();
                             if tests.is_empty() {
                                 None
@@ -126,7 +126,7 @@ fn main() -> ExitCode {
                         .filter_map(|(plugin_id, tests)| {
                             let tests: Vec<_> = tests
                                 .into_iter()
-                                .filter(|test| test.status.failed())
+                                .filter(|test| test.status.failed_or_warning())
                                 .collect();
                             if tests.is_empty() {
                                 None
