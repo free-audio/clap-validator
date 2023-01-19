@@ -13,6 +13,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added a test that makes sure all of the plugin's symbols resolve correctly by
   loading the library with `RTLD_NOW`. This test is only run on Unix-like
   platforms.
+- Added a test that calls `clap_plugin_state::load()` with an empty state and
+  asserts the plugin returns `false`.
 - Added missing thread safety checks in the state tests.
 
 ### Changed

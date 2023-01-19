@@ -22,6 +22,41 @@ const EXPECTED_STATE_FILE_NAME: &str = "state-expected";
 /// The file name we'll use to dump the actual state when a test fails.
 const ACTUAL_STATE_FILE_NAME: &str = "state-actual";
 
+/// The test for `PluginTestCase::InvalidState`.
+pub fn test_invalid_state(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+    let host = Host::new();
+    let plugin = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance")?;
+
+    plugin.init().context("Error during initialization")?;
+    let state = match plugin.get_extension::<State>() {
+        Some(state) => state,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(String::from(
+                    "The plugin does not support the 'state' extension.",
+                )),
+            })
+        }
+    };
+    host.handle_callbacks_once();
+
+    match state.load(&[]) {
+        Ok(_) => anyhow::bail!(
+            "The plugin returned true when 'clap_plugin_state::load()' was called when an empty \
+             state, this is likely a bug."
+        ),
+        Err(_) => {
+            host.handle_callbacks_once();
+            host.thread_safety_check()
+                .context("Thread safety checks failed")?;
+
+            Ok(TestStatus::Success { details: None })
+        }
+    }
+}
+
 /// The test for `PluginTestCase::BasicStateReproducibility`. See the description of this test for a
 /// detailed explanation, but we essentially check if saving a loaded state results in the same
 /// state file, and whether a plugin's parameters are the same after loading the state.

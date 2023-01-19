@@ -79,6 +79,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
                  a mismatching namespace ID. Asserts that the plugin's parameter values don't \
                  change.",
             ),
+            PluginTestCase::InvalidState => String::from(
+                "The plugin should return false when 'clap_plugin_state::load()' is called with \
+                 an empty state.",
+            ),
             PluginTestCase::BasicStateReproducibility => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
                  instance, reloads the state, and then checks whether the parameter values are \
@@ -143,6 +147,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::WrongNamespaceSetParams => {
                 params::test_wrong_namespace_set_params(library, plugin_id)
             }
+            PluginTestCase::InvalidState => state::test_invalid_state(library, plugin_id),
             PluginTestCase::BasicStateReproducibility => {
                 state::test_basic_state_reproducibility(library, plugin_id, false)
             }
