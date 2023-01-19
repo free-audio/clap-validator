@@ -180,6 +180,8 @@ pub fn test_basic_state_reproducibility(
     let actual_state = state.save()?;
     host.handle_callbacks_once();
 
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
     } else {
@@ -384,6 +386,8 @@ pub fn test_flush_state_reproducibility(
     let actual_state = state.save()?;
     host.handle_callbacks_once();
 
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
     } else {
@@ -536,6 +540,8 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
     let actual_state = state.save_buffered(BUFFERED_SAVE_MAX_BYTES)?;
     host.handle_callbacks_once();
 
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
     } else {

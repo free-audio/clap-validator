@@ -242,7 +242,6 @@ pub fn test_basic_out_of_place_audio_processing(
     // The `Host` contains built-in thread safety checks
     host.thread_safety_check()
         .context("Thread safety checks failed")?;
-
     Ok(TestStatus::Success { details: None })
 }
 
@@ -313,7 +312,6 @@ pub fn test_basic_out_of_place_note_processing(
 
     host.thread_safety_check()
         .context("Thread safety checks failed")?;
-
     Ok(TestStatus::Success { details: None })
 }
 
@@ -383,7 +381,6 @@ pub fn test_inconsistent_note_processing(
 
     host.thread_safety_check()
         .context("Thread safety checks failed")?;
-
     Ok(TestStatus::Success { details: None })
 }
 

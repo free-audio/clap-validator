@@ -29,6 +29,8 @@ pub enum PluginTestCase {
     ConvertParams,
     #[strum(serialize = "param-set-wrong-namespace")]
     WrongNamespaceSetParams,
+    #[strum(serialize = "state-invalid")]
+    InvalidState,
     #[strum(serialize = "state-reproducibility-basic")]
     BasicStateReproducibility,
     #[strum(serialize = "state-reproducibility-null-cookies")]

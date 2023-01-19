@@ -147,7 +147,6 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<T
 
     host.thread_safety_check()
         .context("Thread safety checks failed")?;
-
     if num_supported_value_to_text == 0 || num_supported_text_to_value == 0 {
         Ok(TestStatus::Skipped {
             details: Some(String::from(
@@ -230,6 +229,8 @@ pub fn test_wrong_namespace_set_params(
         .map(|param_id| params.get(*param_id).map(|value| (*param_id, value)))
         .collect::<Result<BTreeMap<clap_id, f64>>>()?;
 
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
     if actual_param_values == initial_param_values {
         Ok(TestStatus::Success { details: None })
     } else {
