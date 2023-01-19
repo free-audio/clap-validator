@@ -149,7 +149,6 @@ fn main() -> ExitCode {
                         println!("{}", textwrap::fill(&text, wrapping_options.clone()))
                     };
                     let print_test = |test: TestResult| {
-                        // TODO: We may want to wrap this for the terminal
                         print_wrapped(format!("   - {}: {}", test.name, test.description));
 
                         let status_text = match test.status {
@@ -288,14 +287,19 @@ fn main() -> ExitCode {
                     serde_json::to_string_pretty(&list).expect("Could not format JSON")
                 );
             } else {
+                let wrapping_options =
+                    textwrap::Options::with_termwidth().subsequent_indent("    ");
+                let print_wrapped =
+                    |text: String| println!("{}", textwrap::fill(&text, wrapping_options.clone()));
+
                 println!("Plugin library tests:");
-                for test_name in list.plugin_library_tests {
-                    eprintln!("- {test_name}");
+                for (test_name, test_description) in list.plugin_library_tests {
+                    print_wrapped(format!("- {test_name}: {test_description}"));
                 }
 
                 println!("\nPlugin tests:");
-                for test_name in list.plugin_tests {
-                    eprintln!("- {test_name}");
+                for (test_name, test_description) in list.plugin_tests {
+                    print_wrapped(format!("- {test_name}: {test_description}"));
                 }
             }
         }
