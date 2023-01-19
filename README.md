@@ -17,11 +17,13 @@ quarantine bit to be removed
 ### Usage
 
 Simply pass the path to one or more `.clap` plugins to `clap-validator validate`
-to run the validator on those plugins. Running `clap-validator validate --help`
-lists all available options:
+to run the validator on those plugins. The `--only-failed` option can be used to
+hide the output from all successful and skipped tests. Running `clap-validator
+validate --help` lists all available options:
 
 ```shell
 ./clap-validator validate /path/to/the/plugin.clap
+./clap-validator validate /path/to/the/plugin.clap --only-failed
 ./clap-validator validate --help
 ```
 
