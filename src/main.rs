@@ -144,7 +144,7 @@ fn main() -> ExitCode {
                     );
                 } else {
                     let wrapping_options =
-                        textwrap::Options::with_termwidth().subsequent_indent("         ");
+                        textwrap::Options::with_termwidth().subsequent_indent("       ");
                     let print_wrapped = |text: String| {
                         println!("{}", textwrap::fill(&text, wrapping_options.clone()))
                     };
