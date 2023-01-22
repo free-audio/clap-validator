@@ -10,6 +10,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Tests can now be run in parallel using the `-j`/`--parallel` option. This
+  cannot be used together with the `--in-process` option.
 - Added a test that makes sure all of the plugin's symbols resolve correctly by
   loading the library with `RTLD_NOW`. This test is only run on Unix-like
   platforms.
