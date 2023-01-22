@@ -5,6 +5,7 @@ use clap_sys::entry::clap_plugin_entry;
 use clap_sys::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use clap_sys::version::clap_version;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -183,6 +184,16 @@ impl PluginLibrary {
                 features: unsafe { util::cstr_array_to_vec((*descriptor).features)? }
                     .context("The plugin's 'features' were malformed")?,
             })
+        }
+
+        // As a sanity check we'll make sure there are no duplicate plugin IDs here
+        let unique_plugin_ids: HashSet<&str> = metadata
+            .plugins
+            .iter()
+            .map(|plugin_metadata| plugin_metadata.id.as_str())
+            .collect();
+        if unique_plugin_ids.len() != metadata.plugins.len() {
+            anyhow::bail!("The plugin's factory contains multiple entries for the same plugin ID.");
         }
 
         Ok(metadata)

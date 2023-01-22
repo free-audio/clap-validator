@@ -16,6 +16,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added a test that calls `clap_plugin_state::load()` with an empty state and
   asserts the plugin returns `false`.
 - Added missing thread safety checks in the state tests.
+- Added a check to ensure that plugin factories don't contain duplicate plugin
+  IDs.
 
 ### Changed
 
