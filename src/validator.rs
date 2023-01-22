@@ -85,8 +85,8 @@ pub struct ValidatorSettings {
     pub in_process: bool,
     /// Run all tests in parallel.
     ///
-    /// Some plugins may not handle this correctly, even when the plugins are loaded into different
-    /// processes. This cannot be used in combination with `--in-process`.
+    /// Some plugins may not handle this correctly, so this is turned off by default. This also
+    /// cannot be used in combination with `--in-process`.
     #[arg(short = 'j', long, conflicts_with = "in_process")]
     pub parallel: bool,
 }
