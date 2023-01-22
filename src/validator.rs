@@ -169,13 +169,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                     PluginLibraryTestCase::iter()
                         .par_bridge()
                         .filter(|test| test_filter(test, settings, &test_filter_re))
-                        .map(|test| {
-                            if settings.in_process {
-                                Ok(test.run_in_process(library_path))
-                            } else {
-                                test.run_out_of_process(library_path, settings.hide_output)
-                            }
-                        })
+                        .map(|test| run_test(&test, settings, library_path))
                         .collect::<Result<Vec<TestResult>>>()?,
                 );
 
@@ -219,15 +213,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                                 .par_bridge()
                                 .filter(|test| test_filter(test, settings, &test_filter_re))
                                 .map(|test| {
-                                    if settings.in_process {
-                                        Ok(test
-                                            .run_in_process((&plugin_library, &plugin_metadata.id)))
-                                    } else {
-                                        test.run_out_of_process(
-                                            (&plugin_library, &plugin_metadata.id),
-                                            settings.hide_output,
-                                        )
-                                    }
+                                    run_test(
+                                        &test,
+                                        settings,
+                                        (&plugin_library, &plugin_metadata.id),
+                                    )
                                 })
                                 .collect::<Result<Vec<TestResult>>>()?,
                         ))
@@ -269,13 +259,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                     library_path.clone(),
                     PluginLibraryTestCase::iter()
                         .filter(|test| test_filter(test, settings, &test_filter_re))
-                        .map(|test| {
-                            if settings.in_process {
-                                Ok(test.run_in_process(library_path))
-                            } else {
-                                test.run_out_of_process(library_path, settings.hide_output)
-                            }
-                        })
+                        .map(|test| run_test(&test, settings, library_path))
                         .collect::<Result<Vec<TestResult>>>()?,
                 );
 
@@ -309,15 +293,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                             PluginTestCase::iter()
                                 .filter(|test| test_filter(test, settings, &test_filter_re))
                                 .map(|test| {
-                                    if settings.in_process {
-                                        Ok(test
-                                            .run_in_process((&plugin_library, &plugin_metadata.id)))
-                                    } else {
-                                        test.run_out_of_process(
-                                            (&plugin_library, &plugin_metadata.id),
-                                            settings.hide_output,
-                                        )
-                                    }
+                                    run_test(
+                                        &test,
+                                        settings,
+                                        (&plugin_library, &plugin_metadata.id),
+                                    )
                                 })
                                 .collect::<Result<Vec<TestResult>>>()?,
                         ))
@@ -412,6 +392,20 @@ fn plugin_filter(plugin_metadata: &PluginMetadata, settings: &ValidatorSettings)
     match &settings.plugin_id {
         Some(plugin_id) if &plugin_metadata.id != plugin_id => false,
         _ => true,
+    }
+}
+
+/// The filter function for determining whether or not a test should be run based on the validator's
+/// settings settings.
+fn run_test<'a, T: TestCase<'a>>(
+    test: &T,
+    settings: &ValidatorSettings,
+    args: T::TestArgs,
+) -> Result<TestResult> {
+    if settings.in_process {
+        Ok(test.run_in_process(args))
+    } else {
+        test.run_out_of_process(args, settings.hide_output)
     }
 }
 
