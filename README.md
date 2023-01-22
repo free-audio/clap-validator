@@ -22,8 +22,8 @@ hide the output from all successful and skipped tests. Running `clap-validator
 validate --help` lists all available options:
 
 ```shell
-./clap-validator validate /path/to/the/plugin.clap --parallel
-./clap-validator validate /path/to/the/plugin.clap --parallel --only-failed
+./clap-validator validate /path/to/the/plugin.clap
+./clap-validator validate /path/to/the/plugin.clap --only-failed
 ./clap-validator validate --help
 ```
 

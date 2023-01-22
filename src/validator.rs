@@ -83,12 +83,12 @@ pub struct ValidatorSettings {
     /// Using this option will remove those protections, but in turn the tests may run faster.
     #[arg(long)]
     pub in_process: bool,
-    /// Run all tests in parallel.
+    /// Don't run tests in parallel.
     ///
-    /// Some plugins may not handle this correctly, so this is turned off by default. This also
-    /// cannot be used in combination with `--in-process`.
-    #[arg(short = 'j', long, conflicts_with = "in_process")]
-    pub parallel: bool,
+    /// This will cause the out-of-process tests to be run sequentially. Implied when the
+    /// --in-process option is used. Can be useful for keeping plugin output in the correct order.
+    #[arg(long, conflicts_with = "in_process")]
+    pub no_parallel: bool,
 }
 
 /// Options for running a single test. This is used for the out-of-process testing method. This
@@ -143,17 +143,14 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     // The tests can optionally be run in parallel. This is not the default since some plugins may
     // not handle it correctly, event when the plugins are loaded in different processes. It's also
     // incompatible with the in-process mode.
-    // TODO: We now gather all the results and print everything in one go at the end. This is the
-    //       only way to do JSON, but for the human readable version printing things as we go could
-    //       be nice.
     // TODO: There doesn't seem to be a way to run rayon iterators on the main thread, so the
     //       parallel and scalar versions need to be duplicated here. We could also create a single
     //       threaded shim that implements Rayon's parallel iterator methods, and then branch on the
     //       places where we create parallel iterators instead.
-    let results = if settings.parallel {
+    let results = if settings.no_parallel || settings.in_process {
         settings
             .paths
-            .par_iter()
+            .iter()
             .map(|library_path| {
                 // We distinguish between two separate classes of tests: tests for an entire plugin
                 // library, and tests for a single plugin contained witin that library. The former
@@ -167,7 +164,6 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                 plugin_library_tests.insert(
                     library_path.clone(),
                     PluginLibraryTestCase::iter()
-                        .par_bridge()
                         .filter(|test| test_filter(test, settings, &test_filter_re))
                         .map(|test| run_test(&test, settings, library_path))
                         .collect::<Result<Vec<TestResult>>>()?,
@@ -202,7 +198,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                 // number of entries in the map to make sure there are no dupli
                 let plugin_tests: BTreeMap<String, Vec<TestResult>> = plugin_metadata
                     .plugins
-                    .into_par_iter()
+                    .into_iter()
                     .filter(|plugin_metadata| plugin_filter(plugin_metadata, settings))
                     // We're building a `BTreeMap` containing the results for all plugins in the
                     // plugin's library
@@ -210,7 +206,6 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                         Ok((
                             plugin_metadata.id.clone(),
                             PluginTestCase::iter()
-                                .par_bridge()
                                 .filter(|test| test_filter(test, settings, &test_filter_re))
                                 .map(|test| {
                                     run_test(
@@ -229,35 +224,34 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                     plugin_tests,
                 })
             })
-            .reduce(
-                || Ok(ValidationResult::default()),
-                |a, b| {
-                    // Monads galore! The fact that we need to handle errors for plugin tests makes
-                    // this a bit more complicated.
-                    let (a, b) = (a?, b?);
+            .reduce(|a, b| {
+                // Monads galore! The fact that we need to handle errors for plugin tests makes this
+                // a bit more complicated.
+                let (a, b) = (a?, b?);
 
-                    // In the serial version this could be done when iterating over the plugins, but
-                    // when using iterators you can't do that. But it's still essential to make sure
-                    // we don't test two versionsq of the same plugin.
-                    if a.intersects(&b) {
-                        anyhow::bail!(
-                            "Duplicate plugin ID in validation results. Maybe multiple versions \
-                             of the same plugin are being validated."
-                        );
-                    }
+                // In the serial version this could be done when iterating over the plugins, but
+                // when using iterators you can't do that. But it's still essential to make sure we
+                // don't test two versionsq of the same plugin.
+                if a.intersects(&b) {
+                    anyhow::bail!(
+                        "Duplicate plugin ID in validation results. Maybe multiple versions of \
+                         the same plugin are being validated."
+                    );
+                }
 
-                    Ok(ValidationResult::union(a, b))
-                },
-            )
+                Ok(ValidationResult::union(a, b))
+            })
+            .unwrap_or_else(|| Ok(ValidationResult::default()))
     } else {
         settings
             .paths
-            .iter()
+            .par_iter()
             .map(|library_path| {
                 let mut plugin_library_tests: BTreeMap<PathBuf, Vec<TestResult>> = BTreeMap::new();
                 plugin_library_tests.insert(
                     library_path.clone(),
                     PluginLibraryTestCase::iter()
+                        .par_bridge()
                         .filter(|test| test_filter(test, settings, &test_filter_re))
                         .map(|test| run_test(&test, settings, library_path))
                         .collect::<Result<Vec<TestResult>>>()?,
@@ -285,12 +279,13 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 
                 let plugin_tests: BTreeMap<String, Vec<TestResult>> = plugin_metadata
                     .plugins
-                    .into_iter()
+                    .into_par_iter()
                     .filter(|plugin_metadata| plugin_filter(plugin_metadata, settings))
                     .map(|plugin_metadata| {
                         Ok((
                             plugin_metadata.id.clone(),
                             PluginTestCase::iter()
+                                .par_bridge()
                                 .filter(|test| test_filter(test, settings, &test_filter_re))
                                 .map(|test| {
                                     run_test(
@@ -309,19 +304,21 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                     plugin_tests,
                 })
             })
-            .reduce(|a, b| {
-                let (a, b) = (a?, b?);
+            .reduce(
+                || Ok(ValidationResult::default()),
+                |a, b| {
+                    let (a, b) = (a?, b?);
 
-                if a.intersects(&b) {
-                    anyhow::bail!(
-                        "Duplicate plugin ID in validation results. Maybe multiple versions of \
-                         the same plugin are being validated."
-                    );
-                }
+                    if a.intersects(&b) {
+                        anyhow::bail!(
+                            "Duplicate plugin ID in validation results. Maybe multiple versions \
+                             of the same plugin are being validated."
+                        );
+                    }
 
-                Ok(ValidationResult::union(a, b))
-            })
-            .unwrap_or_else(|| Ok(ValidationResult::default()))
+                    Ok(ValidationResult::union(a, b))
+                },
+            )
     }?;
 
     if let Some(plugin_id) = &settings.plugin_id {
