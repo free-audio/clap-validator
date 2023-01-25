@@ -46,14 +46,11 @@ jobs:
           key: ${{ matrix.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          default: true
           # The macOS AArch64 build is done from an x86_64 macOS CI runner, so
           # it needs to be cross compiled
-          target: ${{ matrix.cross-target }}
+          targets: ${{ matrix.cross-target }}
       - name: Build the binary
         if: '!matrix.cross-target'
         run: cargo build --release
