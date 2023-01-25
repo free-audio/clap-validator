@@ -31,11 +31,11 @@ jobs:
     name: Build binary
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Fetch all git history
         run: git fetch --force --prune --tags --unshallow
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/bin/
@@ -76,7 +76,7 @@ jobs:
         if: startsWith(matrix.os, 'macos') && matrix.cross-target
         run: |
           tar -C target/${{ matrix.cross-target }}/release -caf "$ARCHIVE_NAME.tar.gz" clap-validator
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: "!startsWith(matrix.os, 'windows')"
         with:
           name: ${{ env.ARCHIVE_NAME }}
@@ -84,7 +84,7 @@ jobs:
 
       # On Windows we can just upload the .exe file directly since Windows
       # doesn't have an executable bit
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: startsWith(matrix.os, 'windows')
         with:
           name: ${{ env.ARCHIVE_NAME }}
@@ -95,7 +95,7 @@ jobs:
     runs-on: macos-11
     needs: package
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Fetch all git history
         run: git fetch --force --prune --tags --unshallow
 
@@ -130,7 +130,7 @@ jobs:
           lipo -create -output binaries/clap-validator binaries/x86_64/clap-validator binaries/aarch64/clap-validator
           tar -caf "$ARCHIVE_NAME.tar.gz" binaries/clap-validator
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.tar.gz
