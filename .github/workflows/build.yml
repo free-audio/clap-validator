@@ -51,12 +51,17 @@ jobs:
           # The macOS AArch64 build is done from an x86_64 macOS CI runner, so
           # it needs to be cross compiled
           targets: ${{ matrix.cross-target }}
+
       - name: Build the binary
         if: '!matrix.cross-target'
-        run: cargo build --release
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=10.13
+          cargo build --release
       - name: Build the binary
         if: matrix.cross-target
-        run: cargo build --release --target="${{ matrix.cross-target }}"
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=10.13
+          cargo build --release --target="${{ matrix.cross-target }}"
 
       - name: Determine the build archive name
         run: |
