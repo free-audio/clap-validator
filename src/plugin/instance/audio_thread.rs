@@ -15,12 +15,10 @@ use std::sync::Arc;
 use crate::host::InstanceState;
 use crate::util::unsafe_clap_call;
 
-use self::process::ProcessData;
+use super::process::ProcessData;
 use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 use super::{Plugin, PluginStatus};
 use crate::plugin::ext::Extension;
-
-pub mod process;
 
 /// An audio thread equivalent to [`Plugin`]. This version only allows audio thread functions to be
 /// called. It can be constructed using [`Plugin::on_audio_thread()`].

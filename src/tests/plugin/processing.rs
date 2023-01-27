@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::host::Host;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
-use crate::plugin::instance::audio_thread::process::{
+use crate::plugin::instance::process::{
     AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
 };
 use crate::plugin::instance::Plugin;

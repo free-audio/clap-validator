@@ -18,6 +18,7 @@ use crate::util::unsafe_clap_call;
 use audio_thread::PluginAudioThread;
 
 pub mod audio_thread;
+pub mod process;
 
 /// A `Send+Sync` wrapper around `*const clap_plugin`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

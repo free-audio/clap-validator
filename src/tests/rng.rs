@@ -18,7 +18,7 @@ use std::ops::RangeInclusive;
 
 use crate::plugin::ext::note_ports::NotePortConfig;
 use crate::plugin::ext::params::ParamInfo;
-use crate::plugin::instance::audio_thread::process::{Event, EventQueue};
+use crate::plugin::instance::process::{Event, EventQueue};
 
 /// Create a new pseudo-random number generator with a fixed seed.
 pub fn new_prng() -> Pcg32 {
