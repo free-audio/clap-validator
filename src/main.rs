@@ -1,9 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use colored::Colorize;
 use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
-
-use crate::tests::TestResult;
 
 mod commands;
 mod host;
@@ -97,138 +94,8 @@ fn main() -> ExitCode {
     log_panics::init();
 
     match &cli.command {
-        Command::Validate(settings) => match validator::validate(settings) {
-            Ok(mut result) => {
-                let tally = result.tally();
-
-                // Filtering out tests should be done after we did the tally for consistency's sake
-                if settings.only_failed {
-                    // The `.drain_filter()` methods have not been stabilized yet, so to make things
-                    // easy for us we'll just inefficiently rebuild the data structures
-                    result.plugin_library_tests = result
-                        .plugin_library_tests
-                        .into_iter()
-                        .filter_map(|(library_path, tests)| {
-                            let tests: Vec<_> = tests
-                                .into_iter()
-                                .filter(|test| test.status.failed_or_warning())
-                                .collect();
-                            if tests.is_empty() {
-                                None
-                            } else {
-                                Some((library_path, tests))
-                            }
-                        })
-                        .collect();
-
-                    result.plugin_tests = result
-                        .plugin_tests
-                        .into_iter()
-                        .filter_map(|(plugin_id, tests)| {
-                            let tests: Vec<_> = tests
-                                .into_iter()
-                                .filter(|test| test.status.failed_or_warning())
-                                .collect();
-                            if tests.is_empty() {
-                                None
-                            } else {
-                                Some((plugin_id, tests))
-                            }
-                        })
-                        .collect();
-                }
-
-                if settings.json {
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&result).expect("Could not format JSON")
-                    );
-                } else {
-                    let wrapping_options =
-                        textwrap::Options::with_termwidth().subsequent_indent("       ");
-                    let print_wrapped = |text: String| {
-                        println!("{}", textwrap::fill(&text, wrapping_options.clone()))
-                    };
-                    let print_test = |test: TestResult| {
-                        print_wrapped(format!("   - {}: {}", test.name, test.description));
-
-                        let status_text = match test.status {
-                            tests::TestStatus::Success { .. } => "PASSED".green(),
-                            tests::TestStatus::Crashed { .. } => "CRASHED".red().bold(),
-                            tests::TestStatus::Failed { .. } => "FAILED".red(),
-                            tests::TestStatus::Skipped { .. } => "SKIPPED".yellow(),
-                            tests::TestStatus::Warning { .. } => "WARNING".yellow(),
-                        };
-                        let test_result = match test.status.details() {
-                            Some(reason) => format!("     {status_text}: {reason}"),
-                            None => format!("     {status_text}"),
-                        };
-                        print_wrapped(test_result);
-                    };
-
-                    if !result.plugin_library_tests.is_empty() {
-                        println!("Plugin library tests:");
-                        for (library_path, tests) in result.plugin_library_tests {
-                            println!();
-                            println!(" - {}", library_path.display());
-
-                            for test in tests {
-                                println!();
-                                print_test(test);
-                            }
-                        }
-
-                        println!();
-                    }
-
-                    if !result.plugin_tests.is_empty() {
-                        println!("Plugin tests:");
-                        for (plugin_id, tests) in result.plugin_tests {
-                            println!();
-                            println!(" - {plugin_id}");
-
-                            for test in tests {
-                                println!();
-                                print_test(test);
-                            }
-                        }
-
-                        println!();
-                    }
-
-                    let num_tests = tally.total();
-                    println!(
-                        "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
-                        num_tests,
-                        if num_tests == 1 { "test" } else { "tests" },
-                        tally.num_passed,
-                        tally.num_failed,
-                        tally.num_skipped,
-                        tally.num_warnings
-                    )
-                }
-
-                // If any of the tests failed, this process should exiti with a failure code
-                if tally.num_failed > 0 {
-                    return ExitCode::FAILURE;
-                }
-
-                ExitCode::SUCCESS
-            }
-            Err(err) => {
-                log::error!("Could not run the validator: {err:#}");
-                ExitCode::FAILURE
-            }
-        },
-        Command::RunSingleTest(settings) => match validator::run_single_test(settings) {
-            // The result has been serialized as JSON and written to a file so the main validator
-            // process can read it
-            Ok(()) => ExitCode::SUCCESS,
-            Err(err) => {
-                log::error!("Could not run test the case: {err:#}");
-                ExitCode::FAILURE
-            }
-        },
+        Command::Validate(settings) => commands::validate::validate(settings),
+        Command::RunSingleTest(settings) => commands::validate::run_single(settings),
         Command::List(ListCommand::Plugins { json }) => commands::list::plugins(*json),
         Command::List(ListCommand::Tests { json }) => commands::list::tests(*json),
     }
