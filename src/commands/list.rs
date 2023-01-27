@@ -2,8 +2,10 @@
 
 use std::process::ExitCode;
 
+use anyhow::Result;
+
 /// Lists basic information about all installed CLAP plugins.
-pub fn plugins(json: bool) -> ExitCode {
+pub fn plugins(json: bool) -> Result<ExitCode> {
     let plugin_index = crate::index::index();
 
     if json {
@@ -61,11 +63,11 @@ pub fn plugins(json: bool) -> ExitCode {
         }
     }
 
-    ExitCode::SUCCESS
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Lists all available test cases.
-pub fn tests(json: bool) -> ExitCode {
+pub fn tests(json: bool) -> Result<ExitCode> {
     let list = crate::tests::TestList::default();
 
     if json {
@@ -89,5 +91,5 @@ pub fn tests(json: bool) -> ExitCode {
         }
     }
 
-    ExitCode::SUCCESS
+    Ok(ExitCode::SUCCESS)
 }

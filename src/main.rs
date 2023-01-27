@@ -93,10 +93,18 @@ fn main() -> ExitCode {
     .expect("Could not initialize logger");
     log_panics::init();
 
-    match &cli.command {
+    let result = match &cli.command {
         Command::Validate(settings) => commands::validate::validate(settings),
         Command::RunSingleTest(settings) => commands::validate::run_single(settings),
         Command::List(ListCommand::Plugins { json }) => commands::list::plugins(*json),
         Command::List(ListCommand::Tests { json }) => commands::list::tests(*json),
+    };
+
+    match result {
+        Ok(exit_code) => exit_code,
+        Err(err) => {
+            log::error!("{err:?}");
+            ExitCode::FAILURE
+        }
     }
 }
