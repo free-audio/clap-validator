@@ -154,9 +154,9 @@ impl<'lib> Plugin<'lib> {
             .expect("Tried to get the host instance from a thread that isn't the main thread")
     }
 
-    /// Whether this plugin is currently active.
-    pub fn activated(&self) -> bool {
-        self.state.state.load() >= PluginState::Activated
+    /// The plugin's current initialization state.
+    pub fn state(&self) -> PluginState {
+        self.state.state.load()
     }
 
     /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
@@ -183,13 +183,17 @@ impl<'lib> Plugin<'lib> {
     ///
     /// If whatever happens on the audio thread caused main-thread callback requests to be emited,
     /// then those will be handled concurrently.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the plugin is not active. This indicates a bug in the validator.
     pub fn on_audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
         &'a self,
         f: F,
     ) -> T {
-        // This would be a hard mistake on the the validator's end, because th eaudio thread doesn't
+        // This would be a hard mistake on the the validator's end, because the audio thread doesn't
         // exist when the plugin is deactivated.
-        if !self.activated() {
+        if self.state() < PluginState::Activated {
             panic!(
                 "'Plugin::on_audio_thread()' call while the plugin is not active, this is a bug \
                  in the validator."

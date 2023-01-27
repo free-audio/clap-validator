@@ -21,7 +21,7 @@ use std::ptr::NonNull;
 
 use super::Extension;
 use crate::plugin::audio_thread::process::EventQueue;
-use crate::plugin::instance::Plugin;
+use crate::plugin::instance::{Plugin, PluginState};
 use crate::util::{self, c_char_slice_to_string, unsafe_clap_call};
 
 pub type ParamInfo = BTreeMap<clap_id, Param>;
@@ -300,16 +300,20 @@ impl Params<'_> {
         Ok(result)
     }
 
-    /// Perform a parameter flush. Returns an error if the plugin is active.
+    /// Perform a parameter flush.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the plugin is active. This indicates a bug in the validator.
     pub fn flush(
         &self,
         input_events: &Pin<Box<EventQueue<clap_input_events>>>,
         output_events: &Pin<Box<EventQueue<clap_output_events>>>,
     ) -> Result<()> {
-        if self.plugin.activated() {
-            anyhow::bail!(
+        if self.plugin.state() >= PluginState::Activated {
+            panic!(
                 "Flushing parameters from the main thread is not allowed when the plugin is \
-                 active."
+                 active. This is a bug in the validator."
             )
         }
 
