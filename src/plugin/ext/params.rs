@@ -20,8 +20,9 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 
 use super::Extension;
+use crate::plugin::assert_plugin_state_lt;
 use crate::plugin::audio_thread::process::EventQueue;
-use crate::plugin::instance::{Plugin, PluginState};
+use crate::plugin::instance::{Plugin, PluginStatus};
 use crate::util::{self, c_char_slice_to_string, unsafe_clap_call};
 
 pub type ParamInfo = BTreeMap<clap_id, Param>;
@@ -62,6 +63,11 @@ pub struct Param {
 }
 
 impl Params<'_> {
+    /// Used by the status assertion macros.
+    fn status(&self) -> PluginStatus {
+        self.plugin.status()
+    }
+
     /// Get a parameter's value.
     pub fn get(&self, param_id: clap_id) -> Result<f64> {
         let mut value = 0.0f64;
@@ -304,18 +310,15 @@ impl Params<'_> {
     ///
     /// # Panics
     ///
-    /// Panics if the plugin is active. This indicates a bug in the validator.
+    /// Panics if the plugin is active.
     pub fn flush(
         &self,
         input_events: &Pin<Box<EventQueue<clap_input_events>>>,
         output_events: &Pin<Box<EventQueue<clap_output_events>>>,
-    ) -> Result<()> {
-        if self.plugin.state() >= PluginState::Activated {
-            panic!(
-                "Flushing parameters from the main thread is not allowed when the plugin is \
-                 active. This is a bug in the validator."
-            )
-        }
+    ) {
+        // This may only be called on the audio thread when the plugin is active. This object is the
+        // main thread interface for the parameters extension.
+        assert_plugin_state_lt!(self, PluginStatus::Activated);
 
         unsafe_clap_call! {
             self.params.as_ptr()=>flush(
@@ -324,8 +327,6 @@ impl Params<'_> {
                 output_events.vtable(),
             )
         };
-
-        Ok(())
     }
 }
 

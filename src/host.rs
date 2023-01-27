@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::ThreadId;
 
-use crate::plugin::instance::{PluginHandle, PluginState};
+use crate::plugin::instance::{PluginHandle, PluginStatus};
 use crate::util::{check_null_ptr, unsafe_clap_call};
 
 /// An abstraction for a CLAP plugin host.
@@ -96,7 +96,7 @@ pub struct InstanceState {
     clap_host: Mutex<clap_host>,
 
     /// The plugin's current state in terms of activation and processing status.
-    pub state: AtomicCell<PluginState>,
+    pub status: AtomicCell<PluginStatus>,
 
     /// The plugin instance's audio thread, if it has one. Used for the audio thread checks.
     pub audio_thread: AtomicCell<Option<ThreadId>>,
@@ -153,7 +153,7 @@ impl InstanceState {
                 request_callback: Some(Host::request_callback),
             }),
 
-            state: AtomicCell::new(PluginState::Deactivated),
+            status: AtomicCell::new(PluginStatus::default()),
 
             audio_thread: AtomicCell::new(None),
             requested_callback: AtomicBool::new(false),
@@ -517,6 +517,8 @@ impl Host {
         check_null_ptr!((), host, (*host).host_data);
         let (_, this) = InstanceState::from_clap_host_ptr(host);
 
+        // TODO: A couple of these flags are only allowed when the plugin is not activated, make
+        //       sure to check for this when implementing this functionality
         this.assert_main_thread("clap_host_audio_ports::rescan()");
         log::debug!("TODO: Handle 'clap_host_audio_ports::rescan()'");
     }

@@ -125,10 +125,12 @@ impl<'a> ProcessingTest<'a> {
                     }
                 }
 
-                plugin.stop_processing()
+                plugin.stop_processing();
+
+                Ok(())
             })?;
 
-            self.plugin.deactivate()?;
+            self.plugin.deactivate();
         }
 
         // Handle callbacks the plugin may have made during deactivate
@@ -186,15 +188,17 @@ impl<'a> ProcessingTest<'a> {
             process_data.clear_events();
             process_data.advance_transport(buffer_size as u32);
 
-            plugin.stop_processing()
+            plugin.stop_processing();
+
+            Ok(())
         })?;
 
-        let result = self.plugin.deactivate();
+        self.plugin.deactivate();
 
         // Handle callbacks the plugin may have made during deactivate
         self.plugin.host().handle_callbacks_once();
 
-        result
+        Ok(())
     }
 }
 

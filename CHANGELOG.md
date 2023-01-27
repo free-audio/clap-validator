@@ -31,6 +31,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   but not all of its parameters, clap-validator will now include the names of
   the parameters and the failing inputs in the error message to help pinpoint
   the issue.
+- The validator now asserts the plugin is in the correct state before calling
+  the plugin's functions more often to reduce the potential surface for bugs in
+  the validator itself.
 
 ## [0.2.0] - 2022-01-09
 

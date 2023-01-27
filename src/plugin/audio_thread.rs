@@ -17,7 +17,8 @@ use crate::util::unsafe_clap_call;
 
 use self::process::ProcessData;
 use super::ext::Extension;
-use super::instance::{Plugin, PluginState};
+use super::instance::{Plugin, PluginStatus};
+use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 
 pub mod process;
 
@@ -59,11 +60,11 @@ impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
         match self
             .state()
-            .state
-            .compare_exchange(PluginState::Processing, PluginState::Activated)
+            .status
+            .compare_exchange(PluginStatus::Processing, PluginStatus::Activated)
         {
             Ok(_) => unsafe_clap_call! { self.plugin=>stop_processing(self.plugin.as_ptr()) },
-            Err(PluginState::Activated) => (),
+            Err(PluginStatus::Activated) => (),
             Err(state) => panic!(
                 "The plugin was in an invalid state '{state:?}' when the audio thread got \
                  dropped, this is a clap-validator bug"
@@ -90,13 +91,20 @@ impl<'a> PluginAudioThread<'a> {
         &self.plugin.state
     }
 
+    /// Get the plugin's current initialization status.
+    pub fn status(&self) -> PluginStatus {
+        self.state().status.load()
+    }
+
     /// Get the _audio thread_ extension abstraction for the extension `T`, if the plugin supports
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
     //
-    // TODO: Remove this unused attribute once we implement audio thread extensions:w
+    // TODO: Remove this unused attribute once we implement audio thread extensions
     #[allow(unused)]
     pub fn get_extension<T: Extension<&'a Self>>(&'a self) -> Option<T> {
+        assert_plugin_state_initialized!(self);
+
         let extension_ptr = unsafe_clap_call! { self.plugin=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr()) };
 
         if extension_ptr.is_null() {
@@ -113,22 +121,10 @@ impl<'a> PluginAudioThread<'a> {
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
     pub fn start_processing(&self) -> Result<()> {
-        match self
-            .state()
-            .state
-            .compare_exchange(PluginState::Activated, PluginState::Processing)
-        {
-            Ok(_) => (),
-            Err(PluginState::Processing) => anyhow::bail!(
-                "Cannot start processing for a plugin that's already processing audio."
-            ),
-            Err(state) => panic!(
-                "The plugin was in an invalid state '{state:?}' when trying to start processing, \
-                 this is a clap-validator bug"
-            ),
-        }
+        assert_plugin_state_eq!(self, PluginStatus::Activated);
 
         if unsafe_clap_call! { self.plugin=>start_processing(self.as_ptr()) } {
+            self.state().status.store(PluginStatus::Processing);
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::start_processing()' returned false")
@@ -140,6 +136,8 @@ impl<'a> PluginAudioThread<'a> {
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
     pub fn process(&self, process_data: &mut ProcessData) -> Result<ProcessStatus> {
+        assert_plugin_state_eq!(self, PluginStatus::Processing);
+
         let result = process_data.with_clap_process_data(|clap_process_data| {
             unsafe_clap_call! {
                 self.plugin=>process(self.as_ptr(), &clap_process_data)
@@ -164,24 +162,11 @@ impl<'a> PluginAudioThread<'a> {
     /// Stop processing audio. See
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
-    pub fn stop_processing(&self) -> Result<()> {
-        match self
-            .state()
-            .state
-            .compare_exchange(PluginState::Processing, PluginState::Activated)
-        {
-            Ok(_) => (),
-            Err(PluginState::Activated) => anyhow::bail!(
-                "Cannot stop processing for a plugin that's currently not processing audio."
-            ),
-            Err(state) => panic!(
-                "The plugin was in an invalid state '{state:?}' when trying to stop processing, \
-                 this is a clap-validator bug"
-            ),
-        }
+    pub fn stop_processing(&self) {
+        assert_plugin_state_eq!(self, PluginStatus::Processing);
 
         unsafe_clap_call! { self.plugin=>stop_processing(self.as_ptr()) };
 
-        Ok(())
+        self.state().status.store(PluginStatus::Activated);
     }
 }

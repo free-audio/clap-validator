@@ -300,7 +300,7 @@ pub fn test_flush_state_reproducibility(
         let input_events = EventQueue::new_input();
         *input_events.events.lock() = random_param_set_events.clone();
         let output_events = EventQueue::new_output();
-        params.flush(&input_events, &output_events)?;
+        params.flush(&input_events, &output_events);
         host.handle_callbacks_once();
 
         // We'll compare against these values in that second pass

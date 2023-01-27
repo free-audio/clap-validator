@@ -13,6 +13,7 @@ use std::sync::Arc;
 use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
+use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 use crate::host::{CallbackTask, Host, InstanceState};
 use crate::util::unsafe_clap_call;
 
@@ -27,6 +28,9 @@ unsafe impl Sync for PluginHandle {}
 /// A CLAP plugin instance. The plugin will be deinitialized when this object is dropped. All
 /// functions here are callable only from the main thread. Use the
 /// [`on_audio_thread()`][Self::on_audio_thread()] method to spawn an audio thread.
+///
+/// All functions on `Plugin` and the objects created from it will panic if the plugin is not in the
+/// correct state.
 #[derive(Debug)]
 pub struct Plugin<'lib> {
     handle: PluginHandle,
@@ -49,8 +53,10 @@ pub struct Plugin<'lib> {
 /// in the correct state, and things like double activations can't happen. `Plugin` and
 /// `PluginAudioThread` will drop down to the previous state automatically when the object is
 /// dropped and the stop processing or deactivate functions have not yet been calle.d
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PluginState {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PluginStatus {
+    #[default]
+    Uninitialized,
     Deactivated,
     Activated,
     Processing,
@@ -72,15 +78,12 @@ impl<'lib> Deref for PluginSendWrapper<'lib> {
 
 impl Drop for Plugin<'_> {
     fn drop(&mut self) {
-        match self
-            .state
-            .state
-            .compare_exchange(PluginState::Activated, PluginState::Deactivated)
-        {
-            Ok(_) => unsafe_clap_call! { self.as_ptr()=>deactivate(self.as_ptr()) },
-            Err(PluginState::Deactivated) => (),
-            Err(state) => panic!(
-                "The plugin was in an invalid state '{state:?}' when the instance got dropped, \
+        // Make sure the plugin is in the correct state before it gets destroyed
+        match self.status() {
+            PluginStatus::Uninitialized | PluginStatus::Deactivated => (),
+            PluginStatus::Activated => self.deactivate(),
+            status @ PluginStatus::Processing => panic!(
+                "The plugin was in an invalid state '{status:?}' when the instance got dropped, \
                  this is a clap-validator bug"
             ),
         }
@@ -154,15 +157,17 @@ impl<'lib> Plugin<'lib> {
             .expect("Tried to get the host instance from a thread that isn't the main thread")
     }
 
-    /// The plugin's current initialization state.
-    pub fn state(&self) -> PluginState {
-        self.state.state.load()
+    /// The plugin's current initialization status.
+    pub fn status(&self) -> PluginStatus {
+        self.state.status.load()
     }
 
     /// Get the _main thread_ extension abstraction for the extension `T`, if the plugin supports
     /// this extension. Returns `None` if it does not. The plugin needs to be initialized using
     /// [`init()`][Self::init()] before this may be called.
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
+        assert_plugin_state_initialized!(self);
+
         let extension_ptr = unsafe_clap_call! {
             self.as_ptr()=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr())
         };
@@ -183,22 +188,11 @@ impl<'lib> Plugin<'lib> {
     ///
     /// If whatever happens on the audio thread caused main-thread callback requests to be emited,
     /// then those will be handled concurrently.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the plugin is not active. This indicates a bug in the validator.
     pub fn on_audio_thread<'a, T: Send, F: FnOnce(PluginAudioThread<'a>) -> T + Send>(
         &'a self,
         f: F,
     ) -> T {
-        // This would be a hard mistake on the the validator's end, because the audio thread doesn't
-        // exist when the plugin is deactivated.
-        if self.state() < PluginState::Activated {
-            panic!(
-                "'Plugin::on_audio_thread()' call while the plugin is not active, this is a bug \
-                 in the validator."
-            )
-        }
+        assert_plugin_state_eq!(self, PluginStatus::Activated);
 
         crossbeam::scope(|s| {
             let unsafe_self_wrapper = PluginSendWrapper(self);
@@ -238,7 +232,10 @@ impl<'lib> Plugin<'lib> {
 
     /// Initialize the plugin. This needs to be called before doing anything else.
     pub fn init(&self) -> Result<()> {
+        assert_plugin_state_eq!(self, PluginStatus::Uninitialized);
+
         if unsafe_clap_call! { self.as_ptr()=>init(self.as_ptr()) } {
+            self.state.status.store(PluginStatus::Deactivated);
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::init()' returned false")
@@ -254,20 +251,7 @@ impl<'lib> Plugin<'lib> {
         min_buffer_size: usize,
         max_buffer_size: usize,
     ) -> Result<()> {
-        match self
-            .state
-            .state
-            .compare_exchange(PluginState::Deactivated, PluginState::Activated)
-        {
-            Ok(_) => (),
-            Err(PluginState::Activated) => {
-                anyhow::bail!("Cannot activate an already active plugin.")
-            }
-            Err(state) => panic!(
-                "Tried activating a plugin that was already processing audio ({state:?}), this is \
-                 a clap-validator bug"
-            ),
-        }
+        assert_plugin_state_eq!(self, PluginStatus::Deactivated);
 
         // Apparently 0 is invalid here
         assert!(min_buffer_size >= 1);
@@ -280,6 +264,7 @@ impl<'lib> Plugin<'lib> {
                 max_buffer_size as u32,
             )
         } {
+            self.state.status.store(PluginStatus::Activated);
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin::activate()' returned false")
@@ -289,24 +274,11 @@ impl<'lib> Plugin<'lib> {
     /// Deactivate the plugin. See
     /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for the
     /// preconditions.
-    pub fn deactivate(&self) -> Result<()> {
-        match self
-            .state
-            .state
-            .compare_exchange(PluginState::Activated, PluginState::Deactivated)
-        {
-            Ok(_) => (),
-            Err(PluginState::Deactivated) => {
-                anyhow::bail!("Cannot deactivate an inactive plugin.")
-            }
-            Err(state) => panic!(
-                "Tried deactivating a plugin that was still processing audio ({state:?}), this is \
-                 a clap-validator bug"
-            ),
-        }
+    pub fn deactivate(&self) {
+        assert_plugin_state_eq!(self, PluginStatus::Activated);
 
         unsafe_clap_call! { self.as_ptr()=>deactivate(self.as_ptr()) };
 
-        Ok(())
+        self.state.status.store(PluginStatus::Deactivated);
     }
 }
