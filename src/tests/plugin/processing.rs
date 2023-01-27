@@ -5,11 +5,11 @@ use std::sync::atomic::Ordering;
 use anyhow::{Context, Result};
 
 use crate::host::Host;
-use crate::plugin::audio_thread::process::{
-    AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
-};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
+use crate::plugin::instance::audio_thread::process::{
+    AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
+};
 use crate::plugin::instance::Plugin;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, NoteGenerator};

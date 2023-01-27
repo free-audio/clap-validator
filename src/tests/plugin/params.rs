@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 use super::processing::ProcessingTest;
 use crate::host::Host;
-use crate::plugin::audio_thread::process::{Event, ProcessConfig};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::Params;
+use crate::plugin::instance::audio_thread::process::{Event, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, ParamFuzzer};
 use crate::tests::TestStatus;

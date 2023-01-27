@@ -21,7 +21,7 @@ use std::ptr::NonNull;
 
 use super::Extension;
 use crate::plugin::assert_plugin_state_lt;
-use crate::plugin::audio_thread::process::EventQueue;
+use crate::plugin::instance::audio_thread::process::EventQueue;
 use crate::plugin::instance::{Plugin, PluginStatus};
 use crate::util::{self, c_char_slice_to_string, unsafe_clap_call};
 

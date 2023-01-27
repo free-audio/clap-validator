@@ -10,12 +10,14 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use super::audio_thread::PluginAudioThread;
 use super::ext::Extension;
 use super::library::PluginLibrary;
 use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 use crate::host::{CallbackTask, Host, InstanceState};
 use crate::util::unsafe_clap_call;
+use audio_thread::PluginAudioThread;
+
+pub mod audio_thread;
 
 /// A `Send+Sync` wrapper around `*const clap_plugin`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -16,9 +16,9 @@ use crate::host::InstanceState;
 use crate::util::unsafe_clap_call;
 
 use self::process::ProcessData;
-use super::ext::Extension;
-use super::instance::{Plugin, PluginStatus};
 use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
+use super::{Plugin, PluginStatus};
+use crate::plugin::ext::Extension;
 
 pub mod process;
 
