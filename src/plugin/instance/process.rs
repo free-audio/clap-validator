@@ -94,6 +94,9 @@ unsafe impl Sync for OutOfPlaceAudioBuffers<'_> {}
 /// An event queue that can be used as either an input queue or an output queue. This is always
 /// allocated through a `Pin<Box<EventQueue>>` so the pointers are stable. The `VTable` type
 /// argument should be either `clap_input_events` or `clap_output_events`.
+//
+// TODO: There's not much benefit in having this be generic over the VTable and it makes it more
+//        dififcult to reason about. Just split this up into two concrete structs.
 #[derive(Debug)]
 pub struct EventQueue<VTable> {
     /// The vtable for this event queue. This will be either `clap_input_events` or
