@@ -12,7 +12,7 @@ use crate::tests::TestStatus;
 
 /// Check whether the plugin's categories are consistent. Currently this just makes sure that the
 /// plugin has one of the four main plugin category features.
-pub fn test_category_features(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+pub fn test_features_categories(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
     let features = plugin_features(library, plugin_id)?;
 
     // These are stored in the bindings as C-compatible null terminated strings, but we'll need them
@@ -43,7 +43,7 @@ pub fn test_category_features(library: &PluginLibrary, plugin_id: &str) -> Resul
 }
 
 /// Confirm that the plugin does not have any duplicate features.
-pub fn test_duplicate_features(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+pub fn test_features_duplicates(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
     let mut features = plugin_features(library, plugin_id)?;
     let unique_features: HashSet<&str> = features.iter().map(|feature| feature.as_str()).collect();
 

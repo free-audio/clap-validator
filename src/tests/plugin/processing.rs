@@ -202,8 +202,8 @@ impl<'a> ProcessingTest<'a> {
     }
 }
 
-/// The test for `ProcessingTest::BasicOutOfPlaceAudioProcessing`.
-pub fn test_basic_out_of_place_audio_processing(
+/// The test for `ProcessingTest::ProcessAudioOutOfPlaceBasic`.
+pub fn test_process_audio_out_of_place_basic(
     library: &PluginLibrary,
     plugin_id: &str,
 ) -> Result<TestStatus> {
@@ -249,10 +249,10 @@ pub fn test_basic_out_of_place_audio_processing(
     Ok(TestStatus::Success { details: None })
 }
 
-/// The test for `ProcessingTest::BasicOutOfPlaceNoteProcessing`. This test is very similar to
-/// `BasicAudioProcessing`, but it requires the `note-ports` extension, sends notes and/or MIDI to
-/// the plugin, and doesn't require the `audio-ports` extension.
-pub fn test_basic_out_of_place_note_processing(
+/// The test for `ProcessingTest::ProcessNoteOutOfPlaceBasic`. This test is very similar to
+/// `ProcessAudioOutOfPlaceBasic`, but it requires the `note-ports` extension, sends notes and/or
+/// MIDI to the plugin, and doesn't require the `audio-ports` extension.
+pub fn test_process_note_out_of_place_basic(
     library: &PluginLibrary,
     plugin_id: &str,
 ) -> Result<TestStatus> {
@@ -319,10 +319,10 @@ pub fn test_basic_out_of_place_note_processing(
     Ok(TestStatus::Success { details: None })
 }
 
-/// The test for `ProcessingTest::InconsistentNoteProcessing`. This is the same test as
-/// `BasicOutOfPlaceNoteProcessing`, but without requiring matched note on/off pairs and similar
+/// The test for `ProcessingTest::ProcessNoteInconsistent`. This is the same test as
+/// `ProcessAudioOutOfPlaceBasic`, but without requiring matched note on/off pairs and similar
 /// invariants
-pub fn test_inconsistent_note_processing(
+pub fn test_process_note_inconsistent(
     library: &PluginLibrary,
     plugin_id: &str,
 ) -> Result<TestStatus> {

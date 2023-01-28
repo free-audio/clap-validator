@@ -16,31 +16,31 @@ mod state;
 #[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter)]
 pub enum PluginTestCase {
     #[strum(serialize = "features-categories")]
-    CategoryFeatures,
+    FeaturesCategories,
     #[strum(serialize = "features-duplicates")]
-    DuplicateFeatures,
+    FeaturesDuplicates,
     #[strum(serialize = "process-audio-out-of-place-basic")]
-    BasicOutOfPlaceAudioProcessing,
+    ProcessAudioOutOfPlaceBasic,
     #[strum(serialize = "process-note-out-of-place-basic")]
-    BasicOutOfPlaceNoteProcessing,
+    ProcessNoteOutOfPlaceBasic,
     #[strum(serialize = "process-note-inconsistent")]
-    InconsistentNoteProcessing,
+    ProcessNoteInconsistent,
     #[strum(serialize = "param-conversions")]
-    ConvertParams,
+    ParamConversions,
     #[strum(serialize = "param-fuzz-random")]
-    RandomFuzzParams,
+    ParamFuzzRandom,
     #[strum(serialize = "param-set-wrong-namespace")]
-    WrongNamespaceSetParams,
+    ParamSetWrongNamespace,
     #[strum(serialize = "state-invalid")]
-    InvalidState,
+    StateInvalid,
     #[strum(serialize = "state-reproducibility-basic")]
-    BasicStateReproducibility,
+    StateReproducibilityBasic,
     #[strum(serialize = "state-reproducibility-null-cookies")]
-    NullCookiesStateReproducibility,
+    StateReproducibilityNullCookies,
     #[strum(serialize = "state-reproducibility-flush")]
-    FlushStateReproducibility,
+    StateReproducibilityFlush,
     #[strum(serialize = "state-buffered-streams")]
-    BufferedStateStreams,
+    StateBufferedStreams,
 }
 
 impl<'a> TestCase<'a> for PluginTestCase {
@@ -50,72 +50,72 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn description(&self) -> String {
         match self {
-            PluginTestCase::CategoryFeatures => String::from(
+            PluginTestCase::FeaturesCategories => String::from(
                 "The plugin needs to have at least one of the main CLAP category features.",
             ),
-            PluginTestCase::DuplicateFeatures => {
+            PluginTestCase::FeaturesDuplicates => {
                 String::from("The plugin's features array should not contain any duplicates.")
             }
-            PluginTestCase::BasicOutOfPlaceAudioProcessing => String::from(
+            PluginTestCase::ProcessAudioOutOfPlaceBasic => String::from(
                 "Processes random audio through the plugin with its default parameter values and \
                  tests whether the output does not contain any non-finite or subnormal values. \
                  Uses out-of-place audio processing.",
             ),
-            PluginTestCase::BasicOutOfPlaceNoteProcessing => String::from(
+            PluginTestCase::ProcessNoteOutOfPlaceBasic => String::from(
                 "Sends audio and random note and MIDI events to the plugin with its default \
                  parameter values and tests the output for consistency. Uses out-of-place audio \
                  processing.",
             ),
-            PluginTestCase::InconsistentNoteProcessing => String::from(
+            PluginTestCase::ProcessNoteInconsistent => String::from(
                 "Sends intentionally inconsistent and mismatching note and MIDI events to the \
                  plugin with its default parameter values and tests the output for consistency. \
                  Uses out-of-place audio processing.",
             ),
-            PluginTestCase::ConvertParams => String::from(
+            PluginTestCase::ParamConversions => String::from(
                 "Asserts that value to string and string to value conversions are supported for \
                  ether all or none of the plugin's parameters, and that conversions between \
                  values and strings roundtrip consistently.",
             ),
-            PluginTestCase::RandomFuzzParams => format!(
+            PluginTestCase::ParamFuzzRandom => format!(
                 "Generates {} sets of random parameter values, sets those on the plugin, and has \
                  the plugin process {} buffers of random audio and note events. The plugin passes \
                  the test if it doesn't produce any infinite or NaN values, and doesn't crash.",
                 params::FUZZ_NUM_PERMUTATIONS,
                 params::FUZZ_RUNS_PER_PERMUTATION
             ),
-            PluginTestCase::WrongNamespaceSetParams => String::from(
+            PluginTestCase::ParamSetWrongNamespace => String::from(
                 "Sends events to the plugin with the 'CLAP_EVENT_PARAM_VALUE' event tyep but with \
                  a mismatching namespace ID. Asserts that the plugin's parameter values don't \
                  change.",
             ),
-            PluginTestCase::InvalidState => String::from(
+            PluginTestCase::StateInvalid => String::from(
                 "The plugin should return false when 'clap_plugin_state::load()' is called with \
                  an empty state.",
             ),
-            PluginTestCase::BasicStateReproducibility => String::from(
+            PluginTestCase::StateReproducibilityBasic => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
                  instance, reloads the state, and then checks whether the parameter values are \
                  the same and whether saving the state once more results in the same state file \
                  as before. The parameter values are updated using the process function.",
             ),
-            PluginTestCase::NullCookiesStateReproducibility => format!(
+            PluginTestCase::StateReproducibilityNullCookies => format!(
                 "The exact same test as {}, but with all cookies in the parameter events set to \
                  null pointers. The plugin should handle this in the same way as the other test \
                  case.",
-                PluginTestCase::BasicStateReproducibility
+                PluginTestCase::StateReproducibilityBasic
             ),
-            PluginTestCase::FlushStateReproducibility => String::from(
+            PluginTestCase::StateReproducibilityFlush => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
                  instance, sets the same parameters as before, saves the state again, and then \
                  asserts that the two states are identical. The parameter values are set updated \
                  using the process function to create the first state, and using the flush \
                  function to create the second state.",
             ),
-            PluginTestCase::BufferedStateStreams => format!(
+            PluginTestCase::StateBufferedStreams => format!(
                 "Performs the same state and parameter reproducibility check as in '{}', but this \
                  time the plugin is only allowed to read a small prime number of bytes at a time \
                  when reloading and resaving the state.",
-                PluginTestCase::BasicStateReproducibility
+                PluginTestCase::StateReproducibilityBasic
             ),
         }
     }
@@ -137,38 +137,38 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
         let status = match self {
-            PluginTestCase::CategoryFeatures => {
-                features::test_category_features(library, plugin_id)
+            PluginTestCase::FeaturesCategories => {
+                features::test_features_categories(library, plugin_id)
             }
-            PluginTestCase::DuplicateFeatures => {
-                features::test_duplicate_features(library, plugin_id)
+            PluginTestCase::FeaturesDuplicates => {
+                features::test_features_duplicates(library, plugin_id)
             }
-            PluginTestCase::BasicOutOfPlaceAudioProcessing => {
-                processing::test_basic_out_of_place_audio_processing(library, plugin_id)
+            PluginTestCase::ProcessAudioOutOfPlaceBasic => {
+                processing::test_process_audio_out_of_place_basic(library, plugin_id)
             }
-            PluginTestCase::BasicOutOfPlaceNoteProcessing => {
-                processing::test_basic_out_of_place_note_processing(library, plugin_id)
+            PluginTestCase::ProcessNoteOutOfPlaceBasic => {
+                processing::test_process_note_out_of_place_basic(library, plugin_id)
             }
-            PluginTestCase::InconsistentNoteProcessing => {
-                processing::test_inconsistent_note_processing(library, plugin_id)
+            PluginTestCase::ProcessNoteInconsistent => {
+                processing::test_process_note_inconsistent(library, plugin_id)
             }
-            PluginTestCase::ConvertParams => params::test_convert_params(library, plugin_id),
-            PluginTestCase::RandomFuzzParams => params::test_random_fuzz_params(library, plugin_id),
-            PluginTestCase::WrongNamespaceSetParams => {
-                params::test_wrong_namespace_set_params(library, plugin_id)
+            PluginTestCase::ParamConversions => params::test_param_conversions(library, plugin_id),
+            PluginTestCase::ParamFuzzRandom => params::test_param_fuzz_random(library, plugin_id),
+            PluginTestCase::ParamSetWrongNamespace => {
+                params::test_param_set_wrong_namespace(library, plugin_id)
             }
-            PluginTestCase::InvalidState => state::test_invalid_state(library, plugin_id),
-            PluginTestCase::BasicStateReproducibility => {
-                state::test_basic_state_reproducibility(library, plugin_id, false)
+            PluginTestCase::StateInvalid => state::test_state_invalid(library, plugin_id),
+            PluginTestCase::StateReproducibilityBasic => {
+                state::test_state_reproducibility_null_cookies(library, plugin_id, false)
             }
-            PluginTestCase::NullCookiesStateReproducibility => {
-                state::test_basic_state_reproducibility(library, plugin_id, true)
+            PluginTestCase::StateReproducibilityNullCookies => {
+                state::test_state_reproducibility_null_cookies(library, plugin_id, true)
             }
-            PluginTestCase::FlushStateReproducibility => {
-                state::test_flush_state_reproducibility(library, plugin_id)
+            PluginTestCase::StateReproducibilityFlush => {
+                state::test_state_reproducibility_flush(library, plugin_id)
             }
-            PluginTestCase::BufferedStateStreams => {
-                state::test_buffered_state_streams(library, plugin_id)
+            PluginTestCase::StateBufferedStreams => {
+                state::test_state_buffered_streams(library, plugin_id)
             }
         };
 

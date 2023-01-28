@@ -22,8 +22,8 @@ const EXPECTED_STATE_FILE_NAME: &str = "state-expected";
 /// The file name we'll use to dump the actual state when a test fails.
 const ACTUAL_STATE_FILE_NAME: &str = "state-actual";
 
-/// The test for `PluginTestCase::InvalidState`.
-pub fn test_invalid_state(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+/// The test for `PluginTestCase::StateInvalid`.
+pub fn test_state_invalid(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
     let host = Host::new();
     let plugin = library
         .create_plugin(plugin_id, host.clone())
@@ -57,14 +57,14 @@ pub fn test_invalid_state(library: &PluginLibrary, plugin_id: &str) -> Result<Te
     }
 }
 
-/// The test for `PluginTestCase::BasicStateReproducibility`. See the description of this test for a
-/// detailed explanation, but we essentially check if saving a loaded state results in the same
-/// state file, and whether a plugin's parameters are the same after loading the state.
+/// The test for `PluginTestCase::StateReproducibilityNullCookies`. See the description of this test
+/// for a detailed explanation, but we essentially check if saving a loaded state results in the
+/// same state file, and whether a plugin's parameters are the same after loading the state.
 ///
 /// The `zero_out_cookies` parameter offers an alternative on this test that sends parameter change
 /// events with all cookies set to null pointers. The plugin should behave identically when this
 /// happens.
-pub fn test_basic_state_reproducibility(
+pub fn test_state_reproducibility_null_cookies(
     library: &PluginLibrary,
     plugin_id: &str,
     zero_out_cookies: bool,
@@ -221,10 +221,10 @@ pub fn test_basic_state_reproducibility(
         Ok(TestStatus::Success { details: None })
     } else {
         let (expected_state_file_path, mut expected_state_file) =
-            PluginTestCase::BasicStateReproducibility
+            PluginTestCase::StateReproducibilityBasic
                 .temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
         let (actual_state_file_path, mut actual_state_file) =
-            PluginTestCase::BasicStateReproducibility
+            PluginTestCase::StateReproducibilityBasic
                 .temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
 
         expected_state_file.write_all(&expected_state)?;
@@ -239,8 +239,8 @@ pub fn test_basic_state_reproducibility(
     }
 }
 
-/// The test for `PluginTestCase::FlushStateReproducibility`.
-pub fn test_flush_state_reproducibility(
+/// The test for `PluginTestCase::StateReproducibilityFlush`.
+pub fn test_state_reproducibility_flush(
     library: &PluginLibrary,
     plugin_id: &str,
 ) -> Result<TestStatus> {
@@ -427,10 +427,10 @@ pub fn test_flush_state_reproducibility(
         Ok(TestStatus::Success { details: None })
     } else {
         let (expected_state_file_path, mut expected_state_file) =
-            PluginTestCase::FlushStateReproducibility
+            PluginTestCase::StateReproducibilityFlush
                 .temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
         let (actual_state_file_path, mut actual_state_file) =
-            PluginTestCase::FlushStateReproducibility
+            PluginTestCase::StateReproducibilityFlush
                 .temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
 
         expected_state_file.write_all(&expected_state)?;
@@ -445,8 +445,8 @@ pub fn test_flush_state_reproducibility(
     }
 }
 
-/// The test for `PluginTestCase::BufferedStateStreams`.
-pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+/// The test for `PluginTestCase::StateBufferedStreams`.
+pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
     let mut prng = new_prng();
 
     let host = Host::new();
@@ -581,9 +581,9 @@ pub fn test_buffered_state_streams(library: &PluginLibrary, plugin_id: &str) -> 
         Ok(TestStatus::Success { details: None })
     } else {
         let (expected_state_file_path, mut expected_state_file) =
-            PluginTestCase::BufferedStateStreams
+            PluginTestCase::StateBufferedStreams
                 .temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
-        let (actual_state_file_path, mut actual_state_file) = PluginTestCase::BufferedStateStreams
+        let (actual_state_file_path, mut actual_state_file) = PluginTestCase::StateBufferedStreams
             .temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
 
         expected_state_file.write_all(&expected_state)?;
