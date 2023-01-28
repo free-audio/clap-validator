@@ -271,7 +271,7 @@ pub fn test_basic_out_of_place_note_processing(
             .context("Error while querying 'audio-ports' IO configuration")?,
         None => AudioPortConfig::default(),
     };
-    let note_port_config = match plugin.get_extension::<NotePorts>() {
+    let note_ports_config = match plugin.get_extension::<NotePorts>() {
         Some(note_ports) => note_ports
             .config()
             .context("Error while querying 'note-ports' IO configuration")?,
@@ -283,7 +283,7 @@ pub fn test_basic_out_of_place_note_processing(
             })
         }
     };
-    if note_port_config.inputs.is_empty() {
+    if note_ports_config.inputs.is_empty() {
         return Ok(TestStatus::Skipped {
             details: Some(String::from(
                 "The plugin implements the 'note-ports' extension but it does not have any input \
@@ -295,7 +295,7 @@ pub fn test_basic_out_of_place_note_processing(
 
     // We'll fill the input event queue with (consistent) random CLAP note and/or MIDI
     // events depending on what's supported by the plugin supports
-    let mut note_event_rng = NoteGenerator::new(note_port_config);
+    let mut note_event_rng = NoteGenerator::new(note_ports_config);
 
     const BUFFER_SIZE: usize = 512;
     let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
