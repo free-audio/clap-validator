@@ -10,14 +10,14 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Tests are now run in parallel by default, unless the `--in-process` option is
+- Tests are now run in parallel by default unless the `--in-process` option is
   used. This can be disabled using the new `--no-parallel` option.
 - Added a basic parameter fuzzing test. This test generates 50 random parameter
   value permutations. The plugin succeeds the test if it can process random
-  audio buffers and note events using those parameters without producing
+  audio buffers and note events after setting those parameters without producing
   infinite or NaN values and without crashing.
-- Added a test that makes sure all of the plugin's symbols resolve correctly by
-  loading the library with `RTLD_NOW`. This test is only run on Unix-like
+- Added a test that makes sure all of the plugin's symbols resolve correctly
+  when the library is loaded with `RTLD_NOW`. This test is only run on Unix-like
   platforms.
 - Added a test that calls `clap_plugin_state::load()` with an empty state and
   asserts the plugin returns `false`.
@@ -30,16 +30,17 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - The `features-categories` test now also accepts the CLAP 1.1.7 `note-detector`
   feature as a main category feature.
 - `clap-validator list tests [--json]` now includes test descriptions.
-- `clap-validator validate` now indents the wrapped output slightly less.
+- `clap-validator validate` now indents the wrapped output slightly less to make
+  the output look a bit more consistent.
 - The `--only-failed` option now also shows tests that resulted in a warning in
   addition to hard failures.
 - When a plugin supports text-to-value and/or value-to-text conversions for some
-  but not all of its parameters, clap-validator will now include the names of
-  the parameters and the failing inputs in the error message to help pinpoint
-  the issue.
+  but not all of its parameters, clap-validator now includes the names of the
+  parameters and the failing inputs in the error message to help pinpoint the
+  issue.
 - The validator now asserts the plugin is in the correct state before calling
-  the plugin's functions more often to reduce the potential surface for bugs in
-  the validator itself.
+  the plugin's functions in more places to reduce the potential surface for bugs
+  in the validator itself.
 
 ## [0.2.0] - 2022-01-09
 
