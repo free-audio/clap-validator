@@ -12,6 +12,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Tests are now run in parallel by default, unless the `--in-process` option is
   used. This can be disabled using the new `--no-parallel` option.
+- Added a basic parameter fuzzing test. This test generates 50 random parameter
+  value permutations. The plugin succeeds the test if it can process random
+  audio buffers and note events using those parameters without producing
+  infinite or NaN values and without crashing.
 - Added a test that makes sure all of the plugin's symbols resolve correctly by
   loading the library with `RTLD_NOW`. This test is only run on Unix-like
   platforms.
