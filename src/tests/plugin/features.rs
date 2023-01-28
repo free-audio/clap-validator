@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use clap_sys::plugin_features::{
     CLAP_PLUGIN_FEATURE_ANALYZER, CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_INSTRUMENT,
-    CLAP_PLUGIN_FEATURE_NOTE_EFFECT,
+    CLAP_PLUGIN_FEATURE_NOTE_DETECTOR, CLAP_PLUGIN_FEATURE_NOTE_EFFECT,
 };
 use std::collections::HashSet;
 
@@ -19,12 +19,14 @@ pub fn test_category_features(library: &PluginLibrary, plugin_id: &str) -> Resul
     // as regular string slices so we can compare them to
     let instrument_feature = CLAP_PLUGIN_FEATURE_INSTRUMENT.to_str().unwrap();
     let audio_effect_feature = CLAP_PLUGIN_FEATURE_AUDIO_EFFECT.to_str().unwrap();
+    let note_detector_feature = CLAP_PLUGIN_FEATURE_NOTE_DETECTOR.to_str().unwrap();
     let note_effect_feature = CLAP_PLUGIN_FEATURE_NOTE_EFFECT.to_str().unwrap();
     let analyzer_feature = CLAP_PLUGIN_FEATURE_ANALYZER.to_str().unwrap();
 
     let has_main_category = features.iter().any(|feature| -> bool {
         feature == instrument_feature
             || feature == audio_effect_feature
+            || feature == note_detector_feature
             || feature == note_effect_feature
             || feature == analyzer_feature
     });

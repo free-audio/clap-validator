@@ -23,6 +23,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The `features-categories` test now also accepts the CLAP 1.1.7 `note-detector`
+  feature as a main category feature.
 - `clap-validator list tests [--json]` now includes test descriptions.
 - `clap-validator validate` now indents the wrapped output slightly less.
 - The `--only-failed` option now also shows tests that resulted in a warning in
