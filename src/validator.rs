@@ -143,11 +143,13 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
     // The tests can optionally be run in parallel. This is not the default since some plugins may
     // not handle it correctly, event when the plugins are loaded in different processes. It's also
     // incompatible with the in-process mode.
+    // NOTE: The parallel iterators don't preserve the iterator order, so to ensure consistency the
+    //       results are sorted afterwards
     // TODO: There doesn't seem to be a way to run rayon iterators on the main thread, so the
     //       parallel and scalar versions need to be duplicated here. We could also create a single
     //       threaded shim that implements Rayon's parallel iterator methods, and then branch on the
     //       places where we create parallel iterators instead.
-    let results = if settings.no_parallel || settings.in_process {
+    let mut results = if settings.no_parallel || settings.in_process {
         settings
             .paths
             .iter()
@@ -320,6 +322,16 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                 },
             )
     }?;
+
+    // The parallel iterators don't preserve order, so this needs to be sorted to make sure the test
+    // results are always reported in the same order
+    for tests in results
+        .plugin_tests
+        .values_mut()
+        .chain(results.plugin_library_tests.values_mut())
+    {
+        tests.sort_by(|a, b| Ord::cmp(&a.name, &b.name));
+    }
 
     if let Some(plugin_id) = &settings.plugin_id {
         if results.plugin_tests.is_empty() {
