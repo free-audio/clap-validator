@@ -27,6 +27,8 @@ pub enum PluginTestCase {
     InconsistentNoteProcessing,
     #[strum(serialize = "param-conversions")]
     ConvertParams,
+    #[strum(serialize = "param-fuzz-random")]
+    RandomFuzzParams,
     #[strum(serialize = "param-set-wrong-namespace")]
     WrongNamespaceSetParams,
     #[strum(serialize = "state-invalid")]
@@ -73,6 +75,13 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 "Asserts that value to string and string to value conversions are supported for \
                  ether all or none of the plugin's parameters, and that conversions between \
                  values and strings roundtrip consistently.",
+            ),
+            PluginTestCase::RandomFuzzParams => format!(
+                "Generates {} sets of random parameter values, sets those on the plugin, and has \
+                 the plugin process {} buffers of random audio and note events. The plugin passes \
+                 the test if it doesn't produce any infinite or NaN values, and doesn't crash.",
+                params::FUZZ_NUM_PERMUTATIONS,
+                params::FUZZ_RUNS_PER_PERMUTATION
             ),
             PluginTestCase::WrongNamespaceSetParams => String::from(
                 "Sends events to the plugin with the 'CLAP_EVENT_PARAM_VALUE' event tyep but with \
@@ -144,6 +153,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 processing::test_inconsistent_note_processing(library, plugin_id)
             }
             PluginTestCase::ConvertParams => params::test_convert_params(library, plugin_id),
+            PluginTestCase::RandomFuzzParams => params::test_random_fuzz_params(library, plugin_id),
             PluginTestCase::WrongNamespaceSetParams => {
                 params::test_wrong_namespace_set_params(library, plugin_id)
             }

@@ -9,11 +9,20 @@ use std::collections::BTreeMap;
 use super::processing::ProcessingTest;
 use crate::host::Host;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
+use crate::plugin::ext::note_ports::NotePorts;
 use crate::plugin::ext::params::Params;
 use crate::plugin::instance::process::{Event, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
-use crate::tests::rng::{new_prng, ParamFuzzer};
+use crate::tests::rng::{new_prng, NoteGenerator, ParamFuzzer};
 use crate::tests::TestStatus;
+
+/// The fixed buffer size to use for these tests.
+const BUFFER_SIZE: usize = 512;
+/// The number of different parameter combinations to try in the parameter fuzzing tests.
+pub const FUZZ_NUM_PERMUTATIONS: usize = 50;
+/// How many buffers of [`BUFFER_SIZE`] samples to process at each parameter permutation. This
+/// allows the plugin's state to settle in before moving to the next set of parameter values.
+pub const FUZZ_RUNS_PER_PERMUTATION: usize = 5;
 
 /// The test for `ProcessingTest::ConvertParams`.
 pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
@@ -159,6 +168,90 @@ pub fn test_convert_params(library: &PluginLibrary, plugin_id: &str) -> Result<T
     }
 }
 
+/// The test for `ProcessingTest::RandomFuzzParams`.
+pub fn test_random_fuzz_params(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+    let mut prng = new_prng();
+
+    let host = Host::new();
+    let plugin = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance")?;
+    plugin.init().context("Error during initialization")?;
+
+    // Both audio and note ports are optional
+    let audio_ports = plugin.get_extension::<AudioPorts>();
+    let note_ports = plugin.get_extension::<NotePorts>();
+    let params = match plugin.get_extension::<Params>() {
+        Some(params) => params,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(String::from(
+                    "The plugin does not support the 'params' extension.",
+                )),
+            })
+        }
+    };
+    host.handle_callbacks_once();
+
+    let audio_ports_config = audio_ports
+        .map(|ports| ports.config())
+        .transpose()
+        .context("Could not fetch the plugin's audio port config")?;
+    let note_ports_config = note_ports
+        .map(|ports| ports.config())
+        .transpose()
+        .context("Could not fetch the plugin's note port config")?;
+    let param_infos = params
+        .info()
+        .context("Could not fetch the plugin's parameters")?;
+
+    // For each set of runs we'll generate new parameter values, and if the plugin supports notes
+    // we'll also generate note events.
+    let param_fuzzer = ParamFuzzer::new(&param_infos);
+    let mut note_event_rng = note_ports_config.map(NoteGenerator::new);
+
+    let (mut input_buffers, mut output_buffers) = audio_ports_config
+        .unwrap_or_default()
+        .create_buffers(BUFFER_SIZE);
+    for _permutation in 0..FUZZ_NUM_PERMUTATIONS {
+        // These are taken out of the `Option` and set during the first run
+        let mut random_param_set_events: Option<Vec<_>> =
+            Some(param_fuzzer.randomize_params_at(&mut prng, 0).collect());
+
+        // TODO: Write the current and previous values of `random_param_set_events` to a file if
+        //       processing failed
+        ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?.run(
+            FUZZ_RUNS_PER_PERMUTATION,
+            ProcessConfig::default(),
+            |process_data| {
+                if let Some(random_param_set_events) = random_param_set_events.take() {
+                    *process_data.input_events.events.lock() = random_param_set_events;
+                }
+
+                // Audio and MIDI/note events are randomized in accordance to what the plugin
+                // supports
+                if let Some(note_event_rng) = note_event_rng.as_mut() {
+                    // This includes a sort if `random_param_set_events` also contained a queue
+                    note_event_rng.fill_event_queue(
+                        &mut prng,
+                        &process_data.input_events,
+                        BUFFER_SIZE as u32,
+                    )?;
+                }
+                process_data.buffers.randomize(&mut prng);
+
+                Ok(())
+            },
+        )?;
+    }
+
+    // `ProcessingTest::run()` already handled callbacks for us
+    host.thread_safety_check()
+        .context("Thread safety checks failed")?;
+
+    Ok(TestStatus::Success { details: None })
+}
+
 /// The test for `ProcessingTest::WrongNamespaceSetParams`.
 pub fn test_wrong_namespace_set_params(
     library: &PluginLibrary,
@@ -211,7 +304,7 @@ pub fn test_wrong_namespace_set_params(
         }
     }
 
-    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
+    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(BUFFER_SIZE);
     ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?.run_once(
         ProcessConfig::default(),
         move |process_data| {
