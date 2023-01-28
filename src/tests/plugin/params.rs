@@ -213,36 +213,43 @@ pub fn test_random_fuzz_params(library: &PluginLibrary, plugin_id: &str) -> Resu
     let (mut input_buffers, mut output_buffers) = audio_ports_config
         .unwrap_or_default()
         .create_buffers(BUFFER_SIZE);
-    for _permutation in 0..FUZZ_NUM_PERMUTATIONS {
+    for permutation_no in 1..=FUZZ_NUM_PERMUTATIONS {
         // These are taken out of the `Option` and set during the first run
         let mut random_param_set_events: Option<Vec<_>> =
             Some(param_fuzzer.randomize_params_at(&mut prng, 0).collect());
 
-        // TODO: Write the current and previous values of `random_param_set_events` to a file if
-        //       processing failed
-        ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?.run(
-            FUZZ_RUNS_PER_PERMUTATION,
-            ProcessConfig::default(),
-            |process_data| {
-                if let Some(random_param_set_events) = random_param_set_events.take() {
-                    *process_data.input_events.events.lock() = random_param_set_events;
-                }
+        ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
+            .run(
+                FUZZ_RUNS_PER_PERMUTATION,
+                ProcessConfig::default(),
+                |process_data| {
+                    if let Some(random_param_set_events) = random_param_set_events.take() {
+                        *process_data.input_events.events.lock() = random_param_set_events;
+                    }
 
-                // Audio and MIDI/note events are randomized in accordance to what the plugin
-                // supports
-                if let Some(note_event_rng) = note_event_rng.as_mut() {
-                    // This includes a sort if `random_param_set_events` also contained a queue
-                    note_event_rng.fill_event_queue(
-                        &mut prng,
-                        &process_data.input_events,
-                        BUFFER_SIZE as u32,
-                    )?;
-                }
-                process_data.buffers.randomize(&mut prng);
+                    // Audio and MIDI/note events are randomized in accordance to what the plugin
+                    // supports
+                    if let Some(note_event_rng) = note_event_rng.as_mut() {
+                        // This includes a sort if `random_param_set_events` also contained a queue
+                        note_event_rng.fill_event_queue(
+                            &mut prng,
+                            &process_data.input_events,
+                            BUFFER_SIZE as u32,
+                        )?;
+                    }
+                    process_data.buffers.randomize(&mut prng);
 
-                Ok(())
-            },
-        )?;
+                    Ok(())
+                },
+            )
+            .with_context(|| {
+                // TODO: Write the current and previous values of `random_param_set_events` to a
+                //       file if processing failed
+                format!(
+                    "Invalid output detected in parameter value permutation {permutation_no} of \
+                     {FUZZ_NUM_PERMUTATIONS}"
+                )
+            })?;
     }
 
     // `ProcessingTest::run()` already handled callbacks for us
