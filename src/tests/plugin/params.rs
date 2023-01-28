@@ -200,7 +200,10 @@ pub fn test_random_fuzz_params(library: &PluginLibrary, plugin_id: &str) -> Resu
     let note_ports_config = note_ports
         .map(|ports| ports.config())
         .transpose()
-        .context("Could not fetch the plugin's note port config")?;
+        .context("Could not fetch the plugin's note port config")?
+        // Don't try to generate notes if the plugin supports the note ports extension but doesn't
+        // actually have any note ports. JUCE does this.
+        .filter(|config| !config.inputs.is_empty());
     let param_infos = params
         .info()
         .context("Could not fetch the plugin's parameters")?;
