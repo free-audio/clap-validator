@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use clap_sys::entry::clap_plugin_entry;
-use clap_sys::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
+use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use clap_sys::version::clap_version;
 use serde::Serialize;
 use std::collections::HashSet;

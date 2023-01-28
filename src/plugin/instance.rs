@@ -1,8 +1,8 @@
 //! Abstractions for single CLAP plugin instances for main thread interactions.
 
 use anyhow::Result;
+use clap_sys::factory::plugin_factory::clap_plugin_factory;
 use clap_sys::plugin::clap_plugin;
-use clap_sys::plugin_factory::clap_plugin_factory;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::ops::Deref;
