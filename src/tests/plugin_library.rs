@@ -8,6 +8,7 @@ use std::time::Duration;
 use super::{TestCase, TestResult};
 
 mod factories;
+mod preset_discovery;
 mod scanning;
 
 const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
@@ -17,6 +18,8 @@ const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 /// description of each test case.
 #[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter)]
 pub enum PluginLibraryTestCase {
+    #[strum(serialize = "preset-discovery-descriptor-consistency")]
+    PresetDiscoveryDescriptorConsistency,
     #[strum(serialize = "scan-time")]
     ScanTime,
     #[strum(serialize = "scan-rtld-now")]
@@ -33,6 +36,10 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
     fn description(&self) -> String {
         match self {
+            PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency => String::from(
+                "Ensures that all preset provider descriptors from a preset discovery factory \
+                 match those stored in the providers created by the factory.",
+            ),
             PluginLibraryTestCase::ScanTime => format!(
                 "Checks whether the plugin can be scanned in under {} milliseconds.",
                 SCAN_TIME_LIMIT.as_millis()
@@ -72,6 +79,9 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
         let status = match self {
+            PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency => {
+                preset_discovery::test_descriptor_consistency(library_path)
+            }
             PluginLibraryTestCase::ScanTime => scanning::test_scan_time(library_path),
             PluginLibraryTestCase::ScanRtldNow => scanning::test_scan_rtld_now(library_path),
             PluginLibraryTestCase::QueryNonexistentFactory => {

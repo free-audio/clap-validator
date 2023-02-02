@@ -38,7 +38,7 @@ pub fn test_consistency(library: &PluginLibrary, plugin_id: &str) -> Result<Test
         Ok(TestStatus::Failed {
             details: Some(format!(
                 "The 'clap_plugin_descriptor' stored on '{plugin_id}'s 'clap_plugin' object \
-                 contains different values than the one from the factory."
+                 contains different values than the one returned by the factory."
             )),
         })
     }
