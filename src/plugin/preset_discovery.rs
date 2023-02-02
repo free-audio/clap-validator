@@ -7,10 +7,12 @@ use clap_sys::factory::draft::preset_discovery::{
 use std::collections::HashSet;
 use std::ptr::NonNull;
 
+use self::provider::Provider;
 use super::library::PluginLibrary;
 use crate::util::{self, unsafe_clap_call};
 
 pub mod indexer;
+pub mod provider;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -112,5 +114,11 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
         }
 
         Ok(metadata)
+    }
+
+    /// Create a preset provider based on one of the provider IDs returned by
+    /// [`metadata()`][Self::metadata()].
+    pub fn create_provider(&self, id: &str) -> Result<Provider> {
+        Provider::new(self, id)
     }
 }
