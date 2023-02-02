@@ -20,7 +20,7 @@ use crossbeam::channel;
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::{c_void, CStr};
+use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -91,8 +91,11 @@ pub struct InstanceState {
     /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
     host: Arc<Host>,
 
+    /// The `clap-validator` version. Read at compile time, but it has to be stored here since it
+    /// needs to be null terminated.
+    _clap_validator_version: CString,
     /// The vtable that's passed to the plugin. The `host_data` field is populated with a pointer to
-    /// the this object.
+    /// this object.
     clap_host: Mutex<clap_host>,
 
     /// The plugin's current state in terms of activation and processing status.
@@ -135,6 +138,8 @@ impl InstanceState {
     /// audio thread and pending callbacks. The `Pin` is necessary to prevent moving the object out
     /// of the `Arc`, since that would break pointers to the `InstanceState`.
     pub fn new(host: Arc<Host>) -> Pin<Arc<Self>> {
+        let clap_validator_version =
+            CString::new(env!("CARGO_PKG_VERSION")).expect("Invalid bytes in crate version");
         let instance = Arc::pin(Self {
             plugin: AtomicCell::new(None),
             host,
@@ -146,12 +151,13 @@ impl InstanceState {
                 name: b"clap-validator\0".as_ptr() as *const c_char,
                 vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
                 url: b"https://github.com/free-audio/clap-validator\0".as_ptr() as *const c_char,
-                version: b"0.1.0\0".as_ptr() as *const c_char,
+                version: clap_validator_version.as_ptr(),
                 get_extension: Some(Host::get_extension),
                 request_restart: Some(Host::request_restart),
                 request_process: Some(Host::request_process),
                 request_callback: Some(Host::request_callback),
             }),
+            _clap_validator_version: clap_validator_version,
 
             status: AtomicCell::new(PluginStatus::default()),
 

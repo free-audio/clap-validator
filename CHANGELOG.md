@@ -50,6 +50,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - All skip and error messages saying that a plugin doesn't support a certain
   extension or factory now always use the extension's or factory's actual ID.
   This is especially helpful for tests that use draft versions of extensions.
+- The validator's `clap-host` implementation now always contains the validator's
+  version.
 
 ### Fixed
 

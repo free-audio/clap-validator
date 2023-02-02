@@ -254,6 +254,7 @@ impl PluginLibrary {
         let preset_discovery_factory = unsafe_clap_call! {
             entry_point=>get_factory(CLAP_PRESET_DISCOVERY_FACTORY_ID.as_ptr())
         } as *mut clap_preset_discovery_factory;
+
         match NonNull::new(preset_discovery_factory) {
             Some(preset_discovery_factory) => {
                 Ok(PresetDiscoveryFactory::new(self, preset_discovery_factory))
