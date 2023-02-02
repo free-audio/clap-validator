@@ -238,7 +238,7 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str) -> Result
         .unwrap_or_default()
         .create_buffers(BUFFER_SIZE);
     for permutation_no in 1..=FUZZ_NUM_PERMUTATIONS {
-        current_events = Some(param_fuzzer.basicize_params_at(&mut prng, 0).collect());
+        current_events = Some(param_fuzzer.randomize_params_at(&mut prng, 0).collect());
 
         let mut have_set_parameters = false;
         let run_result =
