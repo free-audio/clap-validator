@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use crate::host::Host;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
+use crate::plugin::ext::Extension;
 use crate::plugin::instance::process::{
     AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
 };
@@ -221,8 +222,9 @@ pub fn test_process_audio_out_of_place_basic(
             .context("Error while querying 'audio-ports' IO configuration")?,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not support the 'audio-ports' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    AudioPorts::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }
@@ -277,17 +279,19 @@ pub fn test_process_note_out_of_place_basic(
             .context("Error while querying 'note-ports' IO configuration")?,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not implement the 'note-ports' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    NotePorts::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }
     };
     if note_ports_config.inputs.is_empty() {
         return Ok(TestStatus::Skipped {
-            details: Some(String::from(
-                "The plugin implements the 'note-ports' extension but it does not have any input \
-                 note ports.",
+            details: Some(format!(
+                "The plugin implements the '{}' extension but it does not have any input note \
+                 ports.",
+                NotePorts::EXTENSION_ID.to_str().unwrap()
             )),
         });
     }
@@ -346,17 +350,19 @@ pub fn test_process_note_inconsistent(
             .context("Error while querying 'note-ports' IO configuration")?,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not implement the 'note-ports' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    NotePorts::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }
     };
     if note_port_config.inputs.is_empty() {
         return Ok(TestStatus::Skipped {
-            details: Some(String::from(
-                "The plugin implements the 'note-ports' extension but it does not have any input \
-                 note ports.",
+            details: Some(format!(
+                "The plugin implements the '{}' extension but it does not have any input note \
+                 ports.",
+                NotePorts::EXTENSION_ID.to_str().unwrap()
             )),
         });
     }

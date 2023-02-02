@@ -169,7 +169,10 @@ impl PluginLibrary {
         // TODO: Should we log anything here? In theory not supporting the plugin factory is
         //       perfectly legal, but it's a bit weird
         if plugin_factory.is_null() {
-            anyhow::bail!("The plugin does not support the 'clap_plugin_factory'");
+            anyhow::bail!(
+                "The plugin does not support the '{}' factory",
+                CLAP_PLUGIN_FACTORY_ID.to_str().unwrap()
+            );
         }
 
         let mut metadata = PluginLibraryMetadata {
@@ -234,7 +237,10 @@ impl PluginLibrary {
         let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
             as *const clap_plugin_factory;
         if plugin_factory.is_null() {
-            anyhow::bail!("The plugin does not support the 'clap_plugin_factory'");
+            anyhow::bail!(
+                "The plugin does not support the '{}' factory",
+                CLAP_PLUGIN_FACTORY_ID.to_str().unwrap()
+            );
         }
 
         let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
@@ -253,7 +259,10 @@ impl PluginLibrary {
                 Ok(PresetDiscoveryFactory::new(self, preset_discovery_factory))
             }
             None => {
-                anyhow::bail!("The plugin does not support the 'clap_preset_discovery_factory'")
+                anyhow::bail!(
+                    "The plugin does not support the '{}' factory",
+                    CLAP_PRESET_DISCOVERY_FACTORY_ID.to_str().unwrap()
+                )
             }
         }
     }

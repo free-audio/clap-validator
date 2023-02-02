@@ -13,6 +13,7 @@ use crate::host::Host;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
 use crate::plugin::ext::params::Params;
+use crate::plugin::ext::Extension;
 use crate::plugin::instance::process::{Event, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, NoteGenerator, ParamFuzzer};
@@ -54,8 +55,9 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
         Some(params) => params,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not support the 'params' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }
@@ -201,8 +203,9 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str) -> Result
         Some(params) => params,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not support the 'params' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }
@@ -348,8 +351,9 @@ pub fn test_param_set_wrong_namespace(
         Some(params) => params,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not support the 'params' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }

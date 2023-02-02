@@ -9,6 +9,7 @@ use crate::host::Host;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::{ParamInfo, Params};
 use crate::plugin::ext::state::State;
+use crate::plugin::ext::Extension;
 use crate::plugin::instance::process::{Event, EventQueue, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, ParamFuzzer};
@@ -34,8 +35,9 @@ pub fn test_state_invalid(library: &PluginLibrary, plugin_id: &str) -> Result<Te
         Some(state) => state,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin does not support the 'state' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    State::EXTENSION_ID.to_str().unwrap(),
                 )),
             })
         }
@@ -90,8 +92,9 @@ pub fn test_state_reproducibility_null_cookies(
             Some(params) => params,
             None => {
                 return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin does not support the 'params' extension.",
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        Params::EXTENSION_ID.to_str().unwrap(),
                     )),
                 })
             }
@@ -100,8 +103,9 @@ pub fn test_state_reproducibility_null_cookies(
             Some(state) => state,
             None => {
                 return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin does not support the 'state' extension.",
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        State::EXTENSION_ID.to_str().unwrap(),
                     )),
                 })
             }
@@ -171,10 +175,11 @@ pub fn test_state_reproducibility_null_cookies(
     let params = match plugin.get_extension::<Params>() {
         Some(params) => params,
         None => {
-            // I sure hope that no plugin will eer hit this
+            // I sure hope that no plugin will ever hit this
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin's second instance does not support the 'params' extension.",
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap(),
                 )),
             });
         }
@@ -183,8 +188,9 @@ pub fn test_state_reproducibility_null_cookies(
         Some(state) => state,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin's second instance does not support the 'state' extension.",
+                details: Some(format!(
+                    "The plugin's second instance does not implement the '{}' extension.",
+                    State::EXTENSION_ID.to_str().unwrap()
                 )),
             })
         }
@@ -262,8 +268,9 @@ pub fn test_state_reproducibility_flush(
             Some(params) => params,
             None => {
                 return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin does not support the 'params' extension.",
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        Params::EXTENSION_ID.to_str().unwrap(),
                     )),
                 })
             }
@@ -272,8 +279,9 @@ pub fn test_state_reproducibility_flush(
             Some(state) => state,
             None => {
                 return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin does not support the 'state' extension.",
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        State::EXTENSION_ID.to_str().unwrap(),
                     )),
                 })
             }
@@ -348,8 +356,9 @@ pub fn test_state_reproducibility_flush(
         None => {
             // I sure hope that no plugin will eer hit this
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin's second instance does not support the 'params' extension.",
+                details: Some(format!(
+                    "The plugin's second instance does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap()
                 )),
             });
         }
@@ -358,10 +367,11 @@ pub fn test_state_reproducibility_flush(
         Some(state) => state,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin's second instance does not support the 'state' extension.",
+                details: Some(format!(
+                    "The plugin's second instance does not implement the '{}' extension.",
+                    State::EXTENSION_ID.to_str().unwrap()
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();
@@ -467,8 +477,9 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
             Some(params) => params,
             None => {
                 return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin does not support the 'params' extension.",
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        Params::EXTENSION_ID.to_str().unwrap(),
                     )),
                 })
             }
@@ -477,8 +488,9 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
             Some(state) => state,
             None => {
                 return Ok(TestStatus::Skipped {
-                    details: Some(String::from(
-                        "The plugin does not support the 'state' extension.",
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        State::EXTENSION_ID.to_str().unwrap(),
                     )),
                 })
             }
@@ -527,8 +539,9 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
         Some(params) => params,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin's second instance does not support the 'params' extension.",
+                details: Some(format!(
+                    "The plugin's second instance does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap()
                 )),
             });
         }
@@ -537,10 +550,11 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
         Some(state) => state,
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin's second instance does not support the 'state' extension.",
+                details: Some(format!(
+                    "The plugin's second instance does not implement the '{}' extension.",
+                    State::EXTENSION_ID.to_str().unwrap()
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();
