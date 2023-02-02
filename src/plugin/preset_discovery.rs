@@ -1,13 +1,16 @@
 //! An abstraction for the preset discovery factory.
 
 use anyhow::{Context, Result};
-use clap_sys::factory::draft::preset_discovery::clap_preset_discovery_factory;
+use clap_sys::factory::draft::preset_discovery::{
+    clap_preset_discovery_factory, clap_preset_discovery_provider_descriptor,
+};
 use std::collections::HashSet;
 use std::ptr::NonNull;
 
+use super::library::PluginLibrary;
 use crate::util::{self, unsafe_clap_call};
 
-use super::library::PluginLibrary;
+pub mod indexer;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,12 +35,31 @@ pub struct PresetDiscoveryFactory<'lib> {
 
 /// Metadata (descriptor) for a preset discovery provider. These providers can be instantiated by
 /// passing the IDs to [`PresetDiscoveryFactory::create()`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ProviderMetadata {
     pub version: (u32, u32, u32),
     pub id: String,
     pub name: String,
     pub vendor: String,
+}
+
+impl ProviderMetadata {
+    /// Parse the metadata from a `clap_preset_discovery_provider_descriptor`.
+    pub fn from_descriptor(descriptor: &clap_preset_discovery_provider_descriptor) -> Result<Self> {
+        Ok(ProviderMetadata {
+            version: (
+                descriptor.clap_version.major,
+                descriptor.clap_version.minor,
+                descriptor.clap_version.revision,
+            ),
+            id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
+                .context("The provider's 'id' pointer was null")?,
+            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
+                .context("The provider's 'name' pointer was null")?,
+            vendor: unsafe { util::cstr_ptr_to_string(descriptor.vendor)? }
+                .context("The provider's 'vendor' pointer was null")?,
+        })
+    }
 }
 
 impl<'lib> PresetDiscoveryFactory<'lib> {
@@ -75,21 +97,7 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
                 );
             }
 
-            metadata.push(ProviderMetadata {
-                version: unsafe {
-                    (
-                        (*descriptor).clap_version.major,
-                        (*descriptor).clap_version.minor,
-                        (*descriptor).clap_version.revision,
-                    )
-                },
-                id: unsafe { util::cstr_ptr_to_string((*descriptor).id)? }
-                    .context("The provider's 'id' pointer was null")?,
-                name: unsafe { util::cstr_ptr_to_string((*descriptor).name)? }
-                    .context("The provider's 'name' pointer was null")?,
-                vendor: unsafe { util::cstr_ptr_to_string((*descriptor).vendor)? }
-                    .context("The provider's 'vendor' pointer was null")?,
-            })
+            metadata.push(ProviderMetadata::from_descriptor(unsafe { &*descriptor })?);
         }
 
         // As a sanity check we'll make sure there are no duplicate IDs in here
