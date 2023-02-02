@@ -11,7 +11,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 use super::ext::Extension;
-use super::library::PluginLibrary;
+use super::library::{PluginLibrary, PluginMetadata};
 use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 use crate::host::{CallbackTask, Host, InstanceState};
 use crate::util::unsafe_clap_call;
@@ -142,6 +142,18 @@ impl<'lib> Plugin<'lib> {
     /// Get the raw pointer to the `clap_plugin` instance.
     pub fn as_ptr(&self) -> *const clap_plugin {
         self.handle.0.as_ptr()
+    }
+
+    /// Get this plugin's metadata descriptor. In theory this should be the same as the one
+    /// retrieved from the factory earlier.
+    pub fn descriptor(&self) -> Result<PluginMetadata> {
+        let plugin = self.as_ptr();
+        let descriptor = unsafe { (*plugin).desc };
+        if descriptor.is_null() {
+            anyhow::bail!("The 'desc' field on the 'clap_plugin' struct is a null pointer");
+        }
+
+        PluginMetadata::from_descriptor(unsafe { &*descriptor })
     }
 
     /// Get the host for this plugin instance.

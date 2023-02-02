@@ -7,8 +7,42 @@ use clap_sys::plugin_features::{
 };
 use std::collections::HashSet;
 
+use crate::host::Host;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
+
+/// Verifies that the descriptor stored in the factory and the descriptor stored on the plugin
+/// object are equivalent.
+pub fn test_consistency(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+    let metadata = library.metadata().with_context(|| {
+        format!(
+            "Could not fetch plugin metadata for '{}'",
+            library.library_path().display()
+        )
+    })?;
+    let factory_descriptor = metadata
+        .plugins
+        .into_iter()
+        .find(|plugin_meta| plugin_meta.id == plugin_id)
+        .expect("Incorrect plugin ID for metadata query, this is a bug in clap-validator");
+
+    let host = Host::new();
+    let plugin = library
+        .create_plugin(plugin_id, host)
+        .context("Could not create the plugin instance")?;
+    let plugin_descriptor = plugin.descriptor()?;
+
+    if plugin_descriptor == factory_descriptor {
+        Ok(TestStatus::Success { details: None })
+    } else {
+        Ok(TestStatus::Failed {
+            details: Some(format!(
+                "The 'clap_plugin_descriptor' stored on '{plugin_id}'s 'clap_plugin' object \
+                 contains different values than the one from the factory."
+            )),
+        })
+    }
+}
 
 /// Check whether the plugin's categories are consistent. Currently this just makes sure that the
 /// plugin has one of the four main plugin category features.

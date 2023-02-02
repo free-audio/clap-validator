@@ -6,7 +6,7 @@ use std::process::Command;
 use super::{TestCase, TestResult};
 use crate::plugin::library::PluginLibrary;
 
-mod features;
+mod descriptor;
 mod params;
 mod processing;
 mod state;
@@ -15,6 +15,8 @@ mod state;
 /// `description` function below for a description of each test case.
 #[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter)]
 pub enum PluginTestCase {
+    #[strum(serialize = "descriptor-consistency")]
+    DescriptorConsistency,
     #[strum(serialize = "features-categories")]
     FeaturesCategories,
     #[strum(serialize = "features-duplicates")]
@@ -50,6 +52,10 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn description(&self) -> String {
         match self {
+            PluginTestCase::DescriptorConsistency => String::from(
+                "The plugin descriptor returned from the plugin factory and the plugin descriptor \
+                 stored on the 'clap_plugin object should be equivalent.",
+            ),
             PluginTestCase::FeaturesCategories => String::from(
                 "The plugin needs to have at least one of the main CLAP category features.",
             ),
@@ -137,11 +143,14 @@ impl<'a> TestCase<'a> for PluginTestCase {
 
     fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
         let status = match self {
+            PluginTestCase::DescriptorConsistency => {
+                descriptor::test_consistency(library, plugin_id)
+            }
             PluginTestCase::FeaturesCategories => {
-                features::test_features_categories(library, plugin_id)
+                descriptor::test_features_categories(library, plugin_id)
             }
             PluginTestCase::FeaturesDuplicates => {
-                features::test_features_duplicates(library, plugin_id)
+                descriptor::test_features_duplicates(library, plugin_id)
             }
             PluginTestCase::ProcessAudioOutOfPlaceBasic => {
                 processing::test_process_audio_out_of_place_basic(library, plugin_id)

@@ -42,7 +42,7 @@ pub struct PluginLibraryMetadata {
 /// Metadata for a single plugin within a CLAP plugin library. See
 /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for a description
 /// of the fields.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct PluginMetadata {
     pub id: String,
     pub name: String,
