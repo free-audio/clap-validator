@@ -1,19 +1,9 @@
 //! An abstraction for the preset discovery factory.
 
-use anyhow::Result;
 use clap_sys::factory::draft::preset_discovery::clap_preset_discovery_factory;
-use clap_sys::factory::plugin_factory::clap_plugin_factory;
-use clap_sys::plugin::clap_plugin;
-use std::ffi::CStr;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::pin::Pin;
 use std::ptr::NonNull;
-use std::sync::Arc;
 
 use super::library::PluginLibrary;
-use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
-use crate::util::unsafe_clap_call;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
