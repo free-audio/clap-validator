@@ -70,9 +70,10 @@ impl Params<'_> {
 
     /// Get a parameter's value.
     pub fn get(&self, param_id: clap_id) -> Result<f64> {
+        let params = self.params.as_ptr();
+        let plugin = self.plugin.as_ptr();
         let mut value = 0.0f64;
-        if unsafe_clap_call! { self.params.as_ptr()=>get_value(self.plugin.as_ptr(), param_id, &mut value) }
-        {
+        if unsafe_clap_call! { params=>get_value(plugin, param_id, &mut value) } {
             Ok(value)
         } else {
             anyhow::bail!(
@@ -85,10 +86,12 @@ impl Params<'_> {
     /// this, or an error if the returned string did not contain any null bytes or if it isn't
     /// invalid UTF-8.
     pub fn value_to_text(&self, param_id: clap_id, value: f64) -> Result<Option<String>> {
+        let params = self.params.as_ptr();
+        let plugin = self.plugin.as_ptr();
         let mut string_buffer = [0; CLAP_NAME_SIZE];
         if unsafe_clap_call! {
-            self.params.as_ptr()=>value_to_text(
-                self.plugin.as_ptr(),
+            params=>value_to_text(
+                plugin,
                 param_id,
                 value,
                 string_buffer.as_mut_ptr(),
@@ -113,10 +116,12 @@ impl Params<'_> {
     pub fn text_to_value(&self, param_id: clap_id, text: &str) -> Result<Option<f64>> {
         let text_cstring = CString::new(text)?;
 
+        let params = self.params.as_ptr();
+        let plugin = self.plugin.as_ptr();
         let mut value = 0.0f64;
         if unsafe_clap_call! {
-            self.params.as_ptr()=>text_to_value(
-                self.plugin.as_ptr(),
+            params=>text_to_value(
+                plugin,
                 param_id,
                 text_cstring.as_ptr(),
                 &mut value,
@@ -135,15 +140,15 @@ impl Params<'_> {
     pub fn info(&self) -> Result<ParamInfo> {
         let mut result = BTreeMap::new();
 
-        let params = unsafe { self.params.as_ref() };
-        let num_params = unsafe_clap_call! { params=>count(self.plugin.as_ptr()) };
+        let params = self.params.as_ptr();
+        let plugin = self.plugin.as_ptr();
+        let num_params = unsafe_clap_call! { params=>count(plugin) };
 
         // Right now this is only used to make sure the plugin doesn't have multiple bypass parameters
         let mut bypass_parameter_id = None;
         for i in 0..num_params {
             let mut info: clap_param_info = unsafe { std::mem::zeroed() };
-            let success =
-                unsafe_clap_call! { params=>get_info(self.plugin.as_ptr(), i, &mut info) };
+            let success = unsafe_clap_call! { params=>get_info(plugin, i, &mut info) };
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying parameter {i} ({num_params} total \
@@ -320,9 +325,11 @@ impl Params<'_> {
         // main thread interface for the parameters extension.
         assert_plugin_state_lt!(self, PluginStatus::Activated);
 
+        let params = self.params.as_ptr();
+        let plugin = self.plugin.as_ptr();
         unsafe_clap_call! {
-            self.params.as_ptr()=>flush(
-                self.plugin.as_ptr(),
+            params=>flush(
+                plugin,
                 input_events.vtable(),
                 output_events.vtable(),
             )

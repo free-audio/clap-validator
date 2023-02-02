@@ -7,7 +7,6 @@ use clap_sys::process::{
     CLAP_PROCESS_SLEEP, CLAP_PROCESS_TAIL,
 };
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
@@ -43,17 +42,6 @@ pub enum ProcessStatus {
     Sleep,
 }
 
-/// This allows methods from the CLAP plugin to be called directly independently of any
-/// abstractions. All of the thread guarentees are lost when interacting with the plugin this way,
-/// but that is not a problem as the function pointers are marked unsafe anyways.
-impl Deref for PluginAudioThread<'_> {
-    type Target = clap_plugin;
-
-    fn deref(&self) -> &Self::Target {
-        self.plugin.deref()
-    }
-}
-
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
         match self
@@ -61,7 +49,7 @@ impl Drop for PluginAudioThread<'_> {
             .status
             .compare_exchange(PluginStatus::Processing, PluginStatus::Activated)
         {
-            Ok(_) => unsafe_clap_call! { self.plugin=>stop_processing(self.plugin.as_ptr()) },
+            Ok(_) => self.stop_processing(),
             Err(PluginStatus::Activated) => (),
             Err(state) => panic!(
                 "The plugin was in an invalid state '{state:?}' when the audio thread got \
@@ -103,7 +91,9 @@ impl<'a> PluginAudioThread<'a> {
     pub fn get_extension<T: Extension<&'a Self>>(&'a self) -> Option<T> {
         assert_plugin_state_initialized!(self);
 
-        let extension_ptr = unsafe_clap_call! { self.plugin=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr()) };
+        let plugin = self.as_ptr();
+        let extension_ptr =
+            unsafe_clap_call! { plugin=>get_extension(plugin, T::EXTENSION_ID.as_ptr()) };
 
         if extension_ptr.is_null() {
             None
@@ -121,7 +111,8 @@ impl<'a> PluginAudioThread<'a> {
     pub fn start_processing(&self) -> Result<()> {
         assert_plugin_state_eq!(self, PluginStatus::Activated);
 
-        if unsafe_clap_call! { self.plugin=>start_processing(self.as_ptr()) } {
+        let plugin = self.as_ptr();
+        if unsafe_clap_call! { plugin=>start_processing(plugin) } {
             self.state().status.store(PluginStatus::Processing);
             Ok(())
         } else {
@@ -136,10 +127,9 @@ impl<'a> PluginAudioThread<'a> {
     pub fn process(&self, process_data: &mut ProcessData) -> Result<ProcessStatus> {
         assert_plugin_state_eq!(self, PluginStatus::Processing);
 
+        let plugin = self.as_ptr();
         let result = process_data.with_clap_process_data(|clap_process_data| {
-            unsafe_clap_call! {
-                self.plugin=>process(self.as_ptr(), &clap_process_data)
-            }
+            unsafe_clap_call! { plugin=>process(plugin, &clap_process_data) }
         });
 
         match result {
@@ -163,7 +153,8 @@ impl<'a> PluginAudioThread<'a> {
     pub fn stop_processing(&self) {
         assert_plugin_state_eq!(self, PluginStatus::Processing);
 
-        unsafe_clap_call! { self.plugin=>stop_processing(self.as_ptr()) };
+        let plugin = self.as_ptr();
+        unsafe_clap_call! { plugin=>stop_processing(plugin) };
 
         self.state().status.store(PluginStatus::Activated);
     }

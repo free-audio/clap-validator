@@ -71,6 +71,8 @@ struct PluginSendWrapper<'lib>(*const Plugin<'lib>);
 
 unsafe impl<'lib> Send for PluginSendWrapper<'lib> {}
 
+/// This `Deref` wrapper works around the !Sync check check we would interwise run into if we
+/// accessed the struct's value directly.
 impl<'lib> Deref for PluginSendWrapper<'lib> {
     type Target = *const Plugin<'lib>;
 
@@ -93,20 +95,10 @@ impl Drop for Plugin<'_> {
 
         // TODO: We can't handle host callbacks that happen in between these two functions, but the
         //       plugin really shouldn't be making callbacks in deactivate()
-        unsafe_clap_call! { self.as_ptr()=>destroy(self.as_ptr()) };
+        let plugin = self.as_ptr();
+        unsafe_clap_call! { plugin=>destroy(plugin) };
 
         self.host().unregister_instance(self.state.clone());
-    }
-}
-
-/// This allows methods from the CLAP plugin to be called directly independently of any
-/// abstractions. All of the thread guarentees are lost when interacting with the plugin this way,
-/// but that is not a problem as the function pointers are marked unsafe anyways.
-impl Deref for Plugin<'_> {
-    type Target = clap_plugin;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.handle.0.as_ref() }
     }
 }
 
@@ -171,8 +163,9 @@ impl<'lib> Plugin<'lib> {
     pub fn get_extension<'a, T: Extension<&'a Self>>(&'a self) -> Option<T> {
         assert_plugin_state_initialized!(self);
 
+        let plugin = self.as_ptr();
         let extension_ptr = unsafe_clap_call! {
-            self.as_ptr()=>get_extension(self.as_ptr(), T::EXTENSION_ID.as_ptr())
+            plugin=>get_extension(plugin, T::EXTENSION_ID.as_ptr())
         };
 
         if extension_ptr.is_null() {
@@ -237,7 +230,8 @@ impl<'lib> Plugin<'lib> {
     pub fn init(&self) -> Result<()> {
         assert_plugin_state_eq!(self, PluginStatus::Uninitialized);
 
-        if unsafe_clap_call! { self.as_ptr()=>init(self.as_ptr()) } {
+        let plugin = self.as_ptr();
+        if unsafe_clap_call! { plugin=>init(plugin) } {
             self.state.status.store(PluginStatus::Deactivated);
             Ok(())
         } else {
@@ -259,13 +253,9 @@ impl<'lib> Plugin<'lib> {
         // Apparently 0 is invalid here
         assert!(min_buffer_size >= 1);
 
+        let plugin = self.as_ptr();
         if unsafe_clap_call! {
-            self.as_ptr()=>activate(
-                self.as_ptr(),
-                sample_rate,
-                min_buffer_size as u32,
-                max_buffer_size as u32,
-            )
+            plugin=>activate(plugin, sample_rate, min_buffer_size as u32, max_buffer_size as u32)
         } {
             self.state.status.store(PluginStatus::Activated);
             Ok(())
@@ -280,7 +270,8 @@ impl<'lib> Plugin<'lib> {
     pub fn deactivate(&self) {
         assert_plugin_state_eq!(self, PluginStatus::Activated);
 
-        unsafe_clap_call! { self.as_ptr()=>deactivate(self.as_ptr()) };
+        let plugin = self.as_ptr();
+        unsafe_clap_call! { plugin=>deactivate(plugin) };
 
         self.state.status.store(PluginStatus::Deactivated);
     }

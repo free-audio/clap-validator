@@ -70,7 +70,9 @@ impl State<'_> {
     pub fn save(&self) -> Result<Vec<u8>> {
         let stream = OutputStream::new();
 
-        if unsafe_clap_call! { self.state.as_ptr()=>save(self.plugin.as_ptr(), &stream.vtable) } {
+        let state = self.state.as_ptr();
+        let plugin = self.plugin.as_ptr();
+        if unsafe_clap_call! { state=>save(plugin, &stream.vtable) } {
             Ok(stream.into_vec())
         } else {
             anyhow::bail!("'clap_plugin_state::save()' returned false.");
@@ -82,7 +84,9 @@ impl State<'_> {
     pub fn save_buffered(&self, max_bytes: usize) -> Result<Vec<u8>> {
         let stream = OutputStream::new().with_buffering(max_bytes);
 
-        if unsafe_clap_call! { self.state.as_ptr()=>save(self.plugin.as_ptr(), stream.vtable()) } {
+        let state = self.state.as_ptr();
+        let plugin = self.plugin.as_ptr();
+        if unsafe_clap_call! { state=>save(plugin, stream.vtable()) } {
             Ok(stream.into_vec())
         } else {
             anyhow::bail!(
@@ -96,7 +100,9 @@ impl State<'_> {
     pub fn load(&self, state: &[u8]) -> Result<()> {
         let stream = InputStream::new(state);
 
-        if unsafe_clap_call! { self.state.as_ptr()=>load(self.plugin.as_ptr(), stream.vtable()) } {
+        let state = self.state.as_ptr();
+        let plugin = self.plugin.as_ptr();
+        if unsafe_clap_call! { state=>load(plugin, stream.vtable()) } {
             Ok(())
         } else {
             anyhow::bail!("'clap_plugin_state::load()' returned false.");
@@ -108,7 +114,9 @@ impl State<'_> {
     pub fn load_buffered(&self, state: &[u8], max_bytes: usize) -> Result<()> {
         let stream = InputStream::new(state).with_buffering(max_bytes);
 
-        if unsafe_clap_call! { self.state.as_ptr()=>load(self.plugin.as_ptr(), &stream.vtable) } {
+        let state = self.state.as_ptr();
+        let plugin = self.plugin.as_ptr();
+        if unsafe_clap_call! { state=>load(plugin, &stream.vtable) } {
             Ok(())
         } else {
             anyhow::bail!(
