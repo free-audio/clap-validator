@@ -170,7 +170,7 @@ impl PluginLibrary {
                 id: unsafe { util::cstr_ptr_to_string((*descriptor).id)? }
                     .context("The plugin's 'id' pointer was null")?,
                 name: unsafe { util::cstr_ptr_to_string((*descriptor).name)? }
-                    .context("The plugin's 'id' pointer was null")?,
+                    .context("The plugin's 'name' pointer was null")?,
                 version: handle_empty_string(unsafe {
                     util::cstr_ptr_to_string((*descriptor).version)?
                 }),

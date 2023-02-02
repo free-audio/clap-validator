@@ -46,6 +46,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   the plugin's functions in more places to reduce the potential surface for bugs
   in the validator itself.
 
+### Fixed
+
+- Fixed a typo in the error message when a plugin descriptor's name field is a
+  null pointer.
+
 ## [0.2.0] - 2022-01-09
 
 ### Added
