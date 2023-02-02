@@ -2,15 +2,20 @@
 
 use anyhow::{Context, Result};
 use clap_sys::entry::clap_plugin_entry;
+use clap_sys::factory::draft::preset_discovery::{
+    clap_preset_discovery_factory, CLAP_PRESET_DISCOVERY_FACTORY_ID,
+};
 use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use clap_sys::version::clap_version;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 use super::instance::Plugin;
+use super::preset_discovery::PresetDiscoveryFactory;
 use crate::host::Host;
 use crate::util::{self, unsafe_clap_call};
 
@@ -229,6 +234,23 @@ impl PluginLibrary {
 
         let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
         Plugin::new(self, host, unsafe { &*plugin_factory }, &id_cstring)
+    }
+
+    /// Returns the plugin's preset discovery factory, if it has one.
+    pub fn preset_discovery_factory(&self) -> Result<PresetDiscoveryFactory> {
+        let entry_point = get_clap_entry_point(&self.library)
+            .expect("A Plugin was constructed for a plugin with no entry point");
+        let preset_discovery_factory = unsafe_clap_call! {
+            entry_point=>get_factory(CLAP_PRESET_DISCOVERY_FACTORY_ID.as_ptr())
+        } as *mut clap_preset_discovery_factory;
+        match NonNull::new(preset_discovery_factory) {
+            Some(preset_discovery_factory) => {
+                Ok(PresetDiscoveryFactory::new(self, preset_discovery_factory))
+            }
+            None => {
+                anyhow::bail!("The plugin does not support the 'clap_preset_discovery_factory'")
+            }
+        }
     }
 }
 

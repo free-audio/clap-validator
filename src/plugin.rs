@@ -3,6 +3,7 @@
 pub mod ext;
 pub mod instance;
 pub mod library;
+pub mod preset_discovery;
 
 /// Used for asserting that the plugin is in the correct state when calling a function. Hard panics
 /// if this is not the case. This is used to ensure the validator's correctness.
