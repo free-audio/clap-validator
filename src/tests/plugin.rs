@@ -27,8 +27,8 @@ pub enum PluginTestCase {
     ProcessNoteInconsistent,
     #[strum(serialize = "param-conversions")]
     ParamConversions,
-    #[strum(serialize = "param-fuzz-random")]
-    ParamFuzzRandom,
+    #[strum(serialize = "param-fuzz-basic")]
+    ParamFuzzBasic,
     #[strum(serialize = "param-set-wrong-namespace")]
     ParamSetWrongNamespace,
     #[strum(serialize = "state-invalid")]
@@ -76,7 +76,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                  ether all or none of the plugin's parameters, and that conversions between \
                  values and strings roundtrip consistently.",
             ),
-            PluginTestCase::ParamFuzzRandom => format!(
+            PluginTestCase::ParamFuzzBasic => format!(
                 "Generates {} sets of random parameter values, sets those on the plugin, and has \
                  the plugin process {} buffers of random audio and note events. The plugin passes \
                  the test if it doesn't produce any infinite or NaN values, and doesn't crash.",
@@ -153,7 +153,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 processing::test_process_note_inconsistent(library, plugin_id)
             }
             PluginTestCase::ParamConversions => params::test_param_conversions(library, plugin_id),
-            PluginTestCase::ParamFuzzRandom => params::test_param_fuzz_random(library, plugin_id),
+            PluginTestCase::ParamFuzzBasic => params::test_param_fuzz_basic(library, plugin_id),
             PluginTestCase::ParamSetWrongNamespace => {
                 params::test_param_set_wrong_namespace(library, plugin_id)
             }

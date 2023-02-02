@@ -16,6 +16,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   value permutations. The plugin succeeds the test if it can process random
   audio buffers and note events after setting those parameters without producing
   infinite or NaN values and without crashing.
+
+  Future versions of CLAP validator will contain more variations on this test
+  and a dedicated fuzzing subcommand for longer test runs.
+
 - Added a test that makes sure all of the plugin's symbols resolve correctly
   when the library is loaded with `RTLD_NOW`. This test is only run on Unix-like
   platforms.

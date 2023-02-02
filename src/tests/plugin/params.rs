@@ -184,8 +184,8 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
     }
 }
 
-/// The test for `ProcessingTest::ParamFuzzRandom`.
-pub fn test_param_fuzz_random(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
+/// The test for `ProcessingTest::ParamFuzzBasic`.
+pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str) -> Result<TestStatus> {
     let mut prng = new_prng();
 
     let host = Host::new();
@@ -238,7 +238,7 @@ pub fn test_param_fuzz_random(library: &PluginLibrary, plugin_id: &str) -> Resul
         .unwrap_or_default()
         .create_buffers(BUFFER_SIZE);
     for permutation_no in 1..=FUZZ_NUM_PERMUTATIONS {
-        current_events = Some(param_fuzzer.randomize_params_at(&mut prng, 0).collect());
+        current_events = Some(param_fuzzer.basicize_params_at(&mut prng, 0).collect());
 
         let mut have_set_parameters = false;
         let run_result =
@@ -272,10 +272,10 @@ pub fn test_param_fuzz_random(library: &PluginLibrary, plugin_id: &str) -> Resul
         // If the run failed we'll want to write the parameter values to a file first
         if run_result.is_err() {
             let (previous_param_values_file_path, previous_param_values_file) =
-                PluginTestCase::ParamFuzzRandom
+                PluginTestCase::ParamFuzzBasic
                     .temporary_file(plugin_id, PREVIOUS_PARAM_VALUES_FILE_NAME)?;
             let (current_param_values_file_path, current_param_values_file) =
-                PluginTestCase::ParamFuzzRandom
+                PluginTestCase::ParamFuzzBasic
                     .temporary_file(plugin_id, CURRENT_PARAM_VALUES_FILE_NAME)?;
 
             let create_param_values_vec = |events: Option<Vec<Event>>| match events {
