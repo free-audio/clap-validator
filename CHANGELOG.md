@@ -44,12 +44,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   but not all of its parameters, clap-validator now includes the names of the
   parameters and the failing inputs in the error message to help pinpoint the
   issue.
-- The validator now asserts the plugin is in the correct state before calling
-  the plugin's functions in more places to reduce the potential surface for bugs
-  in the validator itself.
 - All skip and error messages saying that a plugin doesn't support a certain
   extension or factory now always use the extension's or factory's actual ID.
   This is especially helpful for tests that use draft versions of extensions.
+- The validator now asserts the plugin is in the correct state before calling
+  the plugin's functions in more places to reduce the potential surface for bugs
+  in the validator itself.
 - The validator's `clap-host` implementation now always contains the validator's
   version.
 
