@@ -7,24 +7,15 @@ use std::path::PathBuf;
 
 // TODO: Remove these attributes once we start implementing host interfaces
 
-/// Early exit out of a function with the specified return value when one of the passed pointers is
-/// null.
+/// Assert that the specified pointers are non-null. Panics if this is not the case.
 macro_rules! check_null_ptr {
-    ($ret:expr, $ptr:expr $(, $ptrs:expr)* $(, )?) => {
-        $crate::util::check_null_ptr_msg!("Null pointer passed to function", $ret, $ptr $(, $ptrs)*)
-    };
-}
-
-/// The same as [`check_null_ptr!`], but with a custom message.
-macro_rules! check_null_ptr_msg {
-    ($msg:expr, $ret:expr, $ptr:expr $(, $ptrs:expr)* $(, )?) => {
-        // Clippy doesn't understand it when we use a unit in our `check_null_ptr!()` maccro, even
-        // if we explicitly pattern match on that unit
-        #[allow(clippy::unused_unit)]
-        if $ptr.is_null() $(|| $ptrs.is_null())* {
-            ::log::debug!($msg);
-            return $ret;
+    ($ptr:expr) => {
+        if $ptr.is_null() {
+            panic!("'{}' is not allowed to be a null pointer", stringify!($ptr))
         }
+    };
+    ($($ptrs:expr),*) => {
+        $($crate::util::check_null_ptr!($ptrs));*
     };
 }
 
@@ -52,7 +43,6 @@ macro_rules! unsafe_clap_call {
 }
 
 pub(crate) use check_null_ptr;
-pub(crate) use check_null_ptr_msg;
 pub(crate) use clap_call;
 pub(crate) use unsafe_clap_call;
 

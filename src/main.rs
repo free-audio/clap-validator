@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
 

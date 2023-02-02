@@ -159,7 +159,7 @@ impl<'a> InputStream<'a> {
     }
 
     unsafe extern "C" fn read(stream: *const clap_istream, buffer: *mut c_void, size: u64) -> i64 {
-        check_null_ptr!(0, stream, (*stream).ctx, buffer);
+        check_null_ptr!(stream, (*stream).ctx, buffer);
         let this = &*((*stream).ctx as *const Self);
 
         // The reads may be limited to a certain buffering size to test the plugin's capabilities
@@ -224,7 +224,7 @@ impl OutputStream {
         buffer: *const c_void,
         size: u64,
     ) -> i64 {
-        check_null_ptr!(0, stream, (*stream).ctx, buffer);
+        check_null_ptr!(stream, (*stream).ctx, buffer);
         let this = &*((*stream).ctx as *const Self);
 
         // The writes may be limited to a certain buffering size to test the plugin's capabilities

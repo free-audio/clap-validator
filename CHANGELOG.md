@@ -40,6 +40,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   the output look a bit more consistent.
 - The `--only-failed` option now also shows tests that resulted in a warning in
   addition to hard failures.
+- Passing null pointers to any of clap validator's host callbacks was previously
+  handled gracefully by logging a debug message and then returning early. This
+  has now changed to a hard error as this indicates a serious bug in the plugin.
 - When a plugin supports text-to-value and/or value-to-text conversions for some
   but not all of its parameters, clap-validator now includes the names of the
   parameters and the failing inputs in the error message to help pinpoint the

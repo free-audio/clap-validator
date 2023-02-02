@@ -423,7 +423,7 @@ impl<VTable> EventQueue<VTable> {
     }
 
     unsafe extern "C" fn size(list: *const clap_input_events) -> u32 {
-        check_null_ptr!(0, list, (*list).ctx);
+        check_null_ptr!(list, (*list).ctx);
         let this = &*((*list).ctx as *const Self);
 
         this.events.lock().len() as u32
@@ -433,7 +433,7 @@ impl<VTable> EventQueue<VTable> {
         list: *const clap_input_events,
         index: u32,
     ) -> *const clap_event_header {
-        check_null_ptr!(std::ptr::null(), list, (*list).ctx);
+        check_null_ptr!(list, (*list).ctx);
         let this = &*((*list).ctx as *const Self);
 
         let events = this.events.lock();
@@ -453,7 +453,7 @@ impl<VTable> EventQueue<VTable> {
         list: *const clap_output_events,
         event: *const clap_event_header,
     ) -> bool {
-        check_null_ptr!(false, list, (*list).ctx, event);
+        check_null_ptr!(list, (*list).ctx, event);
         let this = &*((*list).ctx as *const Self);
 
         // The monotonicity of the plugin's event insertion order is checked as part of the output
