@@ -248,6 +248,20 @@ impl Soundpack {
 
 impl Drop for Indexer {
     fn drop(&mut self) {
+        // The results will have been moved out of `self.results` when initializing the provider, so
+        // if this does contain values then the plugin did something shady
+        let results = self.results.borrow();
+        if !results.file_types.is_empty()
+            || !results.locations.is_empty()
+            || !results.soundpacks.is_empty()
+        {
+            log::warn!(
+                "The plugin declared more file types, locations, or soundpacks after its \
+                 initialization. This is invalid behavior, but there is currently no test to \
+                 check for this."
+            )
+        }
+
         if let Some(error) = self.callback_error.borrow_mut().take() {
             log::error!(
                 "The validator's 'clap_preset_indexer' has detected an error during a callback \
@@ -301,6 +315,8 @@ impl Indexer {
     /// Get the values written to this indexer by the plugin during the
     /// `clap_preset_discovery_provider::init()` call. Returns any error that would be returned by
     /// [`callback_error_check()`][Self::callback_error_check()].
+    ///
+    /// This moves the values out of this object.
     pub fn results(&self) -> Result<IndexerResults> {
         self.callback_error_check()?;
 
