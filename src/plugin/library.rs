@@ -6,6 +6,7 @@ use clap_sys::factory::draft::preset_discovery::{
     clap_preset_discovery_factory, CLAP_PRESET_DISCOVERY_FACTORY_ID,
 };
 use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
+use clap_sys::plugin::clap_plugin_descriptor;
 use clap_sys::version::clap_version;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -51,6 +52,36 @@ pub struct PluginMetadata {
     pub manual_url: Option<String>,
     pub support_url: Option<String>,
     pub features: Vec<String>,
+}
+
+impl PluginMetadata {
+    pub fn from_descriptor(descriptor: &clap_plugin_descriptor) -> Result<Self> {
+        // Empty strings should be treated as missing values in some cases
+        let handle_empty_string = |option: Option<String>| match option {
+            Some(s) if s.is_empty() => None,
+            option => option,
+        };
+
+        Ok(PluginMetadata {
+            id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
+                .context("The plugin's 'id' pointer was null")?,
+            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
+                .context("The plugin's 'name' pointer was null")?,
+            version: handle_empty_string(unsafe { util::cstr_ptr_to_string(descriptor.version)? }),
+            vendor: handle_empty_string(unsafe { util::cstr_ptr_to_string(descriptor.vendor)? }),
+            description: handle_empty_string(unsafe {
+                util::cstr_ptr_to_string(descriptor.description)?
+            }),
+            manual_url: handle_empty_string(unsafe {
+                util::cstr_ptr_to_string(descriptor.manual_url)?
+            }),
+            support_url: handle_empty_string(unsafe {
+                util::cstr_ptr_to_string(descriptor.support_url)?
+            }),
+            features: unsafe { util::cstr_array_to_vec(descriptor.features)? }
+                .context("The plugin's 'features' were malformed")?,
+        })
+    }
 }
 
 impl Drop for PluginLibrary {
@@ -160,35 +191,9 @@ impl PluginLibrary {
                 );
             }
 
-            // Empty strings should be treated as missing values in some cases
-            let handle_empty_string = |option: Option<String>| match option {
-                Some(s) if s.is_empty() => None,
-                option => option,
-            };
-
-            metadata.plugins.push(PluginMetadata {
-                id: unsafe { util::cstr_ptr_to_string((*descriptor).id)? }
-                    .context("The plugin's 'id' pointer was null")?,
-                name: unsafe { util::cstr_ptr_to_string((*descriptor).name)? }
-                    .context("The plugin's 'name' pointer was null")?,
-                version: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).version)?
-                }),
-                vendor: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).vendor)?
-                }),
-                description: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).description)?
-                }),
-                manual_url: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).manual_url)?
-                }),
-                support_url: handle_empty_string(unsafe {
-                    util::cstr_ptr_to_string((*descriptor).support_url)?
-                }),
-                features: unsafe { util::cstr_array_to_vec((*descriptor).features)? }
-                    .context("The plugin's 'features' were malformed")?,
-            })
+            metadata
+                .plugins
+                .push(PluginMetadata::from_descriptor(unsafe { &*descriptor })?)
         }
 
         // As a sanity check we'll make sure there are no duplicate plugin IDs here
