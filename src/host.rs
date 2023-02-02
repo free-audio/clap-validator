@@ -49,9 +49,9 @@ use crate::util::{check_null_ptr, unsafe_clap_call};
 pub struct Host {
     /// The ID of the main thread.
     main_thread_id: ThreadId,
-    /// A description of the first thread safety error encountered by this `Host`, if any. This
-    /// is used to check that the plugin called any host callbacks from the correct thread after the
-    /// test has succeeded.
+    /// A description of the first thread safety error encountered by this `Host`, if any. This is
+    /// used to check that the plugin called all host callbacks from the correct thread after the
+    /// rest of the test has succeeded.
     thread_safety_error: RefCell<Option<String>>,
 
     /// These are the plugin instances taht were registered on this host. They're added here when
@@ -214,6 +214,18 @@ impl InstanceState {
     }
 }
 
+impl Drop for Host {
+    fn drop(&mut self) {
+        if let Some(error) = self.thread_safety_error.borrow_mut().take() {
+            log::error!(
+                "The validator's host has detected a thread safety error but this error has not \
+                 been used as part of the test result. This is a clap-validator bug. The error \
+                 message is: {error}"
+            )
+        }
+    }
+}
+
 impl Host {
     /// Initialize a CLAP host. The thread this object is created on will be designated as the main
     /// thread for the purposes of the thread safety checks.
@@ -373,7 +385,8 @@ impl Host {
     }
 
     /// Check if any of the host's callbacks were called from the wrong thread. Returns the first
-    /// error if this happened.
+    /// error if this happened. If there were errors and this function is not called before the
+    /// object is destroyed, an error will be logged.
     pub fn thread_safety_check(&self) -> Result<()> {
         match self.thread_safety_error.borrow_mut().take() {
             Some(err) => anyhow::bail!(err),
