@@ -443,6 +443,14 @@ impl Host {
         }
     }
 
+    /// Returns whether the thread ID is one of the registered audio threads.
+    fn is_audio_thread(&self, thread_id: ThreadId) -> bool {
+        self.instances
+            .borrow()
+            .values()
+            .any(|instance| instance.audio_thread.load() == Some(thread_id))
+    }
+
     unsafe extern "C" fn get_extension(
         host: *const clap_host,
         extension_id: *const c_char,
@@ -466,14 +474,6 @@ impl Host {
         } else {
             std::ptr::null()
         }
-    }
-
-    /// Returns whether the thread ID is one of the registered audio threads.
-    fn is_audio_thread(&self, thread_id: ThreadId) -> bool {
-        self.instances
-            .borrow()
-            .values()
-            .any(|instance| instance.audio_thread.load() == Some(thread_id))
     }
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
