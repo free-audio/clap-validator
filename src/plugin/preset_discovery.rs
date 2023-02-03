@@ -12,6 +12,7 @@ use super::library::PluginLibrary;
 use crate::util::{self, unsafe_clap_call};
 
 mod indexer;
+mod metadata_receiver;
 mod provider;
 
 pub use self::indexer::{FileType, IndexerResults, Location, LocationUri, Soundpack};
