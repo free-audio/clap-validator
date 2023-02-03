@@ -45,11 +45,11 @@ pub struct Indexer {
 #[derive(Debug, Default)]
 pub struct IndexerResults {
     /// The file types added to this indexer by the plugin.
-    file_types: Vec<FileType>,
+    pub file_types: Vec<FileType>,
     /// The locations added to this indexer by the plugin.
-    locations: Vec<Location>,
+    pub locations: Vec<Location>,
     /// The soundpacks added to this indexer by the plugin.
-    soundpacks: Vec<Soundpack>,
+    pub soundpacks: Vec<Soundpack>,
 }
 
 /// Data parsed from a `clap_preset_discovery_filetype`.
