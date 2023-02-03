@@ -2,7 +2,7 @@
 //! plugin fills this object with its supported locations, file types, and sound packs.
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CString};
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ use clap_sys::factory::draft::preset_discovery::{
     clap_preset_discovery_filetype, clap_preset_discovery_indexer, clap_preset_discovery_location,
     clap_preset_discovery_soundpack, CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT,
     CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT, CLAP_PRESET_DISCOVERY_IS_FAVORITE,
-    CLAP_PRESET_DISCOVERY_IS_USER_CONTENT, CLAP_TIMESTAMP_UNKNOWN,
+    CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
 };
 use clap_sys::version::CLAP_VERSION;
 use parking_lot::Mutex;

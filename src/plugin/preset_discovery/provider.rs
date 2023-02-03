@@ -1,11 +1,12 @@
 //! A wrapper around `clap_preset_discovery_provider`.
 
 use anyhow::{Context, Result};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::ptr::NonNull;
+use walkdir::WalkDir;
 
 use clap_sys::factory::draft::preset_discovery::clap_preset_discovery_provider;
 
@@ -129,45 +130,97 @@ impl<'a> Provider<'a> {
     pub fn crawl_location(&self, location: &Location) -> Result<BTreeMap<String, PresetFile>> {
         let mut results = BTreeMap::new();
 
+        let mut crawl_uri = |uri: String| -> Result<()> {
+            let uri_cstring = CString::new(uri.clone()).context("Invalid UTF-8 in URI")?;
+
+            // There is no 'end of preset' kind of function in the metadata provider, so when
+            // the `MetadataReceiver` is dropped it may still need to write a preset file or
+            // emit some errors. That's why it borrows this result, and writes the output
+            // theere. This can happen during the drop.
+            let mut result = None;
+            {
+                let metadata_receiver = MetadataReceiver::new(&mut result);
+
+                let provider = self.as_ptr();
+                let success = unsafe_clap_call! {
+                    provider=>get_metadata(
+                        provider,
+                        uri_cstring.as_ptr(),
+                        metadata_receiver.clap_preset_discovery_metadata_receiver_ptr()
+                    )
+                };
+                if !success {
+                    // TODO: Is the plugin allowed to return false here? If it doesn't have any
+                    //       presets it should just not declare any, right?
+                    anyhow::bail!(
+                        "The preset provider returned false when fetching metadata for the URI \
+                         '{uri}'",
+                    );
+                }
+            }
+
+            if let Some(preset_file) = result {
+                let preset_file = preset_file.with_context(|| {
+                    format!("Error while fetching fetching metadata for the URI '{uri}'",)
+                })?;
+
+                results.insert(uri, preset_file);
+            }
+
+            Ok(())
+        };
+
         match &location.uri {
-            LocationUri::File(_) => todo!("Implement file crawling"),
-            LocationUri::Internal => {
-                let uri = location.uri.to_uri();
-                let uri_cstring = CString::new(uri.clone()).context("Invalid UTF-8 in URI")?;
+            LocationUri::File(file_path) => {
+                // Single files are queried as is, directories are crawled. If the declared location
+                // does not exist, then that results in a hard error.
+                let metadata = std::fs::metadata(file_path).with_context(|| {
+                    "Could not query metadata for the declared file location '{file_path}'"
+                })?;
+                if metadata.is_dir() {
+                    // If the plugin declared valid file extensions, then we'll filter by those file
+                    // extensions
+                    let allowed_extensions: HashSet<_> = self
+                        .declared_data
+                        .file_types
+                        .iter()
+                        .map(|file_type| file_type.extension.as_str())
+                        .collect();
 
-                // There is no 'end of preset' kind of function in the metadata provider, so when
-                // the `MetadataReceiver` is dropped it may still need to write a preset file or
-                // emit some errors. That's why it borrows this result, and writes the output
-                // theere. This can happen during the drop.
-                let mut result = None;
-                {
-                    let metadata_receiver = MetadataReceiver::new(&mut result);
+                    let walker = WalkDir::new(file_path)
+                        .min_depth(1)
+                        .follow_links(true)
+                        .same_file_system(false)
+                        .into_iter()
+                        .filter_map(|entry| entry.ok())
+                        .filter(|entry| entry.file_type().is_file())
+                        .filter(|entry| {
+                            allowed_extensions.is_empty()
+                                || matches!(entry.path().extension(), Some(extension)
+                                               if allowed_extensions.contains(extension.to_str().unwrap()))
+                        });
 
-                    let provider = self.as_ptr();
-                    let success = unsafe_clap_call! {
-                        provider=>get_metadata(
-                            provider,
-                            uri_cstring.as_ptr(),
-                            metadata_receiver.clap_preset_discovery_metadata_receiver_ptr()
-                        )
-                    };
-                    if !success {
-                        // TODO: Is the plugin allowed to return false here? If it doesn't have any
-                        //       presets it should just not declare any, right?
-                        anyhow::bail!(
-                            "The preset provider returned false when fetching metadata for the \
-                             URI '{uri}'",
-                        );
+                    for candidate in walker {
+                        assert!(candidate.path().is_absolute());
+                        let uri = format!("file://{}", candidate.path().to_str().unwrap());
+
+                        // I'm not actually sure if `PathBuf`s always use forward slashes or not,
+                        // but while the original URI does use forward slashes this candidate path
+                        // may not.
+                        #[cfg(windows)]
+                        let uri = uri.replace('\\', "/");
+
+                        // TODO: Not quite sure what should be done with errors when crawling
+                        //       directories. If the plugin doesn't return an error but also doesn't
+                        //       declare any presets then that gets handled gracefully
+                        crawl_uri(uri)?;
                     }
+                } else {
+                    crawl_uri(location.uri.to_uri())?;
                 }
-
-                if let Some(preset_file) = result {
-                    let preset_file = preset_file.with_context(|| {
-                        format!("Error while fetching fetching metadata for the URI '{uri}'",)
-                    })?;
-
-                    results.insert(uri, preset_file);
-                }
+            }
+            LocationUri::Internal => {
+                crawl_uri(location.uri.to_uri())?;
             }
         }
 
