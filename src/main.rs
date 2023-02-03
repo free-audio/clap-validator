@@ -62,6 +62,16 @@ pub enum ListCommand {
         #[arg(short, long)]
         json: bool,
     },
+    /// Lists the available presets for one, more, or all installed CLAP plugins.
+    Presets {
+        /// Print JSON instead of a human readable format.
+        #[arg(short, long)]
+        json: bool,
+        /// Paths to one or more plugins that should be indexed for presets, optional.
+        ///
+        /// All installed plugins are crawled if this value is missing.
+        paths: Option<Vec<PathBuf>>,
+    },
     /// Lists all available test cases.
     Tests {
         /// Print JSON instead of a human readable format.
@@ -94,11 +104,14 @@ fn main() -> ExitCode {
     .expect("Could not initialize logger");
     log_panics::init();
 
-    let result = match &cli.command {
-        Command::Validate(settings) => commands::validate::validate(settings),
-        Command::RunSingleTest(settings) => commands::validate::run_single(settings),
-        Command::List(ListCommand::Plugins { json }) => commands::list::plugins(*json),
-        Command::List(ListCommand::Tests { json }) => commands::list::tests(*json),
+    let result = match cli.command {
+        Command::Validate(settings) => commands::validate::validate(&settings),
+        Command::RunSingleTest(settings) => commands::validate::run_single(&settings),
+        Command::List(ListCommand::Plugins { json }) => commands::list::plugins(json),
+        Command::List(ListCommand::Presets { json, paths }) => {
+            commands::list::presets(json, paths.as_deref())
+        }
+        Command::List(ListCommand::Tests { json }) => commands::list::tests(json),
     };
 
     match result {

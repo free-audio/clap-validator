@@ -1,8 +1,9 @@
 //! Commands for listing information about the validator or installed plugins.
 
+use std::path::Path;
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 /// Lists basic information about all installed CLAP plugins.
 pub fn plugins(json: bool) -> Result<ExitCode> {
@@ -62,6 +63,38 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
             }
         }
     }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Lists presets for one, more, or all plugins.
+pub fn presets<P>(json: bool, plugin_paths: Option<&[P]>) -> Result<ExitCode>
+where
+    P: AsRef<Path>,
+{
+    let preset_index = match plugin_paths {
+        Some(plugin_paths) => crate::index::index_presets(plugin_paths, false),
+        None => {
+            let plugin_index = crate::index::index();
+            let all_plugin_paths = plugin_index.0.keys();
+
+            // This 'true' indicates that plugins that don't support the preset discovery mechanism
+            // should be silently skipped
+            crate::index::index_presets(all_plugin_paths, true)
+        }
+    }
+    .context("Error while crawling presets")?;
+
+    if !json {
+        log::warn!(
+            "Pretty printing has not yet been implemented for presets. I hope you like JSON."
+        )
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&preset_index).expect("Could not format JSON")
+    );
 
     Ok(ExitCode::SUCCESS)
 }

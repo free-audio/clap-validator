@@ -10,6 +10,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Added initial support for the CLAP's new preset discovery mechanism. This
+  includes new tests that check a plugin's preset discovery factory
+  implementation, and a `clap-validator list presets` command to list presets
+  for one, more, or all installed CLAP plugins.
 - Tests are now run in parallel by default unless the `--in-process` option is
   used. This can be disabled using the new `--no-parallel` option.
 - Added a basic parameter fuzzing test. This test generates 50 random parameter

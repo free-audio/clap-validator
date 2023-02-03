@@ -88,8 +88,9 @@ pub struct ProviderPresets {
 
 /// Index the presets for one or more plugins. [`index()`] can be used to build a list of all
 /// installed CLAP plugins. Plugins that
-pub fn index_presets<P>(plugin_paths: &[P], skip_unsupported: bool) -> Result<PresetIndex>
+pub fn index_presets<I, P>(plugin_paths: I, skip_unsupported: bool) -> Result<PresetIndex>
 where
+    I: IntoIterator<Item = P>,
     P: AsRef<Path>,
 {
     let mut index = PresetIndex::default();
