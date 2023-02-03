@@ -7,12 +7,14 @@ use clap_sys::factory::draft::preset_discovery::{
 use std::collections::HashSet;
 use std::ptr::NonNull;
 
-use self::provider::Provider;
 use super::library::PluginLibrary;
 use crate::util::{self, unsafe_clap_call};
 
-pub mod indexer;
-pub mod provider;
+mod indexer;
+mod provider;
+
+pub use self::indexer::{FileType, IndexerResults, Location, LocationUri, Soundpack};
+pub use self::provider::Provider;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
