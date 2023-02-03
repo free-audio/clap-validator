@@ -7,6 +7,8 @@ use std::path::Path;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
 
+// TODO: Test that all declared presets are in fact loadable
+
 /// The test for `PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency`. Verifies that the
 /// descriptors stored in a plugin's preset providers match those returned by the factory.
 pub fn test_descriptor_consistency(library_path: &Path) -> Result<TestStatus> {
