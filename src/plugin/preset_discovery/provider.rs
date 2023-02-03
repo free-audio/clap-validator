@@ -1,6 +1,7 @@
 //! A wrapper around `clap_preset_discovery_provider`.
 
 use anyhow::{Context, Result};
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -9,7 +10,8 @@ use std::ptr::NonNull;
 use clap_sys::factory::draft::preset_discovery::clap_preset_discovery_provider;
 
 use super::indexer::{Indexer, IndexerResults};
-use super::{PresetDiscoveryFactory, ProviderMetadata};
+use super::metadata_receiver::{MetadataReceiver, PresetFile};
+use super::{Location, LocationUri, PresetDiscoveryFactory, ProviderMetadata};
 use crate::util::unsafe_clap_call;
 
 /// A preset discovery provider created from a preset discovery factory. The provider is initialized
@@ -108,13 +110,67 @@ impl<'a> Provider<'a> {
         ProviderMetadata::from_descriptor(unsafe { &*descriptor })
     }
 
+    /// Get the raw pointer to the `clap_preset_discovery_provider` instance.
+    pub fn as_ptr(&self) -> *const clap_preset_discovery_provider {
+        self.handle.as_ptr()
+    }
+
     /// Get the data declared by the provider during its initialization.
     pub fn declared_data(&self) -> &IndexerResults {
         &self.declared_data
     }
 
-    /// Get the raw pointer to the `clap_preset_discovery_provider` instance.
-    pub fn as_ptr(&self) -> *const clap_preset_discovery_provider {
-        self.handle.as_ptr()
+    /// Crawl a location for presets. If the location is a directory, then this walks that directory
+    /// and queries metadata for each preset that matches the declared file extensions. The location
+    /// must be obtained from [`declared_data()`][Self::declared_data()]. Returns an error if the
+    /// plugin triggered any kind of error. The returned map contains a [`PresetFile`] for each of
+    /// the crawled URIs that the plugin declared presets for, which can be either a single preset
+    /// or a container of multiple presets.
+    pub fn crawl_location(&self, location: &Location) -> Result<BTreeMap<String, PresetFile>> {
+        let mut results = BTreeMap::new();
+
+        match &location.uri {
+            LocationUri::File(_) => todo!("Implement file crawling"),
+            LocationUri::Internal => {
+                let uri = location.uri.to_uri();
+                let uri_cstring = CString::new(uri.clone()).context("Invalid UTF-8 in URI")?;
+
+                // There is no 'end of preset' kind of function in the metadata provider, so when
+                // the `MetadataReceiver` is dropped it may still need to write a preset file or
+                // emit some errors. That's why it borrows this result, and writes the output
+                // theere. This can happen during the drop.
+                let mut result = None;
+                {
+                    let metadata_receiver = MetadataReceiver::new(&mut result);
+
+                    let provider = self.as_ptr();
+                    let success = unsafe_clap_call! {
+                        provider=>get_metadata(
+                            provider,
+                            uri_cstring.as_ptr(),
+                            metadata_receiver.clap_preset_discovery_metadata_receiver_ptr()
+                        )
+                    };
+                    if !success {
+                        // TODO: Is the plugin allowed to return false here? If it doesn't have any
+                        //       presets it should just not declare any, right?
+                        anyhow::bail!(
+                            "The preset provider returned false when fetching metadata for the \
+                             URI '{uri}'",
+                        );
+                    }
+                }
+
+                if let Some(preset_file) = result {
+                    let preset_file = preset_file.with_context(|| {
+                        format!("Error while fetching fetching metadata for the URI '{uri}'",)
+                    })?;
+
+                    results.insert(uri, preset_file);
+                }
+            }
+        }
+
+        Ok(results)
     }
 }
