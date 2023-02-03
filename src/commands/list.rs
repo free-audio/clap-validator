@@ -5,6 +5,9 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 
+// TODO: The indexing here always happens in the same process. We should move this over to out of
+//       process scanning at some point.
+
 /// Lists basic information about all installed CLAP plugins.
 pub fn plugins(json: bool) -> Result<ExitCode> {
     let plugin_index = crate::index::index();
