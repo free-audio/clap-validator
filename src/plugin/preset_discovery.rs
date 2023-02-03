@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use clap_sys::factory::draft::preset_discovery::{
     clap_preset_discovery_factory, clap_preset_discovery_provider_descriptor,
 };
+use clap_sys::version::{clap_version, clap_version_is_compatible};
 use std::collections::HashSet;
 use std::ptr::NonNull;
 
@@ -70,6 +71,15 @@ impl ProviderMetadata {
 
         Ok(metadata)
     }
+
+    /// Get the CLAP version representation for this provider.
+    pub fn clap_version(&self) -> clap_version {
+        clap_version {
+            major: self.version.0,
+            minor: self.version.1,
+            revision: self.version.2,
+        }
+    }
 }
 
 impl<'lib> PresetDiscoveryFactory<'lib> {
@@ -126,7 +136,17 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
 
     /// Create a preset provider based on one of the provider IDs returned by
     /// [`metadata()`][Self::metadata()].
-    pub fn create_provider(&self, id: &str) -> Result<Provider> {
-        Provider::new(self, id)
+    ///
+    /// Returns an error if the provider's CLAP version is not supported.
+    pub fn create_provider(&self, metadata: &ProviderMetadata) -> Result<Provider> {
+        if !clap_version_is_compatible(metadata.clap_version()) {
+            anyhow::bail!(
+                "The preset provider with ID '{}' has an unsupported CLAP version {:?}",
+                metadata.id,
+                metadata.clap_version()
+            );
+        }
+
+        Provider::new(self, &metadata.id)
     }
 }

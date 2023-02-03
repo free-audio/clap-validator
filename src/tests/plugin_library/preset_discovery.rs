@@ -28,7 +28,7 @@ pub fn test_descriptor_consistency(library_path: &Path) -> Result<TestStatus> {
         .metadata()
         .context("Could not fetch the preset provider descriptors from the factory")?;
     for factory_metadata in metadata {
-        let provider = preset_discovery_factory.create_provider(&factory_metadata.id)?;
+        let provider = preset_discovery_factory.create_provider(&factory_metadata)?;
         let provider_metadata = provider.descriptor().with_context(|| {
             format!(
                 "Could not grab the descriptor from the 'clap_preset_discovery_provider''s 'desc' \
