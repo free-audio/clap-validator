@@ -221,20 +221,8 @@ impl Soundpack {
                 .context("Error parsing the soundpack's 'vendor' field")?,
             image_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_url) }
                 .context("Error parsing the soundpack's 'image_url' field")?,
-            release_timestamp: if descriptor.release_timestamp == CLAP_TIMESTAMP_UNKNOWN {
-                None
-            } else {
-                Some(
-                    match Utc.timestamp_millis_opt(descriptor.release_timestamp as i64) {
-                        chrono::LocalResult::Single(datetime) => datetime,
-                        // This shouldn't happen
-                        _ => anyhow::bail!(
-                            "Could not parse the timestamp from the soundpack's \
-                             'release_timestamp' field"
-                        ),
-                    },
-                )
-            },
+            release_timestamp: util::parse_timestamp(descriptor.release_timestamp)
+                .context("Error parsing the soundpack's 'release_timestamp' field")?,
         })
     }
 }

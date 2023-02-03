@@ -1,6 +1,8 @@
 //! Miscellaneous functions for data conversions.
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, TimeZone, Utc};
+use clap_sys::factory::draft::preset_discovery::{clap_timestamp, CLAP_TIMESTAMP_UNKNOWN};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -123,6 +125,22 @@ pub fn c_char_slice_to_string(slice: &[c_char]) -> Result<String> {
         .to_str()
         .context("Error while parsing UTF-8")
         .map(String::from)
+}
+
+/// Convert a `clap_timestamp` to an `Option<DateTime<Utc>>`. A value of `CLAP_TIMESTAMP_UNKNOWN`
+/// gets translated to `None`.
+pub fn parse_timestamp(timestamp: clap_timestamp) -> Result<Option<DateTime<Utc>>> {
+    let parsed = if timestamp == CLAP_TIMESTAMP_UNKNOWN {
+        None
+    } else {
+        Some(match Utc.timestamp_millis_opt(timestamp as i64) {
+            chrono::LocalResult::Single(datetime) => datetime,
+            // This shouldn't happen
+            _ => anyhow::bail!("Could not parse the timestamp."),
+        })
+    };
+
+    Ok(parsed)
 }
 
 /// [`std::env::temp_dir`], but taking `XDG_RUNTIME_DIR` on Linux into account.
