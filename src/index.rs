@@ -66,6 +66,7 @@ pub fn index() -> Index {
 ///
 /// Uses a `BTreeMap` purely so the order is stable.
 #[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct PresetIndex {
     /// All successfully crawled `.clap` files. If an error occurred, it will be added to `failed`
     /// instead.
@@ -75,6 +76,7 @@ pub struct PresetIndex {
 
 /// Preset information declared by a preset provider.
 #[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct ProviderPresets {
     /// The preset provider's name.
     provider_name: String,

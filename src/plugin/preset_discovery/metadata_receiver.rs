@@ -67,6 +67,7 @@ pub struct MetadataReceiver<'a> {
 
 /// One or more presets declared by the plugin through a preset provider metadata receiver.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum PresetFile {
     Single(Preset),
     /// This contains one or more presets with associated load keys.
@@ -79,7 +80,7 @@ pub enum PresetFile {
 #[derive(Debug, Clone)]
 struct PartialPreset {
     pub name: String,
-    pub plugin_ids: Vec<(PluginAbi, String)>,
+    pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location.
     pub is_factory_content: Option<bool>,
@@ -144,15 +145,38 @@ impl PartialPreset {
 /// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
 /// plugins.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PluginId {
+    #[serde(serialize_with = "plugin_abi_to_string")]
+    pub abi: PluginAbi,
+    pub id: String,
+}
+
+/// Always serialize this as a string. Having the `Other` enum variant is nice but it looks out of
+/// place in the JSON output.
+fn plugin_abi_to_string<S>(plugin_abi: &PluginAbi, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match plugin_abi {
+        PluginAbi::Clap => "clap".serialize(ser),
+        PluginAbi::Other(s) => s.serialize(ser),
+    }
+}
+
+/// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
+/// plugins.
+#[derive(Debug, Clone, PartialEq)]
 pub enum PluginAbi {
     Clap,
     Other(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Preset {
     pub name: String,
-    pub plugin_ids: Vec<(PluginAbi, String)>,
+    pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location.
     pub is_factory_content: Option<bool>,
@@ -427,7 +451,10 @@ impl<'a> MetadataReceiver<'a> {
                 };
 
                 if abi == "clap" {
-                    next_preset_data.plugin_ids.push((PluginAbi::Clap, id));
+                    next_preset_data.plugin_ids.push(PluginId {
+                        abi: PluginAbi::Clap,
+                        id,
+                    });
                 } else if abi.trim().eq_ignore_ascii_case("clap") {
                     // Let's just assume noone comes up with a painfully sarcastic 'ClAp' standard
                     this.set_callback_error(format!(
@@ -436,9 +463,10 @@ impl<'a> MetadataReceiver<'a> {
                          probably a typo. The expected value is 'clap' in all lowercase."
                     ));
                 } else {
-                    next_preset_data
-                        .plugin_ids
-                        .push((PluginAbi::Other(abi), id));
+                    next_preset_data.plugin_ids.push(PluginId {
+                        abi: PluginAbi::Other(abi),
+                        id,
+                    });
                 }
             }
             (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
