@@ -62,7 +62,7 @@ impl PluginMetadata {
             option => option,
         };
 
-        Ok(PluginMetadata {
+        let metadata = PluginMetadata {
             id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
                 .context("The plugin's 'id' pointer was null")?,
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
@@ -80,7 +80,19 @@ impl PluginMetadata {
             }),
             features: unsafe { util::cstr_array_to_vec(descriptor.features)? }
                 .context("The plugin's 'features' were malformed")?,
-        })
+        };
+
+        if metadata.id.is_empty() {
+            anyhow::bail!("The plugin descriptor's id field is empty.");
+        }
+        if metadata.name.is_empty() {
+            anyhow::bail!(
+                "The plugin descriptor with ID '{}' has an empty name field.",
+                metadata.id
+            );
+        }
+
+        Ok(metadata)
     }
 }
 
