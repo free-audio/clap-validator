@@ -10,6 +10,7 @@ use clap_sys::factory::draft::preset_discovery::{
     CLAP_PRESET_DISCOVERY_IS_FAVORITE, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
 };
 use parking_lot::Mutex;
+use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void};
@@ -65,7 +66,7 @@ pub struct MetadataReceiver<'a> {
 }
 
 /// One or more presets declared by the plugin through a preset provider metadata receiver.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum PresetFile {
     Single(Preset),
     /// This contains one or more presets with associated load keys.
@@ -142,13 +143,13 @@ impl PartialPreset {
 
 /// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
 /// plugins.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum PluginAbi {
     Clap,
     Other(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Preset {
     pub name: String,
     pub plugin_ids: Vec<(PluginAbi, String)>,

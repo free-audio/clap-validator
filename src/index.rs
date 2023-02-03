@@ -1,4 +1,4 @@
-//! Utilities and data structures for indexing plugins.
+//! Utilities and data structures for indexing plugins and presets.
 
 use anyhow::{Context, Result};
 use serde::Serialize;
@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::plugin::library::{PluginLibrary, PluginLibraryMetadata};
+use crate::plugin::preset_discovery::{PresetFile, Soundpack};
 
 /// The separator for path environment variables.
 #[cfg(unix)]
@@ -59,6 +60,108 @@ pub fn index() -> Index {
     }
 
     index
+}
+
+/// A map containing metadata for all presets supported by a set of `.clap` plugin library files.
+///
+/// Uses a `BTreeMap` purely so the order is stable.
+#[derive(Debug, Default, Serialize)]
+pub struct PresetIndex {
+    /// All successfully crawled `.clap` files. If an error occurred, it will be added to `failed`
+    /// instead.
+    pub success: BTreeMap<PathBuf, Vec<ProviderPresets>>,
+    pub failed: BTreeMap<PathBuf, String>,
+}
+
+/// Preset information declared by a preset provider.
+#[derive(Debug, Serialize, Default)]
+pub struct ProviderPresets {
+    /// The preset provider's name.
+    provider_name: String,
+    /// The preset provider's vendor.
+    provider_vendor: Option<String>,
+    // All sound packs declared by the plugin.
+    sound_packs: Vec<Soundpack>,
+    // All presets declared by the plugin, indexed by URI.
+    presets: BTreeMap<String, PresetFile>,
+}
+
+/// Index the presets for one or more plugins. [`index()`] can be used to build a list of all
+/// installed CLAP plugins. Plugins that
+pub fn index_presets<P>(plugin_paths: &[P], skip_unsupported: bool) -> Result<PresetIndex>
+where
+    P: AsRef<Path>,
+{
+    let mut index = PresetIndex::default();
+
+    for path in plugin_paths {
+        let path = path.as_ref();
+        let library = crate::plugin::library::PluginLibrary::load(path)
+            .with_context(|| format!("Could not load '{}'", path.display()))?;
+
+        let preset_discovery_factory = library.preset_discovery_factory().with_context(|| {
+            format!(
+                "Could not get the preset discovery factory for '{}",
+                path.display()
+            )
+        });
+        if preset_discovery_factory.is_err() && skip_unsupported {
+            continue;
+        }
+        let preset_discovery_factory = preset_discovery_factory?;
+
+        let result = preset_discovery_factory
+            .metadata()
+            .context("Could not get the preset discovery's provider descriptors")
+            .and_then(|metadata| {
+                let mut provider_results = Vec::new();
+                for provider_metadata in metadata {
+                    let provider = preset_discovery_factory
+                        .create_provider(&provider_metadata)
+                        .with_context(|| {
+                            format!(
+                                "Could not create the provider with ID '{}'",
+                                provider_metadata.id
+                            )
+                        })?;
+
+                    let declared_data = provider.declared_data();
+                    let mut presets = BTreeMap::new();
+                    for location in &declared_data.locations {
+                        presets.extend(provider.crawl_location(location).with_context(|| {
+                            format!(
+                                "Error occurred while crawling presets for the location '{}' with \
+                                 URI '{}' using provider '{}' with ID '{}'",
+                                location.name,
+                                location.uri.to_uri(),
+                                provider_metadata.name,
+                                provider_metadata.id,
+                            )
+                        })?);
+                    }
+
+                    provider_results.push(ProviderPresets {
+                        provider_name: provider_metadata.name,
+                        provider_vendor: provider_metadata.vendor,
+                        sound_packs: declared_data.soundpacks.clone(),
+                        presets,
+                    });
+                }
+
+                Ok(provider_results)
+            });
+
+        match result {
+            Ok(provider_results) => {
+                index.success.insert(path.to_owned(), provider_results);
+            }
+            Err(err) => {
+                index.failed.insert(path.to_owned(), format!("{err:#}"));
+            }
+        }
+    }
+
+    Ok(index)
 }
 
 /// Get the platform-specific CLAP directories. This takes `$CLAP_PATH` into account. Returns an

@@ -3,6 +3,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CString};
 use std::path::PathBuf;
@@ -183,7 +184,7 @@ impl LocationUri {
 
 /// Data parsed from a `clap_preset_discovery_soundpack`. All of these fields except for the ID may
 /// be empty.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Soundpack {
     pub is_factory_content: bool,
     pub is_user_content: bool,
