@@ -128,8 +128,9 @@ pub enum LocationUri {
     ///
     /// The file path is not yet checked for existence.
     File(PathBuf),
-    /// A special URI referring to data stored within this plugin's library.
-    Plugin,
+    /// A special URI referring to data stored within this plugin's library. This uses the
+    /// `plugin://` magic value.
+    Internal,
 }
 
 impl LocationUri {
@@ -154,7 +155,7 @@ impl LocationUri {
         }
 
         if uri == "plugin://" {
-            return Ok(LocationUri::Plugin);
+            return Ok(LocationUri::Internal);
         } else if uri.starts_with("plugin://") {
             // This is probably useful to have as a dedicated check
             anyhow::bail!(
@@ -176,7 +177,7 @@ impl LocationUri {
                 path.to_str()
                     .expect("The file path contained invalid UTF-8")
             ),
-            LocationUri::Plugin => String::from("plugin://"),
+            LocationUri::Internal => String::from("plugin://"),
         }
     }
 }
