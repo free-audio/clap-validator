@@ -71,6 +71,15 @@ pub unsafe fn cstr_ptr_to_string(ptr: *const c_char) -> Result<Option<String>> {
         .context("Error while parsing UTF-8")
 }
 
+/// The same as [`cstr_ptr_to_string()`], but it treats empty strings as missing. Useful for parsing
+/// optional fields from structs.
+pub unsafe fn cstr_ptr_to_optional_string(ptr: *const c_char) -> Result<Option<String>> {
+    match cstr_ptr_to_string(ptr)? {
+        Some(string) if string.is_empty() => Ok(None),
+        x => Ok(x),
+    }
+}
+
 /// Convert a null terminated `*const *const c_char` array to a `Vec<String>`. Returns `None` if the
 /// first pointer is a null pointer. Returns an error if any of the strings are not valid UTF-8.
 ///

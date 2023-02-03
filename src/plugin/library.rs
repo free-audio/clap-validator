@@ -56,28 +56,17 @@ pub struct PluginMetadata {
 
 impl PluginMetadata {
     pub fn from_descriptor(descriptor: &clap_plugin_descriptor) -> Result<Self> {
-        // Empty strings should be treated as missing values in some cases
-        let handle_empty_string = |option: Option<String>| match option {
-            Some(s) if s.is_empty() => None,
-            option => option,
-        };
-
         let metadata = PluginMetadata {
             id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
                 .context("The plugin's 'id' pointer was null")?,
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
                 .context("The plugin's 'name' pointer was null")?,
-            version: handle_empty_string(unsafe { util::cstr_ptr_to_string(descriptor.version)? }),
-            vendor: handle_empty_string(unsafe { util::cstr_ptr_to_string(descriptor.vendor)? }),
-            description: handle_empty_string(unsafe {
-                util::cstr_ptr_to_string(descriptor.description)?
-            }),
-            manual_url: handle_empty_string(unsafe {
-                util::cstr_ptr_to_string(descriptor.manual_url)?
-            }),
-            support_url: handle_empty_string(unsafe {
-                util::cstr_ptr_to_string(descriptor.support_url)?
-            }),
+            // Empty strings should be treated as missing values in some cases
+            version: unsafe { util::cstr_ptr_to_optional_string(descriptor.version)? },
+            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor)? },
+            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description)? },
+            manual_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.manual_url)? },
+            support_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.support_url)? },
             features: unsafe { util::cstr_array_to_vec(descriptor.features)? }
                 .context("The plugin's 'features' were malformed")?,
         };
