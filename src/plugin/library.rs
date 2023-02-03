@@ -56,32 +56,25 @@ pub struct PluginMetadata {
 
 impl PluginMetadata {
     pub fn from_descriptor(descriptor: &clap_plugin_descriptor) -> Result<Self> {
-        let metadata = PluginMetadata {
-            id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
-                .context("The plugin's 'id' pointer was null")?,
-            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
-                .context("The plugin's 'name' pointer was null")?,
+        Ok(PluginMetadata {
+            id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
+                .context("Error parsing the plugin descriptor's 'id' field")?,
+            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
+                .context("Error parsing the plugin descriptor's 'name' field")?,
             // Empty strings should be treated as missing values in some cases
-            version: unsafe { util::cstr_ptr_to_optional_string(descriptor.version)? },
-            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor)? },
-            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description)? },
-            manual_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.manual_url)? },
-            support_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.support_url)? },
+            version: unsafe { util::cstr_ptr_to_optional_string(descriptor.version) }
+                .context("Error parsing the plugin descriptor's 'version' field")?,
+            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
+                .context("Error parsing the plugin descriptor's 'vendor' field")?,
+            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description) }
+                .context("Error parsing the plugin descriptor's 'description' field")?,
+            manual_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.manual_url) }
+                .context("Error parsing the plugin descriptor's 'manual_url' field")?,
+            support_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.support_url) }
+                .context("Error parsing the plugin descriptor's 'support_url' field")?,
             features: unsafe { util::cstr_array_to_vec(descriptor.features)? }
-                .context("The plugin's 'features' were malformed")?,
-        };
-
-        if metadata.id.is_empty() {
-            anyhow::bail!("The plugin descriptor's id field is empty.");
-        }
-        if metadata.name.is_empty() {
-            anyhow::bail!(
-                "The plugin descriptor with ID '{}' has an empty name field.",
-                metadata.id
-            );
-        }
-
-        Ok(metadata)
+                .context("The plugin descriptor's 'features' array is malformed")?,
+        })
     }
 }
 

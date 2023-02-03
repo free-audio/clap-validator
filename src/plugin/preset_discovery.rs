@@ -45,31 +45,25 @@ pub struct ProviderMetadata {
     pub version: (u32, u32, u32),
     pub id: String,
     pub name: String,
-    pub vendor: String,
+    pub vendor: Option<String>,
 }
 
 impl ProviderMetadata {
     /// Parse the metadata from a `clap_preset_discovery_provider_descriptor`.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_provider_descriptor) -> Result<Self> {
-        let metadata = ProviderMetadata {
+        Ok(ProviderMetadata {
             version: (
                 descriptor.clap_version.major,
                 descriptor.clap_version.minor,
                 descriptor.clap_version.revision,
             ),
-            id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
-                .context("The provider's 'id' pointer was null")?,
-            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
-                .context("The provider's 'name' pointer was null")?,
-            vendor: unsafe { util::cstr_ptr_to_string(descriptor.vendor)? }
-                .context("The provider's 'vendor' pointer was null")?,
-        };
-
-        if metadata.name.is_empty() {
-            anyhow::bail!("The plugin declared a preset provider with an empty name.")
-        }
-
-        Ok(metadata)
+            id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
+                .context("Error parsing the provider's 'id' field")?,
+            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
+                .context("Error parsing the provider's 'name' field")?,
+            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
+                .context("Error parsing the provider's 'vendor' field")?,
+        })
     }
 
     /// Get the CLAP version representation for this provider.

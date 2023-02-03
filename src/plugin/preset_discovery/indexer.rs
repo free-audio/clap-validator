@@ -65,16 +65,14 @@ impl FileType {
     /// Parse a `clap_preset_discovery_fileType`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_filetype) -> Result<Self> {
         let file_type = FileType {
-            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
-                .context("A file type's 'name' field was a null pointer")?,
-            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description)? },
-            extension: unsafe { util::cstr_ptr_to_optional_string(descriptor.file_extension)? }
-                .context("A file type's 'file_extension' field was a null pointer")?,
+            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
+                .context("Error parsing the file extension's 'name' field")?,
+            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description) }
+                .context("Error parsing the file extension's 'description' field")?,
+            extension: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.file_extension) }
+                .context("Error parsing the file extension's 'file_extension' field")?,
         };
 
-        if file_type.name.is_empty() {
-            anyhow::bail!("The plugin declared a file type with an empty name.")
-        }
         if file_type.extension.starts_with('.') {
             anyhow::bail!(
                 "File extensions may not start with periods, so '{}' is not allowed.",
@@ -102,26 +100,20 @@ pub struct Location {
 impl Location {
     /// Parse a `clap_preset_discovery_location`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_location) -> Result<Self> {
-        let location = Location {
+        Ok(Location {
             is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
             is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
             is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
             is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
 
-            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
-                .context("A location's 'name' field was a null pointer")?,
+            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
+                .context("Error parsing the location's 'name' field")?,
             // This already checks that the URI is valid and non-empty
             uri: LocationUri::from_uri(
                 &unsafe { util::cstr_ptr_to_string(descriptor.uri)? }
-                    .context("A location's 'uri' field was a null pointer")?,
+                    .context("Error parsing the location's 'uri' field")?,
             )?,
-        };
-
-        if location.name.is_empty() {
-            anyhow::bail!("The plugin declared a location with an empty name.")
-        }
-
-        Ok(location)
+        })
     }
 }
 
@@ -211,20 +203,24 @@ pub struct Soundpack {
 impl Soundpack {
     /// Parse a `clap_preset_discovery_soundpack`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_soundpack) -> Result<Self> {
-        let soundpack = Soundpack {
+        Ok(Soundpack {
             is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
             is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
             is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
             is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
 
-            id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
-                .context("A soundpack's 'id' field was a null pointer")?,
-            name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
-                .context("A soundpack's 'name' field was a null pointer")?,
-            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description)? },
-            homepage_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.homepage_url)? },
-            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor)? },
-            image_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_url)? },
+            id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
+                .context("Error parsing the soundpack's 'id' field")?,
+            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
+                .context("Error parsing the soundpack's 'name' field")?,
+            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description) }
+                .context("Error parsing the soundpack's 'description' field")?,
+            homepage_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.homepage_url) }
+                .context("Error parsing the soundpack's 'homepage_url' field")?,
+            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
+                .context("Error parsing the soundpack's 'vendor' field")?,
+            image_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_url) }
+                .context("Error parsing the soundpack's 'image_url' field")?,
             release_timestamp: if descriptor.release_timestamp == CLAP_TIMESTAMP_UNKNOWN {
                 None
             } else {
@@ -239,16 +235,7 @@ impl Soundpack {
                     },
                 )
             },
-        };
-
-        if soundpack.id.is_empty() {
-            anyhow::bail!("The plugin declared a soundpack with an empty ID.")
-        }
-        if soundpack.name.is_empty() {
-            anyhow::bail!("The plugin declared a soundpack with an empty name.")
-        }
-
-        Ok(soundpack)
+        })
     }
 }
 

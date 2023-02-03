@@ -71,6 +71,15 @@ pub unsafe fn cstr_ptr_to_string(ptr: *const c_char) -> Result<Option<String>> {
         .context("Error while parsing UTF-8")
 }
 
+/// The same as [`cstr_ptr_to_string()`], but it returns an error if the string is empty.
+pub unsafe fn cstr_ptr_to_mandatory_string(ptr: *const c_char) -> Result<String> {
+    match cstr_ptr_to_string(ptr)? {
+        Some(string) if string.is_empty() => anyhow::bail!("The string is empty."),
+        Some(string) => Ok(string),
+        None => anyhow::bail!("The string is a null pointer."),
+    }
+}
+
 /// The same as [`cstr_ptr_to_string()`], but it treats empty strings as missing. Useful for parsing
 /// optional fields from structs.
 pub unsafe fn cstr_ptr_to_optional_string(ptr: *const c_char) -> Result<Option<String>> {
