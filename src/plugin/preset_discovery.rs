@@ -50,7 +50,7 @@ pub struct ProviderMetadata {
 impl ProviderMetadata {
     /// Parse the metadata from a `clap_preset_discovery_provider_descriptor`.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_provider_descriptor) -> Result<Self> {
-        Ok(ProviderMetadata {
+        let metadata = ProviderMetadata {
             version: (
                 descriptor.clap_version.major,
                 descriptor.clap_version.minor,
@@ -62,7 +62,13 @@ impl ProviderMetadata {
                 .context("The provider's 'name' pointer was null")?,
             vendor: unsafe { util::cstr_ptr_to_string(descriptor.vendor)? }
                 .context("The provider's 'vendor' pointer was null")?,
-        })
+        };
+
+        if metadata.name.is_empty() {
+            anyhow::bail!("The plugin declared a preset provider with an empty name.")
+        }
+
+        Ok(metadata)
     }
 }
 

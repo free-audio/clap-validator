@@ -1,5 +1,5 @@
-//! The indexer abstraction for a CLAP plugin. During initialization the plugin fills this object
-//! with its supported locations, file types, and sound packs.
+//! The indexer abstraction for a CLAP plugin's preset discovery factory. During initialization the
+//! plugin fills this object with its supported locations, file types, and sound packs.
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, TimeZone, Utc};
@@ -65,7 +65,6 @@ impl FileType {
     /// Parse a `clap_preset_discovery_fileType`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_filetype) -> Result<Self> {
         let file_type = FileType {
-            // TODO: Is the name allowed to be empty?
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
                 .context("A file type's 'name' field was a null pointer")?,
             description: unsafe { util::cstr_ptr_to_string(descriptor.description)? }
@@ -74,9 +73,12 @@ impl FileType {
                 .context("A file type's 'file_extension' field was a null pointer")?,
         };
 
+        if file_type.name.is_empty() {
+            anyhow::bail!("The plugin declared a file type with an empty name.")
+        }
         if file_type.extension.starts_with('.') {
             anyhow::bail!(
-                "So extensions may not start with periods, so '{}' is not allowed",
+                "File extensions may not start with periods, so '{}' is not allowed.",
                 file_type.extension
             )
         }
@@ -101,20 +103,26 @@ pub struct Location {
 impl Location {
     /// Parse a `clap_preset_discovery_location`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_location) -> Result<Self> {
-        Ok(Location {
+        let location = Location {
             is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
             is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
             is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
             is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
 
-            // TODO: Is the name allowed to be empty?
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
                 .context("A location's 'name' field was a null pointer")?,
+            // This already checks that the URI is valid and non-empty
             uri: LocationUri::from_uri(
                 &unsafe { util::cstr_ptr_to_string(descriptor.uri)? }
                     .context("A location's 'uri' field was a null pointer")?,
             )?,
-        })
+        };
+
+        if location.name.is_empty() {
+            anyhow::bail!("The plugin declared a location with an empty name.")
+        }
+
+        Ok(location)
     }
 }
 
@@ -212,7 +220,6 @@ impl Soundpack {
 
             id: unsafe { util::cstr_ptr_to_string(descriptor.id)? }
                 .context("A soundpack's 'id' field was a null pointer")?,
-            // TODO: Is the name allowed to be empty?
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
                 .context("A soundpack's 'name' field was a null pointer")?,
             description: unsafe { util::cstr_ptr_to_string(descriptor.description)? }
@@ -241,6 +248,9 @@ impl Soundpack {
 
         if soundpack.id.is_empty() {
             anyhow::bail!("The plugin declared a soundpack with an empty ID.")
+        }
+        if soundpack.name.is_empty() {
+            anyhow::bail!("The plugin declared a soundpack with an empty name.")
         }
 
         Ok(soundpack)
