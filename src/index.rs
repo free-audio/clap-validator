@@ -83,7 +83,7 @@ pub struct ProviderPresets {
     /// The preset provider's vendor.
     provider_vendor: Option<String>,
     // All sound packs declared by the plugin.
-    sound_packs: Vec<Soundpack>,
+    soundpacks: Vec<Soundpack>,
     // All presets declared by the plugin, indexed by URI.
     presets: BTreeMap<String, PresetFile>,
 }
@@ -146,7 +146,7 @@ where
                     provider_results.push(ProviderPresets {
                         provider_name: provider_metadata.name,
                         provider_vendor: provider_metadata.vendor,
-                        sound_packs: declared_data.soundpacks.clone(),
+                        soundpacks: declared_data.soundpacks.clone(),
                         presets,
                     });
                 }
