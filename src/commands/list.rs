@@ -75,6 +75,8 @@ pub fn presets<P>(json: bool, plugin_paths: Option<&[P]>) -> Result<ExitCode>
 where
     P: AsRef<Path>,
 {
+    // TODO: When preset flags are set omitted they should be inherited from the location. This
+    //       currently does not happen.
     let preset_index = match plugin_paths {
         Some(plugin_paths) => crate::index::index_presets(plugin_paths, false),
         None => {
