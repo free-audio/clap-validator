@@ -56,7 +56,7 @@ pub struct IndexerResults {
 #[derive(Debug, Clone)]
 pub struct FileType {
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
     /// The file extension, doesn't contain a leading period.
     pub extension: String,
 }
@@ -67,9 +67,8 @@ impl FileType {
         let file_type = FileType {
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
                 .context("A file type's 'name' field was a null pointer")?,
-            description: unsafe { util::cstr_ptr_to_string(descriptor.description)? }
-                .context("A file type's 'description' field was a null pointer")?,
-            extension: unsafe { util::cstr_ptr_to_string(descriptor.file_extension)? }
+            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description)? },
+            extension: unsafe { util::cstr_ptr_to_optional_string(descriptor.file_extension)? }
                 .context("A file type's 'file_extension' field was a null pointer")?,
         };
 
@@ -202,10 +201,10 @@ pub struct Soundpack {
     /// An ID that the plugin can be refer to later when interacting with the metadata receiver.
     pub id: String,
     pub name: String,
-    pub description: String,
-    pub homepage_url: String,
-    pub vendor: String,
-    pub image_url: String,
+    pub description: Option<String>,
+    pub homepage_url: Option<String>,
+    pub vendor: Option<String>,
+    pub image_url: Option<String>,
     pub release_timestamp: Option<DateTime<Utc>>,
 }
 
@@ -222,14 +221,10 @@ impl Soundpack {
                 .context("A soundpack's 'id' field was a null pointer")?,
             name: unsafe { util::cstr_ptr_to_string(descriptor.name)? }
                 .context("A soundpack's 'name' field was a null pointer")?,
-            description: unsafe { util::cstr_ptr_to_string(descriptor.description)? }
-                .context("A soundpack's 'description' field was a null pointer")?,
-            homepage_url: unsafe { util::cstr_ptr_to_string(descriptor.homepage_url)? }
-                .context("A soundpack's 'homepage_url' field was a null pointer")?,
-            vendor: unsafe { util::cstr_ptr_to_string(descriptor.vendor)? }
-                .context("A soundpack's 'vendor' field was a null pointer")?,
-            image_url: unsafe { util::cstr_ptr_to_string(descriptor.image_url)? }
-                .context("A soundpack's 'image_url' field was a null pointer")?,
+            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description)? },
+            homepage_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.homepage_url)? },
+            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor)? },
+            image_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_url)? },
             release_timestamp: if descriptor.release_timestamp == CLAP_TIMESTAMP_UNKNOWN {
                 None
             } else {
