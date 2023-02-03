@@ -84,6 +84,7 @@ pub enum PresetFile {
 #[derive(Debug, Clone, Default)]
 struct PartialPreset {
     pub name: String,
+    pub plugin_abi: Option<PluginAbi>,
     pub plugin_id: Option<String>,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location.
@@ -103,13 +104,44 @@ impl PartialPreset {
     /// Convert this data to a preset. Returns an error if any data is missing. Individual fields
     /// will have already been validated before it was stored on this `PartialPreset`.
     pub fn finalize(self) -> Result<Preset> {
-        todo!()
+        if self.plugin_abi.is_none() || self.plugin_id.is_none() {
+            anyhow::bail!(
+                "The preset '{}' was defined without setting a plugin ID.",
+                self.name
+            );
+        }
+
+        Ok(Preset {
+            name: self.name,
+            plugin_abi: self.plugin_abi.unwrap(),
+            plugin_id: self.plugin_id.unwrap(),
+            soundpack_id: self.soundpack_id,
+            is_factory_content: self.is_factory_content,
+            is_user_content: self.is_user_content,
+            is_demo_content: self.is_demo_content,
+            is_favorite: self.is_favorite,
+            creator: self.creator,
+            description: self.description,
+            creation_time: self.creation_time,
+            modification_time: self.modification_time,
+            features: self.features,
+            extra_info: self.extra_info,
+        })
     }
+}
+
+/// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
+/// plugins.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PluginAbi {
+    Clap,
+    Other(String),
 }
 
 #[derive(Debug, Clone)]
 pub struct Preset {
     pub name: String,
+    pub plugin_abi: PluginAbi,
     pub plugin_id: String,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location.
