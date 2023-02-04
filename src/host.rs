@@ -1,7 +1,8 @@
 //! Data structures and utilities for hosting plugins.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap_sys::ext::audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS};
+use clap_sys::ext::draft::preset_load::{clap_host_preset_load, CLAP_EXT_PRESET_LOAD};
 use clap_sys::ext::note_ports::{
     clap_host_note_ports, clap_note_dialect, CLAP_EXT_NOTE_PORTS, CLAP_NOTE_DIALECT_CLAP,
     CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
@@ -28,7 +29,7 @@ use std::sync::Arc;
 use std::thread::ThreadId;
 
 use crate::plugin::instance::{PluginHandle, PluginStatus};
-use crate::util::{check_null_ptr, unsafe_clap_call};
+use crate::util::{self, check_null_ptr, unsafe_clap_call};
 
 /// An abstraction for a CLAP plugin host.
 ///
@@ -71,6 +72,7 @@ pub struct Host {
     clap_host_audio_ports: clap_host_audio_ports,
     clap_host_note_ports: clap_host_note_ports,
     clap_host_params: clap_host_params,
+    clap_host_preset_load: clap_host_preset_load,
     clap_host_state: clap_host_state,
     clap_host_thread_check: clap_host_thread_check,
 }
@@ -253,6 +255,10 @@ impl Host {
             clap_host_note_ports: clap_host_note_ports {
                 supported_dialects: Some(Self::ext_note_ports_supported_dialects),
                 rescan: Some(Self::ext_note_ports_rescan),
+            },
+            clap_host_preset_load: clap_host_preset_load {
+                on_error: Some(Self::ext_preset_load_on_error),
+                loaded: Some(Self::ext_preset_load_loaded),
             },
             clap_host_params: clap_host_params {
                 rescan: Some(Self::ext_params_rescan),
@@ -472,6 +478,8 @@ impl Host {
             &this.clap_host_audio_ports as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS {
             &this.clap_host_note_ports as *const _ as *const c_void
+        } else if extension_id_cstr == CLAP_EXT_PRESET_LOAD {
+            &this.clap_host_preset_load as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_PARAMS {
             &this.clap_host_params as *const _ as *const c_void
         } else if extension_id_cstr == CLAP_EXT_STATE {
@@ -553,6 +561,58 @@ impl Host {
 
         this.assert_main_thread("clap_host_note_ports::rescan()");
         log::debug!("TODO: Handle 'clap_host_note_ports::rescan()'");
+    }
+
+    unsafe extern "C" fn ext_preset_load_on_error(
+        host: *const clap_host,
+        uri: *const c_char,
+        os_error: i32,
+        msg: *const c_char,
+    ) {
+        check_null_ptr!(host, (*host).host_data);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
+
+        this.assert_main_thread("clap_host_preset_load::on_error()");
+
+        let uri = unsafe { util::cstr_ptr_to_mandatory_string(uri) }
+            .context("'clap_host_preset_load::on_error()' called with an invalid uri parameter");
+        let msg = unsafe { util::cstr_ptr_to_mandatory_string(msg) }
+            .context("'clap_host_preset_load::on_error()' called with an invalid msg parameter");
+        match (uri, msg) {
+            (Ok(uri), Ok(msg)) => {
+                this.set_callback_error(format!(
+                    "'clap_host_preset_load::on_error()' called for URI '{uri}' with OS error \
+                     code {os_error} and the following error message: {msg}"
+                ));
+            }
+            (Err(err), _) | (_, Err(err)) => {
+                this.set_callback_error(format!("{err:#}"));
+            }
+        }
+    }
+
+    unsafe extern "C" fn ext_preset_load_loaded(
+        host: *const clap_host,
+        uri: *const c_char,
+        load_key: *const c_char,
+    ) {
+        check_null_ptr!(host, (*host).host_data);
+        let (_, this) = InstanceState::from_clap_host_ptr(host);
+
+        this.assert_main_thread("clap_host_preset_load::loaded()");
+
+        let uri = unsafe { util::cstr_ptr_to_mandatory_string(uri) }
+            .context("'clap_host_preset_load::loaded()' called with an invalid uri parameter");
+        let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }
+            .context("'clap_host_preset_load::loaded()' called with an invalid load_key parameter");
+        match (uri, load_key) {
+            (Ok(_uri), Ok(_load_key)) => {
+                log::debug!("TODO: Handle 'clap_host_preset_load::loaded()'");
+            }
+            (Err(err), _) | (_, Err(err)) => {
+                this.set_callback_error(format!("{err:#}"));
+            }
+        }
     }
 
     unsafe extern "C" fn ext_params_rescan(
