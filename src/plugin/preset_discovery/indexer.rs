@@ -343,10 +343,10 @@ impl Indexer {
 
     /// Set the callback error field if it does not already contain a value. Earlier errors are not
     /// overwritten.
-    fn set_callback_error(&self, error: String) {
+    fn set_callback_error(&self, error: impl Into<String>) {
         let mut callback_error = self.callback_error.borrow_mut();
         if callback_error.is_none() {
-            *callback_error = Some(error);
+            *callback_error = Some(error.into());
         }
     }
 

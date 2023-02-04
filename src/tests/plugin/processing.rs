@@ -246,7 +246,7 @@ pub fn test_process_audio_out_of_place_basic(
     )?;
 
     // The `Host` contains built-in thread safety checks
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     Ok(TestStatus::Success { details: None })
 }
@@ -318,7 +318,7 @@ pub fn test_process_note_out_of_place_basic(
         },
     )?;
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     Ok(TestStatus::Success { details: None })
 }
@@ -389,7 +389,7 @@ pub fn test_process_note_inconsistent(
         },
     )?;
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     Ok(TestStatus::Success { details: None })
 }

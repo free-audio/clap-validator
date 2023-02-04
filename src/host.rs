@@ -33,9 +33,9 @@ use crate::util::{check_null_ptr, unsafe_clap_call};
 /// An abstraction for a CLAP plugin host.
 ///
 /// - It handles callback requests made by the plugin, and it checks whether the calling thread
-///   matches up when any of its functions are called by the plugin.  A `Result` indicating the
-///   first failure, of any, can be retrieved by calling the
-///   [`thread_safety_check()`][Self::thread_safety_check()] method.
+///   matches up when any of its functions are called by the plugin. A `Result` indicating the first
+///   failure, of any, can be retrieved by calling the
+///   [`callback_error_check()`][Self::callback_error_check()] method.
 /// - In order for those calblacks to be handled correctly every CLAP function call where the plugin
 ///   potentially requests a main thread callback [`Host::handle_callbacks_once()`] needs to be
 ///   called. Alternatively [`Host::handle_callbacks_blocking()`] can be called on the main thread
@@ -49,10 +49,10 @@ use crate::util::{check_null_ptr, unsafe_clap_call};
 pub struct Host {
     /// The ID of the main thread.
     main_thread_id: ThreadId,
-    /// A description of the first thread safety error encountered by this `Host`, if any. This is
-    /// used to check that the plugin called all host callbacks from the correct thread after the
-    /// rest of the test has succeeded.
-    thread_safety_error: RefCell<Option<String>>,
+    /// A description of the first error encountered during a callback by this `Host`, if any. This
+    /// is primarily used to check that the plugin called all host callbacks from the correct thread
+    /// after the rest of the test has succeeded.
+    callback_error: RefCell<Option<String>>,
 
     /// These are the plugin instances taht were registered on this host. They're added here when
     /// the `Plugin` object is created, and they're removed when the object is dropped. This is used
@@ -216,11 +216,11 @@ impl InstanceState {
 
 impl Drop for Host {
     fn drop(&mut self) {
-        if let Some(error) = self.thread_safety_error.borrow_mut().take() {
+        if let Some(error) = self.callback_error.borrow_mut().take() {
             log::error!(
-                "The validator's host has detected a thread safety error but this error has not \
-                 been used as part of the test result. This is a clap-validator bug. The error \
-                 message is: {error}"
+                "The validator's host has detected a callback error but this error has not been \
+                 used as part of the test result. This is a clap-validator bug. The error message \
+                 is: {error}"
             )
         }
     }
@@ -240,7 +240,7 @@ impl Host {
             main_thread_id: std::thread::current().id(),
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
             // None`. Otherwise this will be replaced by the first error.
-            thread_safety_error: RefCell::new(None),
+            callback_error: RefCell::new(None),
 
             instances: RefCell::new(HashMap::new()),
             callback_task_sender,
@@ -387,72 +387,66 @@ impl Host {
     /// Check if any of the host's callbacks were called from the wrong thread. Returns the first
     /// error if this happened. If there were errors and this function is not called before the
     /// object is destroyed, an error will be logged.
-    pub fn thread_safety_check(&self) -> Result<()> {
-        match self.thread_safety_error.borrow_mut().take() {
+    pub fn callback_error_check(&self) -> Result<()> {
+        match self.callback_error.borrow_mut().take() {
             Some(err) => anyhow::bail!(err),
             None => Ok(()),
         }
     }
 
+    /// Set the callback error field if it does not already contain a value. Earlier errors are not
+    /// overwritten.
+    fn set_callback_error(&self, error: impl Into<String>) {
+        let mut callback_error = self.callback_error.borrow_mut();
+        if callback_error.is_none() {
+            *callback_error = Some(error.into());
+        }
+    }
+
     /// Checks whether this is the main thread. If it is not, then an error indicating this can be
-    /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
+    /// retrieved using [`callback_error_check()`][Self::callback_error_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
     fn assert_main_thread(&self, function_name: &str) {
-        let mut thread_safety_error = self.thread_safety_error.borrow_mut();
         let current_thread_id = std::thread::current().id();
-
-        match *thread_safety_error {
-            // Don't overwrite the first error
-            None if std::thread::current().id() != self.main_thread_id => {
-                *thread_safety_error = Some(format!(
-                    "'{}' may only be called from the main thread (thread {:?}), but it was \
-                     called from thread {:?}",
-                    function_name, self.main_thread_id, current_thread_id
-                ))
-            }
-            _ => (),
+        if current_thread_id != self.main_thread_id {
+            self.set_callback_error(format!(
+                "'{}' may only be called from the main thread (thread {:?}), but it was called \
+                 from thread {:?}.",
+                function_name, self.main_thread_id, current_thread_id
+            ));
         }
     }
 
     /// Checks whether this is the audio thread. If it is not, then an error indicating this can be
-    /// retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
+    /// retrieved using [`callback_error_check()`][Self::callback_error_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
     #[allow(unused)]
     fn assert_audio_thread(&self, function_name: &str) {
         let current_thread_id = std::thread::current().id();
         if !self.is_audio_thread(current_thread_id) {
-            let mut thread_safety_error = self.thread_safety_error.borrow_mut();
-
-            match *thread_safety_error {
-                None if current_thread_id == self.main_thread_id => {
-                    *thread_safety_error = Some(format!(
-                        "'{function_name}' may only be called from an audio thread, but it was \
-                         called from the main thread"
-                    ))
-                }
-                None => {
-                    *thread_safety_error = Some(format!(
-                        "'{function_name}' may only be called from an audio thread, but it was \
-                         called from an unknown thread"
-                    ))
-                }
-                _ => (),
+            if current_thread_id == self.main_thread_id {
+                self.set_callback_error(format!(
+                    "'{function_name}' may only be called from an audio thread, but it was called \
+                     from the main thread."
+                ));
+            } else {
+                self.set_callback_error(format!(
+                    "'{function_name}' may only be called from an audio thread, but it was called \
+                     from an unknown thread."
+                ));
             }
         }
     }
 
     /// Checks whether this is **not** the audio thread. If it is, then an error indicating this can
-    /// be retrieved using [`thread_safety_check()`][Self::thread_safety_check()]. Subsequent thread
+    /// be retrieved using [`callback_error_check()`][Self::callback_error_check()]. Subsequent thread
     /// safety errors will not overwrite earlier ones.
     fn assert_not_audio_thread(&self, function_name: &str) {
         let current_thread_id = std::thread::current().id();
         if self.is_audio_thread(current_thread_id) {
-            let mut thread_safety_error = self.thread_safety_error.borrow_mut();
-            if thread_safety_error.is_none() {
-                *thread_safety_error = Some(format!(
-                    "'{function_name}' was called from an audio thread, this is not allowed",
-                ))
-            }
+            self.set_callback_error(format!(
+                "'{function_name}' was called from an audio thread, this is not allowed.",
+            ));
         }
     }
 

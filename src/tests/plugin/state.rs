@@ -51,7 +51,7 @@ pub fn test_state_invalid(library: &PluginLibrary, plugin_id: &str) -> Result<Te
         ),
         Err(_) => {
             host.handle_callbacks_once();
-            host.thread_safety_check()
+            host.callback_error_check()
                 .context("Thread safety checks failed")?;
 
             Ok(TestStatus::Success { details: None })
@@ -221,7 +221,7 @@ pub fn test_state_reproducibility_null_cookies(
     let actual_state = state.save()?;
     host.handle_callbacks_once();
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
@@ -431,7 +431,7 @@ pub fn test_state_reproducibility_flush(
     let actual_state = state.save()?;
     host.handle_callbacks_once();
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
@@ -589,7 +589,7 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
     let actual_state = state.save_buffered(BUFFERED_SAVE_MAX_BYTES)?;
     host.handle_callbacks_once();
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })

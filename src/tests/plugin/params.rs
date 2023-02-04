@@ -172,7 +172,7 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
         );
     }
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     if num_supported_value_to_text == 0 || num_supported_text_to_value == 0 {
         Ok(TestStatus::Skipped {
@@ -322,7 +322,7 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str) -> Result
     }
 
     // `ProcessingTest::run()` already handled callbacks for us
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
 
     Ok(TestStatus::Success { details: None })
@@ -399,7 +399,7 @@ pub fn test_param_set_wrong_namespace(
         .map(|param_id| params.get(*param_id).map(|value| (*param_id, value)))
         .collect::<Result<BTreeMap<clap_id, f64>>>()?;
 
-    host.thread_safety_check()
+    host.callback_error_check()
         .context("Thread safety checks failed")?;
     if actual_param_values == initial_param_values {
         Ok(TestStatus::Success { details: None })
