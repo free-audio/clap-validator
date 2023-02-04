@@ -8,6 +8,7 @@ use std::ptr::NonNull;
 pub mod audio_ports;
 pub mod note_ports;
 pub mod params;
+pub mod preset_load;
 pub mod state;
 
 /// An abstraction for a CLAP plugin extension. `P` here is the plugin type. In practice, this is
