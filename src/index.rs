@@ -63,15 +63,20 @@ pub fn index() -> Index {
 }
 
 /// A map containing metadata for all presets supported by a set of `.clap` plugin library files.
+/// When crawling all installed plugins this will only contain entries for plugins that support
+/// preset discovery.
 ///
 /// Uses a `BTreeMap` purely so the order is stable.
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct PresetIndex {
-    /// All successfully crawled `.clap` files. If an error occurred, it will be added to `failed`
-    /// instead.
-    pub success: BTreeMap<PathBuf, Vec<ProviderPresets>>,
-    pub failed: BTreeMap<PathBuf, String>,
+pub struct PresetIndex(BTreeMap<PathBuf, PresetIndexResult>);
+
+/// A result-like enum for the index. `anyhow::Result` cannot be serialized.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PresetIndexResult {
+    Success(Vec<ProviderPresets>),
+    Error(String),
 }
 
 /// Preset information declared by a preset provider.
@@ -156,10 +161,16 @@ where
 
         match result {
             Ok(provider_results) => {
-                index.success.insert(path.to_owned(), provider_results);
+                index.0.insert(
+                    path.to_owned(),
+                    PresetIndexResult::Success(provider_results),
+                );
             }
             Err(err) => {
-                index.failed.insert(path.to_owned(), format!("{err:#}"));
+                index.0.insert(
+                    path.to_owned(),
+                    PresetIndexResult::Error(format!("{err:#}")),
+                );
             }
         }
     }
