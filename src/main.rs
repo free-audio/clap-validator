@@ -4,7 +4,6 @@ use std::process::ExitCode;
 use validator::{SingleTestSettings, ValidatorSettings};
 
 mod commands;
-mod host;
 mod index;
 mod plugin;
 mod tests;

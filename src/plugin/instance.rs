@@ -13,7 +13,7 @@ use std::sync::Arc;
 use super::ext::Extension;
 use super::library::{PluginLibrary, PluginMetadata};
 use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
-use crate::host::{CallbackTask, Host, InstanceState};
+use crate::plugin::host::{CallbackTask, Host, InstanceState};
 use crate::util::unsafe_clap_call;
 use audio_thread::PluginAudioThread;
 

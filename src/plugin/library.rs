@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use super::instance::Plugin;
 use super::preset_discovery::PresetDiscoveryFactory;
-use crate::host::Host;
+use crate::plugin::host::Host;
 use crate::util::{self, unsafe_clap_call};
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over

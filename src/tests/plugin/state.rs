@@ -5,11 +5,11 @@ use clap_sys::id::clap_id;
 use std::collections::BTreeMap;
 use std::io::Write;
 
-use crate::host::Host;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::{ParamInfo, Params};
 use crate::plugin::ext::state::State;
 use crate::plugin::ext::Extension;
+use crate::plugin::host::Host;
 use crate::plugin::instance::process::{Event, EventQueue, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
 use crate::tests::rng::{new_prng, ParamFuzzer};

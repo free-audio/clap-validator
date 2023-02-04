@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap_sys::version::clap_version_is_compatible;
 use std::path::Path;
 
-use crate::host::Host;
+use crate::plugin::host::Host;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
 

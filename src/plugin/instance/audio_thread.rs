@@ -11,7 +11,7 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use crate::host::InstanceState;
+use crate::plugin::host::InstanceState;
 use crate::util::unsafe_clap_call;
 
 use super::process::ProcessData;

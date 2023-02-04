@@ -7,7 +7,7 @@ use clap_sys::plugin_features::{
 };
 use std::collections::HashSet;
 
-use crate::host::Host;
+use crate::plugin::host::Host;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
 
