@@ -164,7 +164,7 @@ impl PluginLibrary {
         //       perfectly legal, but it's a bit weird
         if plugin_factory.is_null() {
             anyhow::bail!(
-                "The plugin does not support the '{}' factory",
+                "The plugin does not support the '{}' factory.",
                 CLAP_PLUGIN_FACTORY_ID.to_str().unwrap()
             );
         }
@@ -232,7 +232,7 @@ impl PluginLibrary {
             as *const clap_plugin_factory;
         if plugin_factory.is_null() {
             anyhow::bail!(
-                "The plugin does not support the '{}' factory",
+                "The plugin does not support the '{}' factory.",
                 CLAP_PLUGIN_FACTORY_ID.to_str().unwrap()
             );
         }
@@ -255,7 +255,7 @@ impl PluginLibrary {
             }
             None => {
                 anyhow::bail!(
-                    "The plugin does not support the '{}' factory",
+                    "The plugin does not support the '{}' factory.",
                     CLAP_PRESET_DISCOVERY_FACTORY_ID.to_str().unwrap()
                 )
             }
