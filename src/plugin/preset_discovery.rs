@@ -15,7 +15,7 @@ mod indexer;
 mod metadata_receiver;
 mod provider;
 
-pub use self::indexer::{FileType, IndexerResults, Location, LocationUri, Soundpack};
+pub use self::indexer::{FileType, Flags, IndexerResults, Location, LocationUri, Soundpack};
 pub use self::metadata_receiver::{Preset, PresetFile};
 pub use self::provider::Provider;
 

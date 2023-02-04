@@ -88,24 +88,32 @@ impl FileType {
 /// Data parsed from a `clap_preset_discovery_location`.
 #[derive(Debug, Clone)]
 pub struct Location {
-    pub is_factory_content: bool,
-    pub is_user_content: bool,
-    pub is_demo_content: bool,
-    pub is_favorite: bool,
+    pub flags: Flags,
 
     pub name: String,
     /// The location's URI. The exact variant determines how the location should be treated.
     pub uri: LocationUri,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct Flags {
+    pub is_factory_content: bool,
+    pub is_user_content: bool,
+    pub is_demo_content: bool,
+    pub is_favorite: bool,
+}
+
 impl Location {
     /// Parse a `clap_preset_discovery_location`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_location) -> Result<Self> {
         Ok(Location {
-            is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
-            is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
-            is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
-            is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            flags: Flags {
+                is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT)
+                    != 0,
+                is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
+                is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
+                is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            },
 
             name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
                 .context("Error parsing the location's 'name' field")?,

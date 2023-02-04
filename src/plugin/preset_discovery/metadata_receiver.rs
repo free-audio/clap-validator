@@ -17,6 +17,7 @@ use std::ffi::{c_char, c_void};
 use std::pin::Pin;
 use std::thread::ThreadId;
 
+use super::Flags;
 use crate::util::{self, check_null_ptr};
 
 /// An implementation of the preset discovery's metadata receiver. This borrows a
@@ -83,10 +84,7 @@ struct PartialPreset {
     pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location.
-    pub is_factory_content: Option<bool>,
-    pub is_user_content: Option<bool>,
-    pub is_demo_content: Option<bool>,
-    pub is_favorite: Option<bool>,
+    pub flags: Option<Flags>,
     pub creators: Vec<String>,
     pub description: Option<String>,
     pub creation_time: Option<DateTime<Utc>>,
@@ -101,10 +99,7 @@ impl PartialPreset {
             name,
             plugin_ids: Default::default(),
             soundpack_id: Default::default(),
-            is_factory_content: Default::default(),
-            is_user_content: Default::default(),
-            is_demo_content: Default::default(),
-            is_favorite: Default::default(),
+            flags: Default::default(),
             creators: Default::default(),
             description: Default::default(),
             creation_time: Default::default(),
@@ -128,10 +123,7 @@ impl PartialPreset {
             name: self.name,
             plugin_ids: self.plugin_ids,
             soundpack_id: self.soundpack_id,
-            is_factory_content: self.is_factory_content,
-            is_user_content: self.is_user_content,
-            is_demo_content: self.is_demo_content,
-            is_favorite: self.is_favorite,
+            flags: self.flags,
             creators: self.creators,
             description: self.description,
             creation_time: self.creation_time,
@@ -179,10 +171,7 @@ pub struct Preset {
     pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location.
-    pub is_factory_content: Option<bool>,
-    pub is_user_content: Option<bool>,
-    pub is_demo_content: Option<bool>,
-    pub is_favorite: Option<bool>,
+    pub flags: Option<Flags>,
     pub creators: Vec<String>,
     pub description: Option<String>,
     pub creation_time: Option<DateTime<Utc>>,
@@ -527,13 +516,12 @@ impl<'a> MetadataReceiver<'a> {
             }
         };
 
-        next_preset_data.is_factory_content =
-            Some((flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0);
-        next_preset_data.is_user_content =
-            Some((flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0);
-        next_preset_data.is_demo_content =
-            Some((flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0);
-        next_preset_data.is_favorite = Some((flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0);
+        next_preset_data.flags = Some(Flags {
+            is_factory_content: (flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
+            is_user_content: (flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
+            is_demo_content: (flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
+            is_favorite: (flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+        });
     }
 
     unsafe extern "C" fn add_creator(
