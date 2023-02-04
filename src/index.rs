@@ -116,48 +116,48 @@ where
         if preset_discovery_factory.is_err() && skip_unsupported {
             continue;
         }
-        let preset_discovery_factory = preset_discovery_factory?;
 
-        let result = preset_discovery_factory
-            .metadata()
-            .context("Could not get the preset discovery's provider descriptors")
-            .and_then(|metadata| {
-                let mut provider_results = Vec::new();
-                for provider_metadata in metadata {
-                    let provider = preset_discovery_factory
-                        .create_provider(&provider_metadata)
-                        .with_context(|| {
-                            format!(
-                                "Could not create the provider with ID '{}'",
-                                provider_metadata.id
-                            )
-                        })?;
+        let result = preset_discovery_factory.and_then(|factory| {
+            let metadata = factory
+                .metadata()
+                .context("Could not get the preset discovery's provider descriptors")?;
 
-                    let declared_data = provider.declared_data();
-                    let mut presets = BTreeMap::new();
-                    for location in &declared_data.locations {
-                        presets.extend(provider.crawl_location(location).with_context(|| {
-                            format!(
-                                "Error occurred while crawling presets for the location '{}' with \
-                                 URI '{}' using provider '{}' with ID '{}'",
-                                location.name,
-                                location.uri.to_uri(),
-                                provider_metadata.name,
-                                provider_metadata.id,
-                            )
-                        })?);
-                    }
+            let mut provider_results = Vec::new();
+            for provider_metadata in metadata {
+                let provider = factory
+                    .create_provider(&provider_metadata)
+                    .with_context(|| {
+                        format!(
+                            "Could not create the provider with ID '{}'",
+                            provider_metadata.id
+                        )
+                    })?;
 
-                    provider_results.push(ProviderPresets {
-                        provider_name: provider_metadata.name,
-                        provider_vendor: provider_metadata.vendor,
-                        soundpacks: declared_data.soundpacks.clone(),
-                        presets,
-                    });
+                let declared_data = provider.declared_data();
+                let mut presets = BTreeMap::new();
+                for location in &declared_data.locations {
+                    presets.extend(provider.crawl_location(location).with_context(|| {
+                        format!(
+                            "Error occurred while crawling presets for the location '{}' with URI \
+                             '{}' using provider '{}' with ID '{}'",
+                            location.name,
+                            location.uri.to_uri(),
+                            provider_metadata.name,
+                            provider_metadata.id,
+                        )
+                    })?);
                 }
 
-                Ok(provider_results)
-            });
+                provider_results.push(ProviderPresets {
+                    provider_name: provider_metadata.name,
+                    provider_vendor: provider_metadata.vendor,
+                    soundpacks: declared_data.soundpacks.clone(),
+                    presets,
+                });
+            }
+
+            Ok(provider_results)
+        });
 
         match result {
             Ok(provider_results) => {
