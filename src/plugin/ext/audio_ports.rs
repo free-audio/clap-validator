@@ -84,7 +84,7 @@ impl AudioPorts<'_> {
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying input audio port {i} ({num_inputs} \
-                     total input ports)"
+                     total input ports)."
                 );
             }
 
@@ -98,7 +98,7 @@ impl AudioPorts<'_> {
             // We'll convert these stable IDs to vector indices later
             if input_stable_index_pairs.contains_key(&info.id) {
                 anyhow::bail!(
-                    "The stable ID of input audio port {i} ({}) is a duplicate",
+                    "The stable ID of input audio port {i} ({}) is a duplicate.",
                     info.id
                 );
             }
@@ -118,7 +118,7 @@ impl AudioPorts<'_> {
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying output audio port {i} ({num_outputs} \
-                     total output ports)"
+                     total output ports)."
                 );
             }
 
@@ -131,7 +131,7 @@ impl AudioPorts<'_> {
 
             if output_stable_index_pairs.contains_key(&info.id) {
                 anyhow::bail!(
-                    "The stable ID of output audio port {i} ({}) is a duplicate",
+                    "The stable ID of output audio port {i} ({}) is a duplicate.",
                     info.id
                 );
             }
@@ -234,7 +234,7 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
             Ok(())
         } else {
             anyhow::bail!(
-                "Expected 1 channel, but the audio port has {} channels",
+                "Expected 1 channel, but the audio port has {} channels.",
                 info.channel_count
             );
         }
@@ -243,7 +243,7 @@ fn is_audio_port_type_consistent(info: &clap_audio_port_info) -> Result<()> {
             Ok(())
         } else {
             anyhow::bail!(
-                "Expected 2 channels, but the audio port has {} channel(s)",
+                "Expected 2 channels, but the audio port has {} channel(s).",
                 info.channel_count
             );
         }

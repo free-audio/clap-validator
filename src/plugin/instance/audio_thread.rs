@@ -116,7 +116,7 @@ impl<'a> PluginAudioThread<'a> {
             self.state().status.store(PluginStatus::Processing);
             Ok(())
         } else {
-            anyhow::bail!("'clap_plugin::start_processing()' returned false")
+            anyhow::bail!("'clap_plugin::start_processing()' returned false.")
         }
     }
 
@@ -134,7 +134,7 @@ impl<'a> PluginAudioThread<'a> {
 
         match result {
             CLAP_PROCESS_ERROR => anyhow::bail!(
-                "The plugin returned 'CLAP_PROCESS_ERROR' from 'clap_plugin::process()'"
+                "The plugin returned 'CLAP_PROCESS_ERROR' from 'clap_plugin::process()'."
             ),
             CLAP_PROCESS_CONTINUE => Ok(ProcessStatus::Continue),
             CLAP_PROCESS_CONTINUE_IF_NOT_QUIET => Ok(ProcessStatus::ContinueIfNotQuiet),
@@ -142,7 +142,7 @@ impl<'a> PluginAudioThread<'a> {
             CLAP_PROCESS_SLEEP => Ok(ProcessStatus::Sleep),
             result => anyhow::bail!(
                 "The plugin returned an unknown 'clap_process_status' value {result} from \
-                 'clap_plugin::process()'"
+                 'clap_plugin::process()'."
             ),
         }
     }

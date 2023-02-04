@@ -77,7 +77,7 @@ impl Params<'_> {
             Ok(value)
         } else {
             anyhow::bail!(
-                "'clap_plugin_params::get_value()' returned false for parameter ID {param_id}"
+                "'clap_plugin_params::get_value()' returned false for parameter ID {param_id}."
             );
         }
     }
@@ -152,7 +152,7 @@ impl Params<'_> {
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying parameter {i} ({num_params} total \
-                     parameters)"
+                     parameters)."
                 );
             }
 
@@ -175,7 +175,7 @@ impl Params<'_> {
             if module.starts_with('/') {
                 anyhow::bail!(
                     "The module name for parameter '{}' (stable ID {}) starts with a leading \
-                     slash: '{}'",
+                     slash: '{}'.",
                     &name,
                     info.id,
                     module
@@ -183,7 +183,7 @@ impl Params<'_> {
             } else if module.ends_with('/') {
                 anyhow::bail!(
                     "The module name for parameter '{}' (stable ID {}) ends with a trailing \
-                     slash: '{}'",
+                     slash: '{}'.",
                     &name,
                     info.id,
                     module
@@ -191,7 +191,7 @@ impl Params<'_> {
             } else if module.contains("//") {
                 anyhow::bail!(
                     "The module name for parameter '{}' (stable ID {}) contains multiple \
-                     subsequent slashes: '{}'",
+                     subsequent slashes: '{}'.",
                     &name,
                     info.id,
                     module
@@ -202,7 +202,7 @@ impl Params<'_> {
             if info.min_value > info.max_value {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) has a minimum value ({:?}) that's higher than \
-                     it's maximum value ({:?})",
+                     it's maximum value ({:?}).",
                     &name,
                     info.id,
                     info.min_value,
@@ -212,7 +212,7 @@ impl Params<'_> {
             if !range.contains(&info.default_value) {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) has a default value ({:?}) that falls outside \
-                     of its value range ({:?})",
+                     of its value range ({:?}).",
                     &name,
                     info.id,
                     info.default_value,
@@ -223,7 +223,7 @@ impl Params<'_> {
                 if info.min_value != info.min_value.trunc() {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a stepped parameter, but its minimum \
-                         value ({:?}) is not an integer",
+                         value ({:?}) is not an integer.",
                         &name,
                         info.id,
                         info.min_value,
@@ -232,7 +232,7 @@ impl Params<'_> {
                 if info.max_value != info.max_value.trunc() {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a stepped parameter, but its maximum \
-                         value ({:?}) is not an integer",
+                         value ({:?}) is not an integer.",
                         &name,
                         info.id,
                         info.max_value,
@@ -242,7 +242,7 @@ impl Params<'_> {
             if (info.flags & CLAP_PARAM_IS_BYPASS) != 0 {
                 match bypass_parameter_id {
                     Some(bypass_parameter_id) => anyhow::bail!(
-                        "The plugin has multiple bypass parameters (stable indices {} and {})",
+                        "The plugin has multiple bypass parameters (stable indices {} and {}).",
                         bypass_parameter_id,
                         info.id
                     ),
@@ -252,7 +252,7 @@ impl Params<'_> {
                 if (info.flags & CLAP_PARAM_IS_STEPPED) == 0 {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a bypass parameter, but it is not \
-                         stepped",
+                         stepped.",
                         &name,
                         info.id
                     )
@@ -302,7 +302,7 @@ impl Params<'_> {
             };
             if result.insert(info.id, processed_info).is_some() {
                 anyhow::bail!(
-                    "The plugin contains multiple parameters with stable ID {}",
+                    "The plugin contains multiple parameters with stable ID {}.",
                     info.id
                 );
             }

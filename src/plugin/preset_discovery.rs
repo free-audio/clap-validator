@@ -16,7 +16,7 @@ mod metadata_receiver;
 mod provider;
 
 pub use self::indexer::{FileType, Flags, IndexerResults, Location, LocationUri, Soundpack};
-pub use self::metadata_receiver::{Preset, PresetFile, PresetFlags};
+pub use self::metadata_receiver::{PluginAbi, Preset, PresetFile, PresetFlags};
 pub use self::provider::Provider;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.
@@ -137,7 +137,7 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
     pub fn create_provider(&self, metadata: &ProviderMetadata) -> Result<Provider> {
         if !clap_version_is_compatible(metadata.clap_version()) {
             anyhow::bail!(
-                "The preset provider with ID '{}' has an unsupported CLAP version {:?}",
+                "The preset provider with ID '{}' has an unsupported CLAP version {:?}.",
                 metadata.id,
                 metadata.clap_version()
             );

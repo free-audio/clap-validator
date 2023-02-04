@@ -120,7 +120,7 @@ impl<'lib> Plugin<'lib> {
         };
         if plugin.is_null() {
             anyhow::bail!(
-                "'clap_plugin_factory::create_plugin({plugin_id:?})' returned a null pointer"
+                "'clap_plugin_factory::create_plugin({plugin_id:?})' returned a null pointer."
             );
         }
 
@@ -150,7 +150,7 @@ impl<'lib> Plugin<'lib> {
         let plugin = self.as_ptr();
         let descriptor = unsafe { (*plugin).desc };
         if descriptor.is_null() {
-            anyhow::bail!("The 'desc' field on the 'clap_plugin' struct is a null pointer");
+            anyhow::bail!("The 'desc' field on the 'clap_plugin' struct is a null pointer.");
         }
 
         PluginMetadata::from_descriptor(unsafe { &*descriptor })
@@ -247,7 +247,7 @@ impl<'lib> Plugin<'lib> {
             self.state.status.store(PluginStatus::Deactivated);
             Ok(())
         } else {
-            anyhow::bail!("'clap_plugin::init()' returned false")
+            anyhow::bail!("'clap_plugin::init()' returned false.")
         }
     }
 
@@ -272,7 +272,7 @@ impl<'lib> Plugin<'lib> {
             self.state.status.store(PluginStatus::Activated);
             Ok(())
         } else {
-            anyhow::bail!("'clap_plugin::activate()' returned false")
+            anyhow::bail!("'clap_plugin::activate()' returned false.")
         }
     }
 

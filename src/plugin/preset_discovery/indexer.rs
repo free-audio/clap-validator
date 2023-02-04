@@ -157,7 +157,7 @@ impl LocationUri {
                 anyhow::bail!("'{path}' should use forward slashes instead of backslashes.")
             }
             if !path.starts_with('/') {
-                anyhow::bail!("'{uri}' should refer to an absolute path, i.e. 'file:///{path}'");
+                anyhow::bail!("'{uri}' should refer to an absolute path, i.e. 'file:///{path}'.");
             }
 
             return Ok(LocationUri::File(PathBuf::from(path)));

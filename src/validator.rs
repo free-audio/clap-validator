@@ -335,7 +335,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
 
     if let Some(plugin_id) = &settings.plugin_id {
         if results.plugin_tests.is_empty() {
-            anyhow::bail!("No plugins matched the plugin ID '{plugin_id}'");
+            anyhow::bail!("No plugins matched the plugin ID '{plugin_id}'.");
         }
     }
 

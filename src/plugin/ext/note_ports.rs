@@ -74,21 +74,21 @@ impl NotePorts<'_> {
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying input note port {i} ({num_inputs} \
-                     total input ports)"
+                     total input ports)."
                 );
             }
 
             let num_preferred_dialects = info.preferred_dialect.count_ones();
             if num_preferred_dialects != 1 {
                 anyhow::bail!(
-                    "Plugin prefers {num_preferred_dialects} dialects for input note port {i}"
+                    "Plugin prefers {num_preferred_dialects} dialects for input note port {i}."
                 );
             }
 
             if (info.supported_dialects & info.preferred_dialect) == 0 {
                 anyhow::bail!(
                     "Plugin prefers note dialect {:#b} for input note port {i} which is not \
-                     contained within the supported note dialects field ({:#b})",
+                     contained within the supported note dialects field ({:#b}).",
                     info.preferred_dialect,
                     info.supported_dialects
                 );
@@ -96,7 +96,7 @@ impl NotePorts<'_> {
 
             if !input_stable_indices.insert(info.id) {
                 anyhow::bail!(
-                    "The stable ID of input note port {i} ({}) is a duplicate",
+                    "The stable ID of input note port {i} ({}) is a duplicate.",
                     info.id
                 );
             }
@@ -116,21 +116,21 @@ impl NotePorts<'_> {
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying output note port {i} ({num_outputs} \
-                     total output ports)"
+                     total output ports)."
                 );
             }
 
             let num_preferred_dialects = info.preferred_dialect.count_ones();
             if num_preferred_dialects != 1 {
                 anyhow::bail!(
-                    "Plugin prefers {num_preferred_dialects} dialects for output note port {i}"
+                    "Plugin prefers {num_preferred_dialects} dialects for output note port {i}."
                 );
             }
 
             if (info.supported_dialects & info.preferred_dialect) == 0 {
                 anyhow::bail!(
                     "Plugin prefers note dialect {:#b} for output note port {i} which is not \
-                     contained within the supported note dialects field ({:#b})",
+                     contained within the supported note dialects field ({:#b}).",
                     info.preferred_dialect,
                     info.supported_dialects
                 );
@@ -138,7 +138,7 @@ impl NotePorts<'_> {
 
             if !output_stable_indices.insert(info.id) {
                 anyhow::bail!(
-                    "The stable ID of output note port {i} ({}) is a duplicate",
+                    "The stable ID of output note port {i} ({}) is a duplicate.",
                     info.id
                 );
             }

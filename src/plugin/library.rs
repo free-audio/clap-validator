@@ -140,7 +140,7 @@ impl PluginLibrary {
         )
         .context("Path contains null bytes")?;
         if !unsafe_clap_call! { entry_point=>init(path_cstring.as_ptr()) } {
-            anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false");
+            anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false.");
         }
 
         Ok(PluginLibrary {
@@ -184,7 +184,7 @@ impl PluginLibrary {
             if descriptor.is_null() {
                 anyhow::bail!(
                     "The plugin returned a null plugin descriptor for plugin index {i} (expected \
-                     {num_plugins} total plugins)"
+                     {num_plugins} total plugins)."
                 );
             }
 
@@ -280,7 +280,7 @@ fn get_clap_entry_point(library: &libloading::Library) -> Result<&clap_plugin_en
         unsafe { library.get(b"clap_entry") }
             .context("The library does not expose a 'clap_entry' symbol")?;
     if entry_point.is_null() {
-        anyhow::bail!("'clap_entry' is a null pointer");
+        anyhow::bail!("'clap_entry' is a null pointer.");
     }
 
     Ok(unsafe { &**entry_point })

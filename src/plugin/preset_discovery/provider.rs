@@ -104,7 +104,7 @@ impl<'a> Provider<'a> {
         let descriptor = unsafe { (*provider).desc };
         if descriptor.is_null() {
             anyhow::bail!(
-                "The 'desc' field on the 'clap_preset_provider' struct is a null pointer"
+                "The 'desc' field on the 'clap_preset_provider' struct is a null pointer."
             );
         }
 
@@ -154,7 +154,7 @@ impl<'a> Provider<'a> {
                     //       presets it should just not declare any, right?
                     anyhow::bail!(
                         "The preset provider returned false when fetching metadata for the URI \
-                         '{uri}'",
+                         '{uri}'.",
                     );
                 }
             }

@@ -470,7 +470,7 @@ impl Event {
     /// Parse an event from a plugin-provided pointer. Returns an error if the pointer as a null pointer
     pub unsafe fn from_header_ptr(ptr: *const clap_event_header) -> Result<Self> {
         if ptr.is_null() {
-            anyhow::bail!("Null pointer provided for 'clap_event_header'");
+            anyhow::bail!("Null pointer provided for 'clap_event_header'.");
         }
 
         match ((*ptr).space_id, ((*ptr).type_)) {

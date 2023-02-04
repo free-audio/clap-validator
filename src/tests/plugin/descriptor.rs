@@ -71,7 +71,7 @@ pub fn test_features_categories(library: &PluginLibrary, plugin_id: &str) -> Res
         anyhow::bail!(
             "The plugin needs to have at least one of thw following plugin category features: \
              \"{instrument_feature}\", \"{audio_effect_feature}\", \"{note_effect_feature}\", or \
-             \"{analyzer_feature}\""
+             \"{analyzer_feature}\"."
         )
     }
 }
