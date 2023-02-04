@@ -36,6 +36,7 @@ impl PresetLoad<'_> {
     /// ([`Library::preset_discovery_factory()`][[crate::plugin::library::Library::preset_discovery_factory()]]).
     /// Load keys are only used for container presets, otherwise they're `None`. The semantics are
     /// similar to loading state.
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_uri(&self, uri: &str, load_key: Option<&str>) -> Result<()> {
         let uri_cstring = CString::new(uri).context("URI contained internal null bytes")?;
         let load_key_cstring = load_key
