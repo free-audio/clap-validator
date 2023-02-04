@@ -96,6 +96,7 @@ pub struct Location {
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Flags {
     pub is_factory_content: bool,
     pub is_user_content: bool,
