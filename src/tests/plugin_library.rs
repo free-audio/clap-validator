@@ -18,6 +18,8 @@ const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 /// description of each test case.
 #[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter)]
 pub enum PluginLibraryTestCase {
+    #[strum(serialize = "preset-discovery-crawl")]
+    PresetDiscoveryCrawl,
     #[strum(serialize = "preset-discovery-descriptor-consistency")]
     PresetDiscoveryDescriptorConsistency,
     #[strum(serialize = "scan-time")]
@@ -36,6 +38,10 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
     fn description(&self) -> String {
         match self {
+            PluginLibraryTestCase::PresetDiscoveryCrawl => String::from(
+                "If the plugin supports the preset discovery mechanism, then this test ensures \
+                 that all of the plugin's declared locations can be indexed successfully.",
+            ),
             PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency => String::from(
                 "Ensures that all preset provider descriptors from a preset discovery factory \
                  match those stored in the providers created by the factory.",
@@ -79,6 +85,9 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
 
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
         let status = match self {
+            PluginLibraryTestCase::PresetDiscoveryCrawl => {
+                preset_discovery::test_crawl(library_path)
+            }
             PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency => {
                 preset_discovery::test_descriptor_consistency(library_path)
             }
