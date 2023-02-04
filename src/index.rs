@@ -69,7 +69,7 @@ pub fn index() -> Index {
 /// Uses a `BTreeMap` purely so the order is stable.
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct PresetIndex(BTreeMap<PathBuf, PresetIndexResult>);
+pub struct PresetIndex(pub BTreeMap<PathBuf, PresetIndexResult>);
 
 /// A result-like enum for the index. `anyhow::Result` cannot be serialized.
 #[derive(Debug, Serialize)]

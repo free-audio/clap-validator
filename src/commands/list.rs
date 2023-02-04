@@ -1,9 +1,10 @@
 //! Commands for listing information about the validator or installed plugins.
 
+use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
+use crate::index::PresetIndexResult;
 
 // TODO: The indexing here always happens in the same process. We should move this over to out of
 //       process scanning at some point.
@@ -89,6 +90,10 @@ where
         }
     }
     .context("Error while crawling presets")?;
+    let has_errors = preset_index
+        .0
+        .values()
+        .any(|result| matches!(result, PresetIndexResult::Error(_)));
 
     if !json {
         log::warn!(
@@ -101,7 +106,11 @@ where
         serde_json::to_string_pretty(&preset_index).expect("Could not format JSON")
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(if has_errors {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 /// Lists all available test cases.
