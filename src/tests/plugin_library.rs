@@ -22,6 +22,8 @@ pub enum PluginLibraryTestCase {
     PresetDiscoveryCrawl,
     #[strum(serialize = "preset-discovery-descriptor-consistency")]
     PresetDiscoveryDescriptorConsistency,
+    #[strum(serialize = "preset-discovery-load")]
+    PresetDiscoveryLoad,
     #[strum(serialize = "scan-time")]
     ScanTime,
     #[strum(serialize = "scan-rtld-now")]
@@ -45,6 +47,12 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
             PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency => String::from(
                 "Ensures that all preset provider descriptors from a preset discovery factory \
                  match those stored in the providers created by the factory.",
+            ),
+            PluginLibraryTestCase::PresetDiscoveryLoad => format!(
+                "The same as '{}', but also tries to load all found presets for plugins supported \
+                 the CLAP plugin library. A single plugin instance is reused for loading multiple \
+                 presets, and the process function is called after loading each preset.",
+                PluginLibraryTestCase::PresetDiscoveryCrawl
             ),
             PluginLibraryTestCase::ScanTime => format!(
                 "Checks whether the plugin can be scanned in under {} milliseconds.",
@@ -86,10 +94,13 @@ impl<'a> TestCase<'a> for PluginLibraryTestCase {
     fn run_in_process(&self, library_path: Self::TestArgs) -> TestResult {
         let status = match self {
             PluginLibraryTestCase::PresetDiscoveryCrawl => {
-                preset_discovery::test_crawl(library_path)
+                preset_discovery::test_crawl(library_path, false)
             }
             PluginLibraryTestCase::PresetDiscoveryDescriptorConsistency => {
                 preset_discovery::test_descriptor_consistency(library_path)
+            }
+            PluginLibraryTestCase::PresetDiscoveryLoad => {
+                preset_discovery::test_crawl(library_path, true)
             }
             PluginLibraryTestCase::ScanTime => scanning::test_scan_time(library_path),
             PluginLibraryTestCase::ScanRtldNow => scanning::test_scan_rtld_now(library_path),

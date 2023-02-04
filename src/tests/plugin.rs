@@ -11,6 +11,8 @@ mod params;
 mod processing;
 mod state;
 
+pub use processing::ProcessingTest;
+
 /// The tests for individual CLAP plugins. See the module's heading for more information, and the
 /// `description` function below for a description of each test case.
 #[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumIter)]
