@@ -139,7 +139,7 @@ impl<'a> Provider<'a> {
             // theere. This can happen during the drop.
             let mut result = None;
             {
-                let metadata_receiver = MetadataReceiver::new(&mut result);
+                let metadata_receiver = MetadataReceiver::new(&mut result, location);
 
                 let provider = self.as_ptr();
                 let success = unsafe_clap_call! {

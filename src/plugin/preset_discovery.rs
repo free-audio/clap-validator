@@ -16,7 +16,7 @@ mod metadata_receiver;
 mod provider;
 
 pub use self::indexer::{FileType, Flags, IndexerResults, Location, LocationUri, Soundpack};
-pub use self::metadata_receiver::{Preset, PresetFile};
+pub use self::metadata_receiver::{Preset, PresetFile, PresetFlags};
 pub use self::provider::Provider;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.

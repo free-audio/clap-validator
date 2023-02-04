@@ -17,7 +17,7 @@ use std::ffi::{c_char, c_void};
 use std::pin::Pin;
 use std::thread::ThreadId;
 
-use super::Flags;
+use super::{Flags, Location};
 use crate::util::{self, check_null_ptr};
 
 /// An implementation of the preset discovery's metadata receiver. This borrows a
@@ -39,6 +39,9 @@ pub struct MetadataReceiver<'a> {
     /// we'll assert that all callbacks are made from this thread.
     expected_thread_id: ThreadId,
 
+    /// The crawled location's flags. This is used as a fallback for the preset flags if the
+    /// provider does not explicitly set flags for a preset.
+    location_flags: Flags,
     /// See this object's docstring. If an error occurs, then the error is written here immediately.
     /// If the object is dropped and all presets have been written to `pending_presets` without any
     /// errors occurring, then this will contain a [`PresetFile`] describing the preset(s) added by
@@ -83,7 +86,7 @@ struct PartialPreset {
     pub name: String,
     pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
-    /// These may remain unset, in which case the host should inherit them from the location.
+    /// These may remain unset, in which case the host should inherit them from the location
     pub flags: Option<Flags>,
     pub creators: Vec<String>,
     pub description: Option<String>,
@@ -110,8 +113,9 @@ impl PartialPreset {
     }
 
     /// Convert this data to a preset. Returns an error if any data is missing. Individual fields
-    /// will have already been validated before it was stored on this `PartialPreset`.
-    pub fn finalize(self) -> Result<Preset> {
+    /// will have already been validated before it was stored on this `PartialPreset`. If there were
+    /// no flags set for this preset, then the location's flags will be used.
+    pub fn finalize(self, location_flags: &Flags) -> Result<Preset> {
         if self.plugin_ids.is_empty() {
             anyhow::bail!(
                 "The preset '{}' was defined without setting a plugin ID.",
@@ -123,7 +127,10 @@ impl PartialPreset {
             name: self.name,
             plugin_ids: self.plugin_ids,
             soundpack_id: self.soundpack_id,
-            flags: self.flags,
+            flags: match self.flags {
+                Some(flags) => PresetFlags::Explicit(flags),
+                None => PresetFlags::Inherited(*location_flags),
+            },
             creators: self.creators,
             description: self.description,
             creation_time: self.creation_time,
@@ -164,20 +171,32 @@ pub enum PluginAbi {
     Other(String),
 }
 
+/// A preset as declared by the plugin. Constructed from a [`PartialPreset`].
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Preset {
     pub name: String,
     pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
-    /// These may remain unset, in which case the host should inherit them from the location.
-    pub flags: Option<Flags>,
+    pub flags: PresetFlags,
     pub creators: Vec<String>,
     pub description: Option<String>,
     pub creation_time: Option<DateTime<Utc>>,
     pub modification_time: Option<DateTime<Utc>>,
     pub features: Vec<String>,
     pub extra_info: BTreeMap<String, String>,
+}
+
+/// The flags applying to a preset. These are either explicitly set for the preset or inherited from
+/// the location.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "type")]
+pub enum PresetFlags {
+    /// The fall back to the location's flags if the provider did not explicitly set flags for the
+    /// preset.
+    Inherited(Flags),
+    /// Flags that were explicitly set for the preset.
+    Explicit(Flags),
 }
 
 impl Drop for MetadataReceiver<'_> {
@@ -196,7 +215,7 @@ impl<'a> MetadataReceiver<'a> {
     /// - `None` if the plugin didn't write any presets.
     /// - `Some(Err(err))` if an error occurred while declaring presets.
     /// - `Some(Ok(preset_file))` if the plugin declared one or more presets successfully.
-    pub fn new(result: &'a mut Option<Result<PresetFile>>) -> Pin<Box<Self>> {
+    pub fn new(result: &'a mut Option<Result<PresetFile>>, location: &Location) -> Pin<Box<Self>> {
         // In the event that the caller reuses result objects this needs to be initialized to a
         // non-error value, since if it does contain an error at some point then nothing will be
         // written to it in the `Drop` implementation
@@ -205,6 +224,7 @@ impl<'a> MetadataReceiver<'a> {
         let metadata_receiver = Box::pin(Self {
             expected_thread_id: std::thread::current().id(),
 
+            location_flags: location.flags,
             result: RefCell::new(result),
             next_preset_data: RefCell::new(None),
             next_load_key: RefCell::new(None),
@@ -276,7 +296,7 @@ impl<'a> MetadataReceiver<'a> {
         if let Some(partial_preset) = self.next_preset_data.borrow_mut().take() {
             match (
                 &mut *self.result.borrow_mut(),
-                partial_preset.finalize(),
+                partial_preset.finalize(&self.location_flags),
                 // The `take()` is important here to catch the situation where the plugin adds a
                 // load key on the first `begin_preset()` call but not in subsequent calls
                 self.next_load_key.borrow_mut().take(),

@@ -95,7 +95,7 @@ pub struct Location {
     pub uri: LocationUri,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct Flags {
     pub is_factory_content: bool,
     pub is_user_content: bool,
