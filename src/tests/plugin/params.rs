@@ -173,7 +173,7 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
     }
 
     host.callback_error_check()
-        .context("Thread safety checks failed")?;
+        .context("An error occured during a host callback")?;
     if num_supported_value_to_text == 0 || num_supported_text_to_value == 0 {
         Ok(TestStatus::Skipped {
             details: Some(String::from(
@@ -323,7 +323,7 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str) -> Result
 
     // `ProcessingTest::run()` already handled callbacks for us
     host.callback_error_check()
-        .context("Thread safety checks failed")?;
+        .context("An error occured during a host callback")?;
 
     Ok(TestStatus::Success { details: None })
 }
@@ -400,7 +400,7 @@ pub fn test_param_set_wrong_namespace(
         .collect::<Result<BTreeMap<clap_id, f64>>>()?;
 
     host.callback_error_check()
-        .context("Thread safety checks failed")?;
+        .context("An error occured during a host callback")?;
     if actual_param_values == initial_param_values {
         Ok(TestStatus::Success { details: None })
     } else {
