@@ -58,8 +58,11 @@ impl PresetLoad<'_> {
             Ok(())
         } else {
             anyhow::bail!(
-                "'clap_plugin_preset_load::from_uri()' returned false with URI '{uri}' and load \
-                 key '{load_key:?}'."
+                "'clap_plugin_preset_load::from_uri()' returned false with {}.",
+                match load_key {
+                    Some(load_key) => format!("URI '{uri}' and load key '{load_key}'"),
+                    None => format!("URI '{uri}'"),
+                },
             );
         }
     }
