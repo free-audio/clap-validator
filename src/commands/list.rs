@@ -27,55 +27,46 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 println!();
             }
 
-            wrapper.print(
-                2,
-                format!(
-                    "{}: (CLAP {}.{}.{}, contains {} {})",
-                    plugin_path.display(),
-                    metadata.version.0,
-                    metadata.version.1,
-                    metadata.version.2,
-                    metadata.plugins.len(),
-                    if metadata.plugins.len() == 1 {
-                        "plugin"
-                    } else {
-                        "plugins"
-                    },
-                ),
-            );
+            wrapper.print_auto(format!(
+                "{}: (CLAP {}.{}.{}, contains {} {})",
+                plugin_path.display(),
+                metadata.version.0,
+                metadata.version.1,
+                metadata.version.2,
+                metadata.plugins.len(),
+                if metadata.plugins.len() == 1 {
+                    "plugin"
+                } else {
+                    "plugins"
+                },
+            ));
 
             for plugin in metadata.plugins {
                 println!();
-                wrapper.print(
-                    4,
-                    format!(
-                        " - {} {} ({})",
-                        plugin.name,
-                        plugin.version.as_deref().unwrap_or("(unknown version)"),
-                        plugin.id
-                    ),
-                );
+                wrapper.print_auto(format!(
+                    " - {} {} ({})",
+                    plugin.name,
+                    plugin.version.as_deref().unwrap_or("(unknown version)"),
+                    plugin.id
+                ));
 
                 // Whether it makes sense to always show optional fields or not depends on
                 // the field
                 if let Some(description) = plugin.description {
-                    wrapper.print(3, format!("   {description}"));
+                    wrapper.print_auto(format!("   {description}"));
                 }
                 println!();
-                wrapper.print(
-                    5,
-                    format!(
-                        "   vendor: {}",
-                        plugin.vendor.as_deref().unwrap_or("(unknown)")
-                    ),
-                );
+                wrapper.print_auto(format!(
+                    "   vendor: {}",
+                    plugin.vendor.as_deref().unwrap_or("(unknown)")
+                ));
                 if let Some(manual_url) = plugin.manual_url {
-                    wrapper.print(5, format!("   manual url: {manual_url}"));
+                    wrapper.print_auto(format!("   manual url: {manual_url}"));
                 }
                 if let Some(support_url) = plugin.support_url {
-                    wrapper.print(5, format!("   support url: {support_url}"));
+                    wrapper.print_auto(format!("   support url: {support_url}"));
                 }
-                wrapper.print(5, format!("   features: [{}]", plugin.features.join(", ")));
+                wrapper.print_auto(format!("   features: [{}]", plugin.features.join(", ")));
             }
         }
     }
@@ -139,12 +130,12 @@ pub fn tests(json: bool) -> Result<ExitCode> {
 
         println!("Plugin library tests:");
         for (test_name, test_description) in list.plugin_library_tests {
-            wrapper.print(4, format!("- {test_name}: {test_description}"));
+            wrapper.print_auto(format!("- {test_name}: {test_description}"));
         }
 
         println!("\nPlugin tests:");
         for (test_name, test_description) in list.plugin_tests {
-            wrapper.print(4, format!("- {test_name}: {test_description}"));
+            wrapper.print_auto(format!("- {test_name}: {test_description}"));
         }
     }
 

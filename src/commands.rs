@@ -1,7 +1,6 @@
 //! All the different commands for the cli. Split up into modules and functions to make it a bit
 //! easier to navigate.
 
-use std::borrow::Borrow;
 use std::collections::HashMap;
 
 pub mod list;
@@ -29,7 +28,7 @@ impl TextWrapper {
     /// Print a string to STDOUT wrapped to the terminal width using the given subsequent indent
     /// width. The first line is not automatically indented so you can use bullets and other
     /// formatting characters.
-    pub fn print(&mut self, subsequent_indent_width: usize, text: impl Borrow<str>) {
+    pub fn print(&mut self, subsequent_indent_width: usize, text: impl AsRef<str>) {
         let indent_string = self
             .indent_strings
             .entry(subsequent_indent_width)
@@ -37,7 +36,21 @@ impl TextWrapper {
         let wrapping_options = self
             .wrapping_options
             .clone()
-            .subsequent_indent(&indent_string);
-        println!("{}", textwrap::fill(text.borrow(), wrapping_options));
+            .subsequent_indent(indent_string);
+        println!("{}", textwrap::fill(text.as_ref(), wrapping_options));
+    }
+
+    /// The same as [`print()`][Self::print()], but it uses a heuristic to guess the subsequent
+    /// indent width. This is the number of space and dash characters the input starts with, plus
+    /// two.
+    pub fn print_auto(&mut self, text: impl AsRef<str>) {
+        let indent_width = text
+            .as_ref()
+            .chars()
+            .take_while(|&c| c == ' ' || c == '-')
+            .count()
+            + 2;
+
+        self.print(indent_width, text)
     }
 }

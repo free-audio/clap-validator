@@ -63,7 +63,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
         // refcell or to inline this, so this is probably still better
         macro_rules! print_test {
             ($test:expr) => {
-                wrapper.print(7, format!("   - {}: {}", $test.name, $test.description));
+                wrapper.print_auto(format!("   - {}: {}", $test.name, $test.description));
 
                 let status_text = match $test.status {
                     TestStatus::Success { .. } => "PASSED".green(),
@@ -76,7 +76,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
                     Some(reason) => format!("     {status_text}: {reason}"),
                     None => format!("     {status_text}"),
                 };
-                wrapper.print(7, test_result);
+                wrapper.print_auto(test_result);
             };
         }
 
@@ -84,7 +84,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin library tests:");
             for (library_path, tests) in result.plugin_library_tests {
                 println!();
-                wrapper.print(5, format!(" - {}", library_path.display()));
+                wrapper.print_auto(format!(" - {}", library_path.display()));
 
                 for test in tests {
                     println!();
@@ -99,7 +99,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin tests:");
             for (plugin_id, tests) in result.plugin_tests {
                 println!();
-                wrapper.print(4, format!(" - {plugin_id}"));
+                wrapper.print_auto(format!(" - {plugin_id}"));
 
                 for test in tests {
                     println!();
@@ -111,18 +111,15 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
         }
 
         let num_tests = tally.total();
-        wrapper.print(
-            2,
-            format!(
-                "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
-                num_tests,
-                if num_tests == 1 { "test" } else { "tests" },
-                tally.num_passed,
-                tally.num_failed,
-                tally.num_skipped,
-                tally.num_warnings
-            ),
-        );
+        wrapper.print_auto(format!(
+            "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
+            num_tests,
+            if num_tests == 1 { "test" } else { "tests" },
+            tally.num_passed,
+            tally.num_failed,
+            tally.num_skipped,
+            tally.num_warnings
+        ));
     }
 
     // If any of the tests failed, this process should exit with a failure code
