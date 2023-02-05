@@ -135,16 +135,16 @@ pub fn tests(json: bool) -> Result<ExitCode> {
             serde_json::to_string_pretty(&list).expect("Could not format JSON")
         );
     } else {
-        let wrapper_4 = TextWrapper::new(4);
+        let mut wrapper = TextWrapper::default();
 
         println!("Plugin library tests:");
         for (test_name, test_description) in list.plugin_library_tests {
-            wrapper_4.print(format!("- {test_name}: {test_description}"));
+            wrapper.print(4, format!("- {test_name}: {test_description}"));
         }
 
         println!("\nPlugin tests:");
         for (test_name, test_description) in list.plugin_tests {
-            wrapper_4.print(format!("- {test_name}: {test_description}"));
+            wrapper.print(4, format!("- {test_name}: {test_description}"));
         }
     }
 
