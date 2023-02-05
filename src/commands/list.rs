@@ -27,7 +27,7 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 println!();
             }
 
-            println!(
+            wrapper_4.print(format!(
                 "{}: (CLAP {}.{}.{}, contains {} {})",
                 plugin_path.display(),
                 metadata.version.0,
@@ -39,34 +39,34 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 } else {
                     "plugins"
                 },
-            );
+            ));
 
             for plugin in metadata.plugins {
                 println!();
-                println!(
+                wrapper_4.print(format!(
                     " - {} {} ({})",
                     plugin.name,
                     plugin.version.as_deref().unwrap_or("(unknown version)"),
                     plugin.id
-                );
+                ));
 
                 // Whether it makes sense to always show optional fields or not depends on
                 // the field
                 if let Some(description) = plugin.description {
-                    wrapper_4.print(format!("  {description}"));
+                    wrapper_4.print(format!("   {description}"));
                 }
                 println!();
-                println!(
+                wrapper_4.print(format!(
                     "   vendor: {}",
-                    plugin.vendor.as_deref().unwrap_or("(unknown)"),
-                );
+                    plugin.vendor.as_deref().unwrap_or("(unknown)")
+                ));
                 if let Some(manual_url) = plugin.manual_url {
-                    println!("   manual url: {manual_url}");
+                    wrapper_4.print(format!("   manual url: {manual_url}"));
                 }
                 if let Some(support_url) = plugin.support_url {
-                    println!("   support url: {support_url}");
+                    wrapper_4.print(format!("   support url: {support_url}"));
                 }
-                println!("   features: [{}]", plugin.features.join(", "));
+                wrapper_4.print(format!("   features: [{}]", plugin.features.join(", ")));
             }
         }
     }
@@ -126,18 +126,16 @@ pub fn tests(json: bool) -> Result<ExitCode> {
             serde_json::to_string_pretty(&list).expect("Could not format JSON")
         );
     } else {
-        let wrapping_options = textwrap::Options::with_termwidth().subsequent_indent("    ");
-        let print_wrapped =
-            |text: String| println!("{}", textwrap::fill(&text, wrapping_options.clone()));
+        let wrapper_4 = TextWrapper::new(4);
 
         println!("Plugin library tests:");
         for (test_name, test_description) in list.plugin_library_tests {
-            print_wrapped(format!("- {test_name}: {test_description}"));
+            wrapper_4.print(format!("- {test_name}: {test_description}"));
         }
 
         println!("\nPlugin tests:");
         for (test_name, test_description) in list.plugin_tests {
-            print_wrapped(format!("- {test_name}: {test_description}"));
+            wrapper_4.print(format!("- {test_name}: {test_description}"));
         }
     }
 

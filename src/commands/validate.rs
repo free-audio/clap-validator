@@ -58,6 +58,8 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             serde_json::to_string_pretty(&result).expect("Could not format JSON")
         );
     } else {
+        let wrapper_2 = TextWrapper::new(2);
+        let wrapper_4 = TextWrapper::new(4);
         let wrapper_7 = TextWrapper::new(7);
         let print_test = |test: TestResult| {
             wrapper_7.print(format!("   - {}: {}", test.name, test.description));
@@ -80,7 +82,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin library tests:");
             for (library_path, tests) in result.plugin_library_tests {
                 println!();
-                println!(" - {}", library_path.display());
+                wrapper_4.print(format!(" - {}", library_path.display()));
 
                 for test in tests {
                     println!();
@@ -95,7 +97,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin tests:");
             for (plugin_id, tests) in result.plugin_tests {
                 println!();
-                println!(" - {plugin_id}");
+                wrapper_4.print(format!(" - {plugin_id}"));
 
                 for test in tests {
                     println!();
@@ -107,7 +109,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
         }
 
         let num_tests = tally.total();
-        println!(
+        wrapper_2.print(format!(
             "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
             num_tests,
             if num_tests == 1 { "test" } else { "tests" },
@@ -115,7 +117,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             tally.num_failed,
             tally.num_skipped,
             tally.num_warnings
-        )
+        ));
     }
 
     // If any of the tests failed, this process should exit with a failure code
