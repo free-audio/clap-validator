@@ -51,7 +51,10 @@ impl PresetLoad<'_> {
             preset_load=>from_uri(
                 plugin,
                 uri_cstring.as_ptr(),
-                load_key_cstring.map(|load_key| load_key.as_ptr()).unwrap_or(std::ptr::null())
+                match load_key_cstring.as_ref() {
+                    Some(load_key_cstring) => load_key_cstring.as_ptr(),
+                    None => std::ptr::null(),
+                }
             )
         };
         if success {
