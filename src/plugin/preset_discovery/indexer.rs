@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CString};
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::thread::ThreadId;
@@ -102,6 +103,42 @@ pub struct Flags {
     pub is_user_content: bool,
     pub is_demo_content: bool,
     pub is_favorite: bool,
+}
+
+impl Display for Flags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut is_first_flag = true;
+
+        if self.is_factory_content {
+            write!(f, "factory content")?;
+            is_first_flag = false;
+        }
+        if self.is_user_content {
+            if is_first_flag {
+                write!(f, "user content")?;
+            } else {
+                write!(f, ", user content")?;
+            }
+            is_first_flag = false;
+        }
+        if self.is_demo_content {
+            if is_first_flag {
+                write!(f, "demo content")?;
+            } else {
+                write!(f, ", demo content")?;
+            }
+            is_first_flag = false;
+        }
+        if self.is_favorite {
+            if is_first_flag {
+                write!(f, "favorite")?;
+            } else {
+                write!(f, ", favorite")?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Location {
