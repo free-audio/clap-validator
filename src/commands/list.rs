@@ -4,9 +4,8 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::ExitCode;
 
+use super::{println_wrapped, println_wrapped_no_indent, TextWrapper};
 use crate::index::PresetIndexResult;
-
-use super::TextWrapper;
 
 // TODO: The indexing here always happens in the same process. We should move this over to out of
 //       process scanning at some point.
@@ -27,7 +26,8 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 println!();
             }
 
-            wrapper.print_auto(format!(
+            println_wrapped!(
+                wrapper,
                 "{}: (CLAP {}.{}.{}, contains {} {})",
                 plugin_path.display(),
                 metadata.version.0,
@@ -39,34 +39,36 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 } else {
                     "plugins"
                 },
-            ));
+            );
 
             for plugin in metadata.plugins {
                 println!();
-                wrapper.print_auto(format!(
+                println_wrapped!(
+                    wrapper,
                     " - {} {} ({})",
                     plugin.name,
                     plugin.version.as_deref().unwrap_or("(unknown version)"),
                     plugin.id
-                ));
+                );
 
                 // Whether it makes sense to always show optional fields or not depends on
                 // the field
                 if let Some(description) = plugin.description {
-                    wrapper.print_auto_no_indent(format!("   {description}"));
+                    println_wrapped_no_indent!(wrapper, "   {description}");
                 }
                 println!();
-                wrapper.print_auto(format!(
+                println_wrapped!(
+                    wrapper,
                     "   vendor: {}",
                     plugin.vendor.as_deref().unwrap_or("(unknown)")
-                ));
+                );
                 if let Some(manual_url) = plugin.manual_url {
-                    wrapper.print_auto(format!("   manual url: {manual_url}"));
+                    println_wrapped!(wrapper, "   manual url: {manual_url}");
                 }
                 if let Some(support_url) = plugin.support_url {
-                    wrapper.print_auto(format!("   support url: {support_url}"));
+                    println_wrapped!(wrapper, "   support url: {support_url}");
                 }
-                wrapper.print_auto(format!("   features: [{}]", plugin.features.join(", ")));
+                println_wrapped!(wrapper, "   features: [{}]", plugin.features.join(", "));
             }
         }
     }
@@ -130,12 +132,12 @@ pub fn tests(json: bool) -> Result<ExitCode> {
 
         println!("Plugin library tests:");
         for (test_name, test_description) in list.plugin_library_tests {
-            wrapper.print_auto(format!("- {test_name}: {test_description}"));
+            println_wrapped!(wrapper, "- {test_name}: {test_description}");
         }
 
         println!("\nPlugin tests:");
         for (test_name, test_description) in list.plugin_tests {
-            wrapper.print_auto(format!("- {test_name}: {test_description}"));
+            println_wrapped!(wrapper, "- {test_name}: {test_description}");
         }
     }
 

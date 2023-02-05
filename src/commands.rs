@@ -24,6 +24,22 @@ impl Default for TextWrapper {
     }
 }
 
+/// Shorthand for `wrapper.print_auto(format!(...))`.
+macro_rules! println_wrapped {
+    ($wrapper:expr, $($arg:tt)*) => {
+        $wrapper.print_auto(format!($($arg)*))
+    }
+}
+pub(crate) use println_wrapped;
+
+/// Shorthand for `wrapper.print_auto_no_indent(format!(...))`.
+macro_rules! println_wrapped_no_indent {
+    ($wrapper:expr, $($arg:tt)*) => {
+        $wrapper.print_auto_no_indent(format!($($arg)*))
+    }
+}
+pub(crate) use println_wrapped_no_indent;
+
 impl TextWrapper {
     /// Print a string to STDOUT wrapped to the terminal width using the given subsequent indent
     /// width. The first line is not automatically indented so you can use bullets and other

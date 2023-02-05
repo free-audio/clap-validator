@@ -5,10 +5,9 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use crate::tests::{TestResult, TestStatus};
+use super::{println_wrapped, TextWrapper};
+use crate::tests::TestStatus;
 use crate::validator::{self, SingleTestSettings, ValidatorSettings};
-
-use super::TextWrapper;
 
 /// The main validator command. This will validate one or more plugins and print the results.
 pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
@@ -63,7 +62,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
         // refcell or to inline this, so this is probably still better
         macro_rules! print_test {
             ($test:expr) => {
-                wrapper.print_auto(format!("   - {}: {}", $test.name, $test.description));
+                println_wrapped!(wrapper, "   - {}: {}", $test.name, $test.description);
 
                 let status_text = match $test.status {
                     TestStatus::Success { .. } => "PASSED".green(),
@@ -84,7 +83,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin library tests:");
             for (library_path, tests) in result.plugin_library_tests {
                 println!();
-                wrapper.print_auto(format!(" - {}", library_path.display()));
+                println_wrapped!(wrapper, " - {}", library_path.display());
 
                 for test in tests {
                     println!();
@@ -99,7 +98,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin tests:");
             for (plugin_id, tests) in result.plugin_tests {
                 println!();
-                wrapper.print_auto(format!(" - {plugin_id}"));
+                println_wrapped!(wrapper, " - {plugin_id}");
 
                 for test in tests {
                     println!();
@@ -111,7 +110,8 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
         }
 
         let num_tests = tally.total();
-        wrapper.print_auto(format!(
+        println_wrapped!(
+            wrapper,
             "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
             num_tests,
             if num_tests == 1 { "test" } else { "tests" },
@@ -119,7 +119,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             tally.num_failed,
             tally.num_skipped,
             tally.num_warnings
-        ));
+        );
     }
 
     // If any of the tests failed, this process should exit with a failure code
