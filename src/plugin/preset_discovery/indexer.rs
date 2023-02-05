@@ -135,6 +135,11 @@ impl Display for Flags {
             } else {
                 write!(f, ", favorite")?;
             }
+            is_first_flag = false;
+        }
+
+        if is_first_flag {
+            write!(f, "(none)")?;
         }
 
         Ok(())

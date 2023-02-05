@@ -14,6 +14,7 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void};
+use std::fmt::Display;
 use std::pin::Pin;
 use std::thread::ThreadId;
 
@@ -197,6 +198,32 @@ pub enum PresetFlags {
     Inherited(Flags),
     /// Flags that were explicitly set for the preset.
     Explicit(Flags),
+}
+
+impl Display for PresetFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PresetFlags::Inherited(flags) => write!(f, "{flags} (inherited)"),
+            PresetFlags::Explicit(flags) => flags.fmt(f),
+        }
+    }
+}
+
+impl Preset {
+    /// Format the supported plugin IDs as a comma separated string. CLAP plugins are listed as is,
+    /// plugins for other ABIs will have the ABI prepended to them.
+    pub fn plugin_ids_string(&self) -> String {
+        let plugin_id_strings: Vec<_> = self
+            .plugin_ids
+            .iter()
+            .map(|plugin_id| match &plugin_id.abi {
+                PluginAbi::Clap => plugin_id.id.to_owned(),
+                PluginAbi::Other(abi) => format!("{}: {}", abi, plugin_id.id),
+            })
+            .collect();
+
+        plugin_id_strings.join(", ")
+    }
 }
 
 impl Drop for MetadataReceiver<'_> {

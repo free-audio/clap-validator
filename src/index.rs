@@ -84,13 +84,13 @@ pub enum PresetIndexResult {
 #[serde(rename_all = "kebab-case")]
 pub struct ProviderPresets {
     /// The preset provider's name.
-    provider_name: String,
+    pub provider_name: String,
     /// The preset provider's vendor.
-    provider_vendor: Option<String>,
+    pub provider_vendor: Option<String>,
     // All sound packs declared by the plugin.
-    soundpacks: Vec<Soundpack>,
+    pub soundpacks: Vec<Soundpack>,
     // All presets declared by the plugin, indexed by URI.
-    presets: BTreeMap<String, PresetFile>,
+    pub presets: BTreeMap<String, PresetFile>,
 }
 
 /// Index the presets for one or more plugins. [`index()`] can be used to build a list of all
