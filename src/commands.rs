@@ -44,13 +44,23 @@ impl TextWrapper {
     /// indent width. This is the number of space and dash characters the input starts with, plus
     /// two.
     pub fn print_auto(&mut self, text: impl AsRef<str>) {
-        let indent_width = text
-            .as_ref()
+        let indent_width = Self::auto_indent_width(&text) + 2;
+
+        self.print(indent_width, text)
+    }
+
+    /// The same as [`print_auto()`][Self::print_auto()], but doesn't indent subsequent lines.
+    pub fn print_auto_no_indent(&mut self, text: impl AsRef<str>) {
+        let indent_width = Self::auto_indent_width(&text);
+
+        self.print(indent_width, text)
+    }
+
+    /// The number of characters until the start of the string, ignoring spaces and dashes.
+    fn auto_indent_width(text: impl AsRef<str>) -> usize {
+        text.as_ref()
             .chars()
             .take_while(|&c| c == ' ' || c == '-')
             .count()
-            + 2;
-
-        self.print(indent_width, text)
     }
 }

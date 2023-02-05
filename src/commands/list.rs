@@ -53,7 +53,7 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 // Whether it makes sense to always show optional fields or not depends on
                 // the field
                 if let Some(description) = plugin.description {
-                    wrapper.print_auto(format!("   {description}"));
+                    wrapper.print_auto_no_indent(format!("   {description}"));
                 }
                 println!();
                 wrapper.print_auto(format!(
