@@ -196,10 +196,7 @@ impl LocationUri {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Soundpack {
-    pub is_factory_content: bool,
-    pub is_user_content: bool,
-    pub is_demo_content: bool,
-    pub is_favorite: bool,
+    pub flags: Flags,
 
     /// An ID that the plugin can be refer to later when interacting with the metadata receiver.
     pub id: String,
@@ -215,10 +212,13 @@ impl Soundpack {
     /// Parse a `clap_preset_discovery_soundpack`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_soundpack) -> Result<Self> {
         Ok(Soundpack {
-            is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
-            is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
-            is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
-            is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            flags: Flags {
+                is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT)
+                    != 0,
+                is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
+                is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
+                is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            },
 
             id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
                 .context("Error parsing the soundpack's 'id' field")?,
