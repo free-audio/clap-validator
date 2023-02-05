@@ -31,7 +31,7 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
         Err(_) => {
             return Ok(TestStatus::Skipped {
                 details: Some(format!(
-                    "The plugin does not implement the '{}' factory",
+                    "The plugin does not implement the '{}' factory.",
                     CLAP_PRESET_DISCOVERY_FACTORY_ID.to_str().unwrap(),
                 )),
             })
@@ -217,7 +217,7 @@ pub fn test_descriptor_consistency(library_path: &Path) -> Result<TestStatus> {
         Err(_) => {
             return Ok(TestStatus::Skipped {
                 details: Some(format!(
-                    "The plugin does not implement the '{}' factory",
+                    "The plugin does not implement the '{}' factory.",
                     CLAP_PRESET_DISCOVERY_FACTORY_ID.to_str().unwrap(),
                 )),
             })
