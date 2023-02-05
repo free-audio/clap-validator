@@ -21,52 +21,61 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
             serde_json::to_string_pretty(&plugin_index).expect("Could not format JSON")
         );
     } else {
-        let wrapper_4 = TextWrapper::new(4);
+        let mut wrapper = TextWrapper::default();
         for (i, (plugin_path, metadata)) in plugin_index.0.into_iter().enumerate() {
             if i > 0 {
                 println!();
             }
 
-            wrapper_4.print(format!(
-                "{}: (CLAP {}.{}.{}, contains {} {})",
-                plugin_path.display(),
-                metadata.version.0,
-                metadata.version.1,
-                metadata.version.2,
-                metadata.plugins.len(),
-                if metadata.plugins.len() == 1 {
-                    "plugin"
-                } else {
-                    "plugins"
-                },
-            ));
+            wrapper.print(
+                4,
+                format!(
+                    "{}: (CLAP {}.{}.{}, contains {} {})",
+                    plugin_path.display(),
+                    metadata.version.0,
+                    metadata.version.1,
+                    metadata.version.2,
+                    metadata.plugins.len(),
+                    if metadata.plugins.len() == 1 {
+                        "plugin"
+                    } else {
+                        "plugins"
+                    },
+                ),
+            );
 
             for plugin in metadata.plugins {
                 println!();
-                wrapper_4.print(format!(
-                    " - {} {} ({})",
-                    plugin.name,
-                    plugin.version.as_deref().unwrap_or("(unknown version)"),
-                    plugin.id
-                ));
+                wrapper.print(
+                    4,
+                    format!(
+                        " - {} {} ({})",
+                        plugin.name,
+                        plugin.version.as_deref().unwrap_or("(unknown version)"),
+                        plugin.id
+                    ),
+                );
 
                 // Whether it makes sense to always show optional fields or not depends on
                 // the field
                 if let Some(description) = plugin.description {
-                    wrapper_4.print(format!("   {description}"));
+                    wrapper.print(3, format!("   {description}"));
                 }
                 println!();
-                wrapper_4.print(format!(
-                    "   vendor: {}",
-                    plugin.vendor.as_deref().unwrap_or("(unknown)")
-                ));
+                wrapper.print(
+                    5,
+                    format!(
+                        "   vendor: {}",
+                        plugin.vendor.as_deref().unwrap_or("(unknown)")
+                    ),
+                );
                 if let Some(manual_url) = plugin.manual_url {
-                    wrapper_4.print(format!("   manual url: {manual_url}"));
+                    wrapper.print(5, format!("   manual url: {manual_url}"));
                 }
                 if let Some(support_url) = plugin.support_url {
-                    wrapper_4.print(format!("   support url: {support_url}"));
+                    wrapper.print(5, format!("   support url: {support_url}"));
                 }
-                wrapper_4.print(format!("   features: [{}]", plugin.features.join(", ")));
+                wrapper.print(5, format!("   features: [{}]", plugin.features.join(", ")));
             }
         }
     }

@@ -58,35 +58,37 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             serde_json::to_string_pretty(&result).expect("Could not format JSON")
         );
     } else {
-        let wrapper_2 = TextWrapper::new(2);
-        let wrapper_4 = TextWrapper::new(4);
-        let wrapper_7 = TextWrapper::new(7);
-        let print_test = |test: TestResult| {
-            wrapper_7.print(format!("   - {}: {}", test.name, test.description));
+        let mut wrapper = TextWrapper::default();
+        // This doesn't need to be a macro but the alternatives are to either wrap `wrapper` in a
+        // refcell or to inline this, so this is probably still better
+        macro_rules! print_test {
+            ($test:expr) => {
+                wrapper.print(7, format!("   - {}: {}", $test.name, $test.description));
 
-            let status_text = match test.status {
-                TestStatus::Success { .. } => "PASSED".green(),
-                TestStatus::Crashed { .. } => "CRASHED".red().bold(),
-                TestStatus::Failed { .. } => "FAILED".red(),
-                TestStatus::Skipped { .. } => "SKIPPED".yellow(),
-                TestStatus::Warning { .. } => "WARNING".yellow(),
+                let status_text = match $test.status {
+                    TestStatus::Success { .. } => "PASSED".green(),
+                    TestStatus::Crashed { .. } => "CRASHED".red().bold(),
+                    TestStatus::Failed { .. } => "FAILED".red(),
+                    TestStatus::Skipped { .. } => "SKIPPED".yellow(),
+                    TestStatus::Warning { .. } => "WARNING".yellow(),
+                };
+                let test_result = match $test.status.details() {
+                    Some(reason) => format!("     {status_text}: {reason}"),
+                    None => format!("     {status_text}"),
+                };
+                wrapper.print(7, test_result);
             };
-            let test_result = match test.status.details() {
-                Some(reason) => format!("     {status_text}: {reason}"),
-                None => format!("     {status_text}"),
-            };
-            wrapper_7.print(test_result);
-        };
+        }
 
         if !result.plugin_library_tests.is_empty() {
             println!("Plugin library tests:");
             for (library_path, tests) in result.plugin_library_tests {
                 println!();
-                wrapper_4.print(format!(" - {}", library_path.display()));
+                wrapper.print(5, format!(" - {}", library_path.display()));
 
                 for test in tests {
                     println!();
-                    print_test(test);
+                    print_test!(test);
                 }
             }
 
@@ -97,11 +99,11 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             println!("Plugin tests:");
             for (plugin_id, tests) in result.plugin_tests {
                 println!();
-                wrapper_4.print(format!(" - {plugin_id}"));
+                wrapper.print(4, format!(" - {plugin_id}"));
 
                 for test in tests {
                     println!();
-                    print_test(test);
+                    print_test!(test);
                 }
             }
 
@@ -109,15 +111,18 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
         }
 
         let num_tests = tally.total();
-        wrapper_2.print(format!(
-            "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
-            num_tests,
-            if num_tests == 1 { "test" } else { "tests" },
-            tally.num_passed,
-            tally.num_failed,
-            tally.num_skipped,
-            tally.num_warnings
-        ));
+        wrapper.print(
+            2,
+            format!(
+                "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
+                num_tests,
+                if num_tests == 1 { "test" } else { "tests" },
+                tally.num_passed,
+                tally.num_failed,
+                tally.num_skipped,
+                tally.num_warnings
+            ),
+        );
     }
 
     // If any of the tests failed, this process should exit with a failure code

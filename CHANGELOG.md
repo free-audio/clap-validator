@@ -59,6 +59,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - The validator now asserts the plugin is in the correct state before calling
   the plugin's functions in more places to reduce the potential surface for bugs
   in the validator itself.
+- Improved the consistency of the text wrapping and error message formatting in
+  the non-JSON modes.
 - The validator's `clap-host` implementation now always contains the validator's
   version.
 
