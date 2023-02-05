@@ -6,6 +6,8 @@ use std::process::ExitCode;
 
 use crate::index::PresetIndexResult;
 
+use super::TextWrapper;
+
 // TODO: The indexing here always happens in the same process. We should move this over to out of
 //       process scanning at some point.
 
@@ -19,6 +21,7 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
             serde_json::to_string_pretty(&plugin_index).expect("Could not format JSON")
         );
     } else {
+        let wrapper_4 = TextWrapper::new(4);
         for (i, (plugin_path, metadata)) in plugin_index.0.into_iter().enumerate() {
             if i > 0 {
                 println!();
@@ -50,7 +53,7 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
                 // Whether it makes sense to always show optional fields or not depends on
                 // the field
                 if let Some(description) = plugin.description {
-                    println!("   {description}");
+                    wrapper_4.print(format!("  {description}"));
                 }
                 println!();
                 println!(

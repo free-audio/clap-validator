@@ -8,6 +8,8 @@ use colored::Colorize;
 use crate::tests::{TestResult, TestStatus};
 use crate::validator::{self, SingleTestSettings, ValidatorSettings};
 
+use super::TextWrapper;
+
 /// The main validator command. This will validate one or more plugins and print the results.
 pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
     let mut result = validator::validate(settings).context("Could not run the validator")?;
@@ -56,11 +58,9 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
             serde_json::to_string_pretty(&result).expect("Could not format JSON")
         );
     } else {
-        let wrapping_options = textwrap::Options::with_termwidth().subsequent_indent("       ");
-        let print_wrapped =
-            |text: String| println!("{}", textwrap::fill(&text, wrapping_options.clone()));
+        let wrapper_7 = TextWrapper::new(7);
         let print_test = |test: TestResult| {
-            print_wrapped(format!("   - {}: {}", test.name, test.description));
+            wrapper_7.print(format!("   - {}: {}", test.name, test.description));
 
             let status_text = match test.status {
                 TestStatus::Success { .. } => "PASSED".green(),
@@ -73,7 +73,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
                 Some(reason) => format!("     {status_text}: {reason}"),
                 None => format!("     {status_text}"),
             };
-            print_wrapped(test_result);
+            wrapper_7.print(test_result);
         };
 
         if !result.plugin_library_tests.is_empty() {
