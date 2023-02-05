@@ -28,7 +28,7 @@ pub fn plugins(json: bool) -> Result<ExitCode> {
             }
 
             wrapper.print(
-                4,
+                2,
                 format!(
                     "{}: (CLAP {}.{}.{}, contains {} {})",
                     plugin_path.display(),
