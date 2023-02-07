@@ -15,6 +15,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void};
 use std::fmt::Display;
+use std::path::Path;
 use std::pin::Pin;
 use std::thread::ThreadId;
 
@@ -43,6 +44,9 @@ pub struct MetadataReceiver<'a> {
     /// The crawled location's flags. This is used as a fallback for the preset flags if the
     /// provider does not explicitly set flags for a preset.
     location_flags: Flags,
+    /// The URI this metadata receiver was created for. If this is a single-file preset, then the
+    /// preset's name becomes the file name including the file extensions.
+    uri: &'a str,
     /// See this object's docstring. If an error occurs, then the error is written here immediately.
     /// If the object is dropped and all presets have been written to `pending_presets` without any
     /// errors occurring, then this will contain a [`PresetFile`] describing the preset(s) added by
@@ -84,7 +88,7 @@ pub enum PresetFile {
 /// the [`MetadataReceiver`] is dropped or when `begin_preset()` is called a second time.
 #[derive(Debug, Clone)]
 struct PartialPreset {
-    pub name: String,
+    pub name: PresetName,
     pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
     /// These may remain unset, in which case the host should inherit them from the location
@@ -98,7 +102,7 @@ struct PartialPreset {
 }
 
 impl PartialPreset {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: PresetName) -> Self {
         Self {
             name,
             plugin_ids: Default::default(),
@@ -142,6 +146,24 @@ impl PartialPreset {
     }
 }
 
+/// The docs specify that you are not allowed to specify a preset name unless the preset is part of
+/// a container file.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "kebab-case", tag = "type", content = "value")]
+pub enum PresetName {
+    Explicit(String),
+    Filename(String),
+}
+
+impl Display for PresetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PresetName::Explicit(name) => write!(f, "{name}"),
+            PresetName::Filename(name) => write!(f, "{name} (derived from filename)"),
+        }
+    }
+}
+
 /// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
 /// plugins.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -176,7 +198,7 @@ pub enum PluginAbi {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Preset {
-    pub name: String,
+    pub name: PresetName,
     pub plugin_ids: Vec<PluginId>,
     pub soundpack_id: Option<String>,
     pub flags: PresetFlags,
@@ -242,7 +264,11 @@ impl<'a> MetadataReceiver<'a> {
     /// - `None` if the plugin didn't write any presets.
     /// - `Some(Err(err))` if an error occurred while declaring presets.
     /// - `Some(Ok(preset_file))` if the plugin declared one or more presets successfully.
-    pub fn new(result: &'a mut Option<Result<PresetFile>>, location: &Location) -> Pin<Box<Self>> {
+    pub fn new(
+        result: &'a mut Option<Result<PresetFile>>,
+        uri: &'a str,
+        location: &'a Location,
+    ) -> Pin<Box<Self>> {
         // In the event that the caller reuses result objects this needs to be initialized to a
         // non-error value, since if it does contain an error at some point then nothing will be
         // written to it in the `Drop` implementation
@@ -252,6 +278,7 @@ impl<'a> MetadataReceiver<'a> {
             expected_thread_id: std::thread::current().id(),
 
             location_flags: location.flags,
+            uri,
             result: RefCell::new(result),
             next_preset_data: RefCell::new(None),
             next_load_key: RefCell::new(None),
@@ -391,7 +418,7 @@ impl<'a> MetadataReceiver<'a> {
 
         this.assert_same_thread("clap_preset_discovery_metadata_receiver::begin_preset()");
 
-        let name = unsafe { util::cstr_ptr_to_mandatory_string(name) }.context(
+        let name = unsafe { util::cstr_ptr_to_optional_string(name) }.context(
             "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
              name parameter",
         );
@@ -433,6 +460,41 @@ impl<'a> MetadataReceiver<'a> {
                     }
                 }
 
+                // TODO: Right now explicit preset names are not allowed for non-container presets:
+                //       https://github.com/free-audio/clap/issues/298
+                //
+                //       This seems like an oversight because deriving a preset name from a file
+                //       name is not always easy or even possible.
+                let preset_name = match (name, &load_key) {
+                    (None, None) => PresetName::Filename(match Path::new(this.uri).file_name() {
+                        Some(file_name) => file_name
+                            .to_str()
+                            .expect("Invalid UTF-8 in file name")
+                            .to_owned(),
+                        _ => {
+                            this.set_callback_error(format!(
+                                "Could not derive a file name from the URI '{}'.",
+                                this.uri
+                            ));
+                            return false;
+                        }
+                    }),
+                    (Some(name), Some(_)) => PresetName::Explicit(name),
+                    (Some(_), None) => {
+                        this.set_callback_error(
+                            "Specifying a preset name for non-container presets is not allowed."
+                                .to_string(),
+                        );
+                        return false;
+                    }
+                    (None, Some(_)) => {
+                        this.set_callback_error(
+                            "Container presets must specify a preset name.".to_string(),
+                        );
+                        return false;
+                    }
+                };
+
                 // If this is a subsequent `begin_preset()` call for a container preset, then the
                 // old preset is written to `self.result` before starting a new one.
                 if load_key.is_some() {
@@ -443,7 +505,7 @@ impl<'a> MetadataReceiver<'a> {
                 // data structure, and it is finally added to `self.result` in a
                 // `maybe_write_preset()` call either from here or from the drop handler.
                 *this.next_load_key.borrow_mut() = load_key;
-                *this.next_preset_data.borrow_mut() = Some(PartialPreset::new(name));
+                *this.next_preset_data.borrow_mut() = Some(PartialPreset::new(preset_name));
 
                 true
             }
