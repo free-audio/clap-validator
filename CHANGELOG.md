@@ -10,15 +10,16 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Added initial support for the CLAP's new preset discovery mechanism and preset
-  load extension. This includes new tests that check a plugin's preset discovery
-  factory implementation, and a `clap-validator list presets` command to list
-  presets for one, more, or all installed CLAP plugins.
+- Added initial support for the CLAP 1.1.7's new preset discovery mechanism and
+  preset load extension. This includes new tests that test a plugin's preset
+  discovery factory and preset loading implementations, as well as a
+  `clap-validator list presets` command to list presets for one, more, or all
+  installed CLAP plugins.
 - Tests are now run in parallel by default unless the `--in-process` option is
-  used. This can be disabled using the new `--no-parallel` option.
-- Added a basic parameter fuzzing test. This test generates 50 random parameter
-  value permutations. The plugin succeeds the test if it can process random
-  audio buffers and note events after setting those parameters without producing
+  used. This behavior can be disabled using the new `--no-parallel` option.
+- Added a basic fuzzing test. This test generates 50 random parameter value
+  permutations. The plugin succeeds the test if it can process five buffers of
+  random audio and note events after setting those parameters without producing
   infinite or NaN values and without crashing.
 
   Future versions of CLAP validator will contain more variations on this test
@@ -44,25 +45,26 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - `clap-validator list tests [--json]` now includes test descriptions.
 - `clap-validator validate` now indents the wrapped output slightly less to make
   the output look a bit more consistent.
-- The `--only-failed` option now also shows tests that resulted in a warning in
-  addition to hard failures.
-- Passing null pointers to any of clap validator's host callbacks was previously
-  handled gracefully by logging a debug message and then returning early. This
-  has now changed to a hard error as this indicates a serious bug in the plugin.
+- The `--only-failed` validation option now also shows tests that resulted in a
+  warning in addition to hard failures.
+- Passing null pointers to any of clap validator's host callbacks where null
+  pointers are not expected now results in a hard error instead of being handled
+  gracefully. This indicates a bug in the plugin, and the previous behavior made
+  it too easy to overlook.
 - When a plugin supports text-to-value and/or value-to-text conversions for some
   but not all of its parameters, clap-validator now includes the names of the
   parameters and the failing inputs in the error message to help pinpoint the
   issue.
 - All skip and error messages saying that a plugin doesn't support a certain
-  extension or factory now always use the extension's or factory's actual ID.
-  This is especially helpful for tests that use draft versions of extensions.
-- The validator now asserts the plugin is in the correct state before calling
-  the plugin's functions in more places to reduce the potential surface for bugs
-  in the validator itself.
-- Improved the consistency of the text wrapping and error message formatting in
-  the non-JSON modes.
-- The validator's `clap-host` implementation now always contains the validator's
+  extension or factory now always include the extension's or factory's ID. This
+  is especially helpful for tests that use draft versions of extensions.
+- The validator's `clap_host` structs now always contain the validator's
   version.
+- The validator now asserts that the plugin is in the correct state before
+  calling the plugin's functions in more places. This reduces the surface for
+  potential bugs in the validator itself.
+- Improved the consistency of the text wrapping and error message formatting in
+  the non-JSON output modes.
 
 ### Fixed
 
