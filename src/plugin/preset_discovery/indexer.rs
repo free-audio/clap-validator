@@ -246,7 +246,7 @@ pub struct Soundpack {
     pub description: Option<String>,
     pub homepage_url: Option<String>,
     pub vendor: Option<String>,
-    pub image_url: Option<String>,
+    pub image_uri: Option<String>,
     pub release_timestamp: Option<DateTime<Utc>>,
 }
 
@@ -255,11 +255,14 @@ impl Soundpack {
     pub fn from_descriptor(descriptor: &clap_preset_discovery_soundpack) -> Result<Self> {
         Ok(Soundpack {
             flags: Flags {
-                is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT)
+                is_factory_content: (descriptor.flags
+                    & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT as u64)
                     != 0,
-                is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
-                is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
-                is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+                is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT as u64)
+                    != 0,
+                is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT as u64)
+                    != 0,
+                is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE as u64) != 0,
             },
 
             id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
@@ -272,8 +275,8 @@ impl Soundpack {
                 .context("Error parsing the soundpack's 'homepage_url' field")?,
             vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
                 .context("Error parsing the soundpack's 'vendor' field")?,
-            image_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_url) }
-                .context("Error parsing the soundpack's 'image_url' field")?,
+            image_uri: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_uri) }
+                .context("Error parsing the soundpack's 'image_uri' field")?,
             release_timestamp: util::parse_timestamp(descriptor.release_timestamp)
                 .context("Error parsing the soundpack's 'release_timestamp' field")?,
         })

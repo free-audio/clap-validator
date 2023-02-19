@@ -181,8 +181,8 @@ where
                         if let Some(homepage_url) = soundpack.homepage_url {
                             println_wrapped!(wrapper, "     homepage url: {homepage_url}");
                         }
-                        if let Some(image_url) = soundpack.image_url {
-                            println_wrapped!(wrapper, "     image url: {image_url}");
+                        if let Some(image_uri) = soundpack.image_uri {
+                            println_wrapped!(wrapper, "     image url: {image_uri}");
                         }
                         if let Some(release_timestamp) = soundpack.release_timestamp {
                             println_wrapped!(wrapper, "     released: {release_timestamp}");
