@@ -10,6 +10,7 @@
 //! be converted to and from a string representation.
 
 use anyhow::{Context, Result};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -20,7 +21,7 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 use strum::IntoEnumIterator;
 
-use crate::util;
+use crate::{util, Verbosity};
 
 mod plugin;
 mod plugin_library;
@@ -100,11 +101,19 @@ pub trait TestCase<'a>: Display + FromStr + IntoEnumIterator + Sized + 'static {
     /// plugin to segfault, then the result will have a status of `TestStatus::Crashed`. If
     /// `hide_output` is set, then the tested plugin's output will not be printed to STDIO.
     ///
+    /// The verbosity option is threaded through here so out of process tests use the same logger
+    /// verbosity as in-process tests.
+    ///
     /// In the event that this is called for a plugin ID that does not exist within the plugin
     /// library, then the test will also be marked as failed.
     ///
     /// This will only return an error if the actual `clap-validator` process call failed.
-    fn run_out_of_process(&self, args: Self::TestArgs, hide_output: bool) -> Result<TestResult> {
+    fn run_out_of_process(
+        &self,
+        args: Self::TestArgs,
+        verbosity: Verbosity,
+        hide_output: bool,
+    ) -> Result<TestResult> {
         // The idea here is that we'll invoke the same clap-validator binary with a special hidden command
         // that runs a single test. This is the reason why test cases must be convertible to and
         // from strings. If everything goes correctly, then the child process will write the results
@@ -123,6 +132,8 @@ pub trait TestCase<'a>: Display + FromStr + IntoEnumIterator + Sized + 'static {
         let mut command = Command::new(clap_validator_binary);
 
         command
+            .arg("--verbosity")
+            .arg(verbosity.to_possible_value().unwrap().get_name())
             .arg("run-single-test")
             .args([OsStr::new("--output-file"), output_file_path.as_os_str()]);
         self.set_out_of_process_args(&mut command, args);

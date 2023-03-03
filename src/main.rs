@@ -26,7 +26,7 @@ struct Cli {
 /// The verbosity level. Set to `Debug` by default. `Trace` can be used to get more information on
 /// what the validator is actually doing.
 #[derive(Debug, Clone, Copy, ValueEnum)]
-enum Verbosity {
+pub enum Verbosity {
     /// Suppress all logging output from the validator itself.
     Quiet,
     Error,
@@ -104,7 +104,7 @@ fn main() -> ExitCode {
     log_panics::init();
 
     let result = match cli.command {
-        Command::Validate(settings) => commands::validate::validate(&settings),
+        Command::Validate(settings) => commands::validate::validate(cli.verbosity, &settings),
         Command::RunSingleTest(settings) => commands::validate::run_single(&settings),
         Command::List(ListCommand::Plugins { json }) => commands::list::plugins(json),
         Command::List(ListCommand::Presets { json, paths }) => {

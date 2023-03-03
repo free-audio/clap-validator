@@ -15,6 +15,7 @@ use strum::IntoEnumIterator;
 use crate::plugin::library::{PluginLibrary, PluginMetadata};
 use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult, TestStatus};
 use crate::util;
+use crate::Verbosity;
 
 /// The results of running the validation test suite on one or more plugins. Use the
 /// [`tally()`][Self::tally()] method to compute the number of successful and failed tests.
@@ -123,7 +124,7 @@ pub enum SingleTestType {
 
 /// Run the validator using the specified settings. Returns an error if any of the plugin paths
 /// could not loaded, or if the plugin ID filter did not match any plugins.
-pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
+pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<ValidationResult> {
     // Before doing anything, we need to make sure any temporary artifact files from the previous
     // run are cleaned up. These are used for things like state dumps when one of the state tests
     // fail. This is allowed to fail since the directory may not exist and even if it does and we
@@ -167,7 +168,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                     library_path.clone(),
                     PluginLibraryTestCase::iter()
                         .filter(|test| test_filter(test, settings, &test_filter_re))
-                        .map(|test| run_test(&test, settings, library_path))
+                        .map(|test| run_test(&test, verbosity, settings, library_path))
                         .collect::<Result<Vec<TestResult>>>()?,
                 );
 
@@ -212,6 +213,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                                 .map(|test| {
                                     run_test(
                                         &test,
+                                        verbosity,
                                         settings,
                                         (&plugin_library, &plugin_metadata.id),
                                     )
@@ -255,7 +257,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                     PluginLibraryTestCase::iter()
                         .par_bridge()
                         .filter(|test| test_filter(test, settings, &test_filter_re))
-                        .map(|test| run_test(&test, settings, library_path))
+                        .map(|test| run_test(&test, verbosity, settings, library_path))
                         .collect::<Result<Vec<TestResult>>>()?,
                 );
 
@@ -292,6 +294,7 @@ pub fn validate(settings: &ValidatorSettings) -> Result<ValidationResult> {
                                 .map(|test| {
                                     run_test(
                                         &test,
+                                        verbosity,
                                         settings,
                                         (&plugin_library, &plugin_metadata.id),
                                     )
@@ -408,13 +411,14 @@ fn plugin_filter(plugin_metadata: &PluginMetadata, settings: &ValidatorSettings)
 /// settings settings.
 fn run_test<'a, T: TestCase<'a>>(
     test: &T,
+    verbosity: Verbosity,
     settings: &ValidatorSettings,
     args: T::TestArgs,
 ) -> Result<TestResult> {
     if settings.in_process {
         Ok(test.run_in_process(args))
     } else {
-        test.run_out_of_process(args, settings.hide_output)
+        test.run_out_of_process(args, verbosity, settings.hide_output)
     }
 }
 

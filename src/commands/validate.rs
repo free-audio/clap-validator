@@ -8,10 +8,12 @@ use colored::Colorize;
 use super::{println_wrapped, TextWrapper};
 use crate::tests::TestStatus;
 use crate::validator::{self, SingleTestSettings, ValidatorSettings};
+use crate::Verbosity;
 
 /// The main validator command. This will validate one or more plugins and print the results.
-pub fn validate(settings: &ValidatorSettings) -> Result<ExitCode> {
-    let mut result = validator::validate(settings).context("Could not run the validator")?;
+pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<ExitCode> {
+    let mut result =
+        validator::validate(verbosity, settings).context("Could not run the validator")?;
     let tally = result.tally();
 
     // Filtering out tests should be done after we did the tally for consistency's sake
