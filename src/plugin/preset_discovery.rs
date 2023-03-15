@@ -15,7 +15,7 @@ mod indexer;
 mod metadata_receiver;
 mod provider;
 
-pub use self::indexer::{FileType, Flags, IndexerResults, Location, LocationUri, Soundpack};
+pub use self::indexer::{FileType, Flags, IndexerResults, Location, LocationValue, Soundpack};
 pub use self::metadata_receiver::{PluginAbi, Preset, PresetFile, PresetFlags};
 pub use self::provider::Provider;
 

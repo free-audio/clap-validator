@@ -15,11 +15,10 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void};
 use std::fmt::Display;
-use std::path::Path;
 use std::pin::Pin;
 use std::thread::ThreadId;
 
-use super::{Flags, Location};
+use super::{Flags, LocationValue};
 use crate::util::{self, check_null_ptr};
 
 /// An implementation of the preset discovery's metadata receiver. This borrows a
@@ -41,12 +40,13 @@ pub struct MetadataReceiver<'a> {
     /// we'll assert that all callbacks are made from this thread.
     expected_thread_id: ThreadId,
 
+    /// The location this metadata receiver was created for. If this is a single-file preset and a
+    /// name has not been explicitly set, then the preset's name becomes the file name including the
+    /// file extensions.
+    location: &'a LocationValue,
     /// The crawled location's flags. This is used as a fallback for the preset flags if the
     /// provider does not explicitly set flags for a preset.
     location_flags: Flags,
-    /// The URI this metadata receiver was created for. If this is a single-file preset, then the
-    /// preset's name becomes the file name including the file extensions.
-    uri: &'a str,
     /// See this object's docstring. If an error occurs, then the error is written here immediately.
     /// If the object is dropped and all presets have been written to `pending_presets` without any
     /// errors occurring, then this will contain a [`PresetFile`] describing the preset(s) added by
@@ -266,8 +266,8 @@ impl<'a> MetadataReceiver<'a> {
     /// - `Some(Ok(preset_file))` if the plugin declared one or more presets successfully.
     pub fn new(
         result: &'a mut Option<Result<PresetFile>>,
-        uri: &'a str,
-        location: &'a Location,
+        location: &'a LocationValue,
+        location_flags: Flags,
     ) -> Pin<Box<Self>> {
         // In the event that the caller reuses result objects this needs to be initialized to a
         // non-error value, since if it does contain an error at some point then nothing will be
@@ -277,8 +277,8 @@ impl<'a> MetadataReceiver<'a> {
         let metadata_receiver = Box::pin(Self {
             expected_thread_id: std::thread::current().id(),
 
-            location_flags: location.flags,
-            uri,
+            location,
+            location_flags,
             result: RefCell::new(result),
             next_preset_data: RefCell::new(None),
             next_load_key: RefCell::new(None),
@@ -460,33 +460,21 @@ impl<'a> MetadataReceiver<'a> {
                     }
                 }
 
-                // TODO: Right now explicit preset names are not allowed for non-container presets:
-                //       https://github.com/free-audio/clap/issues/298
-                //
-                //       This seems like an oversight because deriving a preset name from a file
-                //       name is not always easy or even possible.
+                // Container presets have a load key, single-preset files don't have a load key. The
+                // name field is mandatory for container presets, and optional for non-container
+                // presets. If it's not specified we'll use the file name instead.
                 let preset_name = match (name, &load_key) {
-                    (None, None) => PresetName::Filename(match Path::new(this.uri).file_name() {
-                        Some(file_name) => file_name
-                            .to_str()
-                            .expect("Invalid UTF-8 in file name")
-                            .to_owned(),
-                        _ => {
+                    (None, None) => PresetName::Filename(match this.location.file_name() {
+                        Ok(file_name) => file_name,
+                        Err(err) => {
                             this.set_callback_error(format!(
-                                "Could not derive a file name from the URI '{}'.",
-                                this.uri
+                                "Could not derive a file name from {}: {:#}",
+                                this.location, err
                             ));
                             return false;
                         }
                     }),
-                    (Some(name), Some(_)) => PresetName::Explicit(name),
-                    (Some(_), None) => {
-                        this.set_callback_error(
-                            "Specifying a preset name for non-container presets is not allowed."
-                                .to_string(),
-                        );
-                        return false;
-                    }
+                    (Some(name), _) => PresetName::Explicit(name),
                     (None, Some(_)) => {
                         this.set_callback_error(
                             "Container presets must specify a preset name.".to_string(),

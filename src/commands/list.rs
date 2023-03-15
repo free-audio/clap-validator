@@ -181,8 +181,8 @@ where
                         if let Some(homepage_url) = soundpack.homepage_url {
                             println_wrapped!(wrapper, "     homepage url: {homepage_url}");
                         }
-                        if let Some(image_uri) = soundpack.image_uri {
-                            println_wrapped!(wrapper, "     image url: {image_uri}");
+                        if let Some(image_path) = soundpack.image_path {
+                            println_wrapped!(wrapper, "     image path: {image_path}");
                         }
                         if let Some(release_timestamp) = soundpack.release_timestamp {
                             println_wrapped!(wrapper, "     released: {release_timestamp}");
@@ -193,7 +193,7 @@ where
 
                 if !provider_result.presets.is_empty() {
                     println!();
-                    println!("   Presets URIs:");
+                    println!("   Presets:");
 
                     for (preset_uri, preset_file) in provider_result.presets {
                         println!();

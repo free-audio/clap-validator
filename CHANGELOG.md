@@ -8,6 +8,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The preset discovery implementation has been updated for CLAP 1.1.8. Because
+  of the change from location URIs to a location kind and a value, the
+  `clap-validator list presets` output format has changed slightly.
+
 ### Fixed
 
 - The `--verbosity` option's value now propagated to child processes when tests

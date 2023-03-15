@@ -12,6 +12,7 @@ use clap_sys::ext::params::{
 };
 use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
 use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
+use clap_sys::factory::draft::preset_discovery::clap_preset_discovery_location_kind;
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
 use clap_sys::plugin::clap_plugin;
@@ -29,6 +30,7 @@ use std::sync::Arc;
 use std::thread::ThreadId;
 
 use crate::plugin::instance::{PluginHandle, PluginStatus};
+use crate::plugin::preset_discovery::LocationValue;
 use crate::util::{self, check_null_ptr, unsafe_clap_call};
 
 /// An abstraction for a CLAP plugin host.
@@ -565,7 +567,9 @@ impl Host {
 
     unsafe extern "C" fn ext_preset_load_on_error(
         host: *const clap_host,
-        uri: *const c_char,
+        location_kind: clap_preset_discovery_location_kind,
+        location: *const c_char,
+        load_key: *const c_char,
         os_error: i32,
         msg: *const c_char,
     ) {
@@ -574,18 +578,27 @@ impl Host {
 
         this.assert_main_thread("clap_host_preset_load::on_error()");
 
-        let uri = unsafe { util::cstr_ptr_to_mandatory_string(uri) }
-            .context("'clap_host_preset_load::on_error()' called with an invalid uri parameter");
+        let location = LocationValue::new(location_kind, location)
+            .context("'clap_host_preset_load::on_error()' called with invalid location parameters");
+        let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }.context(
+            "'clap_host_preset_load::on_error()' called with an invalid load_key parameter",
+        );
         let msg = unsafe { util::cstr_ptr_to_mandatory_string(msg) }
             .context("'clap_host_preset_load::on_error()' called with an invalid msg parameter");
-        match (uri, msg) {
-            (Ok(uri), Ok(msg)) => {
+        match (location, load_key, msg) {
+            (Ok(location), Ok(Some(load_key)), Ok(msg)) => {
                 this.set_callback_error(format!(
-                    "'clap_host_preset_load::on_error()' called for URI '{uri}' with OS error \
-                     code {os_error} and the following error message: {msg}"
+                    "'clap_host_preset_load::on_error()' called for {location} with load key \
+                     {load_key}, OS error code {os_error}, and the following error message: {msg}"
                 ));
             }
-            (Err(err), _) | (_, Err(err)) => {
+            (Ok(location), Ok(None), Ok(msg)) => {
+                this.set_callback_error(format!(
+                    "'clap_host_preset_load::on_error()' called for {location} with no load key, \
+                     OS error code {os_error}, and the following error message: {msg}"
+                ));
+            }
+            (Err(err), _, _) | (_, Err(err), _) | (_, _, Err(err)) => {
                 this.set_callback_error(format!("{err:#}"));
             }
         }
@@ -593,7 +606,8 @@ impl Host {
 
     unsafe extern "C" fn ext_preset_load_loaded(
         host: *const clap_host,
-        uri: *const c_char,
+        location_kind: clap_preset_discovery_location_kind,
+        location: *const c_char,
         load_key: *const c_char,
     ) {
         check_null_ptr!(host, (*host).host_data);
@@ -601,12 +615,12 @@ impl Host {
 
         this.assert_main_thread("clap_host_preset_load::loaded()");
 
-        let uri = unsafe { util::cstr_ptr_to_mandatory_string(uri) }
-            .context("'clap_host_preset_load::loaded()' called with an invalid uri parameter");
+        let location = LocationValue::new(location_kind, location)
+            .context("'clap_host_preset_load::loaded()' called with invalid location parameters");
         let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }
             .context("'clap_host_preset_load::loaded()' called with an invalid load_key parameter");
-        match (uri, load_key) {
-            (Ok(_uri), Ok(_load_key)) => {
+        match (location, load_key) {
+            (Ok(_location), Ok(_load_key)) => {
                 log::debug!("TODO: Handle 'clap_host_preset_load::loaded()'");
             }
             (Err(err), _) | (_, Err(err)) => {

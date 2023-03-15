@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::plugin::library::{PluginLibrary, PluginLibraryMetadata};
-use crate::plugin::preset_discovery::{PresetFile, Soundpack};
+use crate::plugin::preset_discovery::{LocationValue, PresetFile, Soundpack};
 
 /// The separator for path environment variables.
 #[cfg(unix)]
@@ -89,8 +89,11 @@ pub struct ProviderPresets {
     pub provider_vendor: Option<String>,
     // All sound packs declared by the plugin.
     pub soundpacks: Vec<Soundpack>,
-    // All presets declared by the plugin, indexed by URI.
-    pub presets: BTreeMap<String, PresetFile>,
+    // All presets declared by the plugin, indexed by their location. Represented by a tuple list
+    // because JSON object keys must be strings, and with the change from URIs to a location
+    // kind+value that's not longer the case.
+    #[serde(with = "serde_with::rust::btreemap_as_tuple_list")]
+    pub presets: BTreeMap<LocationValue, PresetFile>,
 }
 
 /// Index the presets for one or more plugins. [`index()`] can be used to build a list of all
@@ -138,10 +141,10 @@ where
                 for location in &declared_data.locations {
                     presets.extend(provider.crawl_location(location).with_context(|| {
                         format!(
-                            "Error occurred while crawling presets for the location '{}' with URI \
-                             '{}' using provider '{}' with ID '{}'",
+                            "Error occurred while crawling presets for the location '{}' with {} \
+                             using provider '{}' with ID '{}'",
                             location.name,
-                            location.uri.to_uri(),
+                            location.value,
                             provider_metadata.name,
                             provider_metadata.id,
                         )

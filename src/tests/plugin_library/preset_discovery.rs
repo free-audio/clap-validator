@@ -11,7 +11,7 @@ use crate::plugin::ext::Extension;
 use crate::plugin::host::Host;
 use crate::plugin::instance::process::ProcessConfig;
 use crate::plugin::library::PluginLibrary;
-use crate::plugin::preset_discovery::{PluginAbi, Preset, PresetFile};
+use crate::plugin::preset_discovery::{LocationValue, PluginAbi, Preset, PresetFile};
 use crate::tests::plugin::ProcessingTest;
 use crate::tests::TestStatus;
 
@@ -38,8 +38,8 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
         }
     };
 
-    // All found presets, indexed by URI
-    let mut found_presets: BTreeMap<String, PresetFile> = BTreeMap::new();
+    // All found presets, indexed by location (value)
+    let mut found_presets: BTreeMap<LocationValue, PresetFile> = BTreeMap::new();
 
     let metadata = preset_discovery_factory
         .metadata()
@@ -56,12 +56,9 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
         for location in &provider.declared_data().locations {
             let presets = provider.crawl_location(location).with_context(|| {
                 format!(
-                    "Error occurred while crawling presets for the location '{}' with URI '{}' \
-                     using provider '{}' with ID '{}'",
-                    location.name,
-                    location.uri.to_uri(),
-                    provider_metadata.name,
-                    provider_metadata.id,
+                    "Error occurred while crawling presets for the location '{}' with {} using \
+                     provider '{}' with ID '{}'",
+                    location.name, location.value, provider_metadata.name, provider_metadata.id,
                 )
             })?;
             found_presets.extend(presets);
@@ -75,39 +72,41 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
         // simple wrapper around `PresetFile` to use with the preset load extension. The `Preset` is
         // technically not needed anymore but it's nice for error reporting.
         struct LoadablePreset {
-            uri: String,
+            location: LocationValue,
             load_key: Option<String>,
             preset: Preset,
         }
 
-        // Stores URIs with associated `PresetFile`s for all CLAP plugin IDs in `found_presets`
+        // Stores `PresetFile`s with their associated locations for all CLAP plugin IDs in
+        // `found_presets`
         let mut loadable_presets_by_plugin_id: BTreeMap<String, Vec<LoadablePreset>> =
             BTreeMap::new();
-        let mut maybe_add_preset = |uri: &str, load_key: Option<String>, preset: Preset| {
-            for plugin_id in &preset.plugin_ids {
-                if plugin_id.abi == PluginAbi::Clap {
-                    if !loadable_presets_by_plugin_id.contains_key(&plugin_id.id) {
-                        loadable_presets_by_plugin_id.insert(plugin_id.id.clone(), Vec::new());
+        let mut maybe_add_preset =
+            |location: &LocationValue, load_key: Option<String>, preset: Preset| {
+                for plugin_id in &preset.plugin_ids {
+                    if plugin_id.abi == PluginAbi::Clap {
+                        if !loadable_presets_by_plugin_id.contains_key(&plugin_id.id) {
+                            loadable_presets_by_plugin_id.insert(plugin_id.id.clone(), Vec::new());
+                        }
+
+                        loadable_presets_by_plugin_id
+                            .get_mut(&plugin_id.id)
+                            .unwrap()
+                            .push(LoadablePreset {
+                                location: location.clone(),
+                                load_key: load_key.clone(),
+                                preset: preset.clone(),
+                            })
                     }
-
-                    loadable_presets_by_plugin_id
-                        .get_mut(&plugin_id.id)
-                        .unwrap()
-                        .push(LoadablePreset {
-                            uri: uri.to_owned(),
-                            load_key: load_key.clone(),
-                            preset: preset.clone(),
-                        })
                 }
-            }
-        };
+            };
 
-        for (uri, preset_file) in found_presets {
+        for (location, preset_file) in found_presets {
             match preset_file {
-                PresetFile::Single(preset) => maybe_add_preset(&uri, None, preset),
+                PresetFile::Single(preset) => maybe_add_preset(&location, None, preset),
                 PresetFile::Container(presets) => {
                     for (load_key, preset) in presets {
-                        maybe_add_preset(&uri, Some(load_key), preset);
+                        maybe_add_preset(&location, Some(load_key), preset);
                     }
                 }
             }
@@ -150,7 +149,7 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
                 .create_buffers(BUFFER_SIZE);
 
             for LoadablePreset {
-                uri,
+                location,
                 load_key,
                 preset,
             } in presets
@@ -159,7 +158,7 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
                 //       be loaded at any point, even when the plugin is processing audio. Test
                 //       this.
                 let load_result = preset_load
-                    .from_uri(&uri, load_key.as_deref())
+                    .from_location(&location, load_key.as_deref())
                     .with_context(|| {
                         format!(
                             "Could not load the preset '{}' for plugin '{}'",

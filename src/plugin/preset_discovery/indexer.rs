@@ -5,17 +5,18 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::cell::RefCell;
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::Path;
 use std::pin::Pin;
 use std::thread::ThreadId;
 
 use clap_sys::factory::draft::preset_discovery::{
     clap_preset_discovery_filetype, clap_preset_discovery_indexer, clap_preset_discovery_location,
-    clap_preset_discovery_soundpack, CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT,
-    CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT, CLAP_PRESET_DISCOVERY_IS_FAVORITE,
-    CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
+    clap_preset_discovery_location_kind, clap_preset_discovery_soundpack,
+    CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT, CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT,
+    CLAP_PRESET_DISCOVERY_IS_FAVORITE, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
+    CLAP_PRESET_DISCOVERY_LOCATION_FILE, CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN,
 };
 use clap_sys::version::CLAP_VERSION;
 use parking_lot::Mutex;
@@ -92,8 +93,9 @@ pub struct Location {
     pub flags: Flags,
 
     pub name: String,
-    /// The location's URI. The exact variant determines how the location should be treated.
-    pub uri: LocationUri,
+    /// The actual location, parsed from the location kind value and the location string.
+    /// Conveniently also called location, hence `LocationValue`.
+    pub value: LocationValue,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -160,75 +162,131 @@ impl Location {
 
             name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
                 .context("Error parsing the location's 'name' field")?,
-            // This already checks that the URI is valid and non-empty
-            uri: LocationUri::from_uri(
-                &unsafe { util::cstr_ptr_to_string(descriptor.uri)? }
-                    .context("Error parsing the location's 'uri' field")?,
-            )?,
+            // This already checks that the location's kind and location fields are valid
+            value: unsafe { LocationValue::new(descriptor.kind, descriptor.location)? },
         })
     }
 }
 
-/// A URI as used by the preset discovery API. These are used to refer to single files, directories,
-/// and internal plugin data.
-#[derive(Debug, Clone)]
-pub enum LocationUri {
-    /// A path parsed from a `file://` URI. If the URI was `file:///foo/bar`, then this will contain
-    /// `/foo/bar`. The spec says nothing about trailing slashes, but the paths must at least be
-    /// absolute.
+/// A location as used by the preset discovery API. These are used to refer to single files,
+/// directories, and internal plugin data. Previous versions of the API used URIs instead of a
+/// location kind and a location path field.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub enum LocationValue {
+    /// An absolute path to a file or a directory. The spec says nothing about trailing slashes, but
+    /// the paths must at least be absolute.
     ///
-    /// The file path is not yet checked for existence.
-    File(PathBuf),
-    /// A special URI referring to data stored within this plugin's library. This uses the
-    /// `plugin://` magic value.
+    /// The path may refer to a file that does not exist. This has not yet been checked when
+    /// creating the path.
+    File(CString),
+    /// A special location referring to data stored within this plugin's library. The 'location'
+    /// string is not used here. In the C-implementation this should always be a null pointer.
     Internal,
 }
 
-impl LocationUri {
-    /// Parse a URI string to a `LocationUri`. Returns an error if the URI was not in an expected format.
-    pub fn from_uri(uri: &str) -> Result<Self> {
-        if uri.is_empty() {
-            anyhow::bail!("Empty URIs are not allowed.");
-        }
-
-        if let Some(path) = uri.strip_prefix("file://") {
-            // Backslashes are valid characters in file paths on non-Windows platforms, so we'll
-            // restrict this to just Windows. Hopefully this doesn't cause any false positives.
-            #[cfg(windows)]
-            if path.contains('\\') {
-                anyhow::bail!("'{path}' should use forward slashes instead of backslashes.")
+impl Display for LocationValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LocationValue::File(path) => {
+                write!(f, "CLAP_PRESET_DISCOVERY_LOCATION_FILE with path {path:?}")
             }
-            if !path.starts_with('/') {
-                anyhow::bail!("'{uri}' should refer to an absolute path, i.e. 'file:///{path}'.");
+            LocationValue::Internal => write!(f, "CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN"),
+        }
+    }
+}
+
+impl Serialize for LocationValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            LocationValue::File(path) => serializer.serialize_newtype_variant(
+                "LocationValue",
+                1,
+                "CLAP_PRESET_DISCOVERY_LOCATION_FILE",
+                // This should have alreayd been checked at this point
+                path.to_str().expect("Invalid UTF-8"),
+            ),
+            LocationValue::Internal => serializer.serialize_newtype_variant(
+                "LocationValue",
+                1,
+                "CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN",
+                // This should just resolve to a `null` value, to keep the format consistent
+                &None::<()>,
+            ),
+        }
+    }
+}
+
+impl LocationValue {
+    /// Constructs an new [`LocationValue`] from a location kind and a location field. Whether this
+    /// succeeds or not depends on the location kind and whether or not the location is a null
+    /// pointer or not. See the preset discovery factory definition for more information.
+    pub unsafe fn new(
+        location_kind: clap_preset_discovery_location_kind,
+        location: *const c_char,
+    ) -> Result<Self> {
+        match location_kind {
+            CLAP_PRESET_DISCOVERY_LOCATION_FILE => {
+                if location.is_null() {
+                    anyhow::bail!(
+                        "The location may not be a null pointer with \
+                         CLAP_PRESET_DISCOVERY_LOCATION_FILE."
+                    )
+                }
+
+                let path = CStr::from_ptr(location);
+                let path_str = path
+                    .to_str()
+                    .context("Invalid UTF-8 in preset discovery location")?;
+                if !path_str.starts_with('/') {
+                    anyhow::bail!("'{path_str}' should be an absolute path, i.e. '/{path_str}'.");
+                }
+
+                Ok(LocationValue::File(path.to_owned()))
             }
+            CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN => {
+                if !location.is_null() {
+                    anyhow::bail!(
+                        "The location must be a null pointer with \
+                         CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN."
+                    )
+                }
 
-            return Ok(LocationUri::File(PathBuf::from(path)));
+                Ok(LocationValue::Internal)
+            }
+            n => anyhow::bail!("Unknown location kind {n}."),
         }
-
-        if uri == "plugin://" {
-            return Ok(LocationUri::Internal);
-        } else if uri.starts_with("plugin://") {
-            // This is probably useful to have as a dedicated check
-            anyhow::bail!(
-                "'{uri}' is not a valid preset URI. 'plugin://' must not be followed by a path."
-            )
-        }
-
-        Err(anyhow::anyhow!(
-            "'{uri}' is not a supported URI, only the 'file://' and 'plugin://' schemas are \
-             supported."
-        ))
     }
 
-    /// Transform this `LocationUri` back into a URI.
-    pub fn to_uri(&self) -> String {
+    /// Transform this `LocationValue` back into a location kind and location pointer.
+    ///
+    /// # Safety
+    ///
+    /// The returned pointer is valid for the lifetime of this struct.
+    pub fn to_raw(&self) -> (clap_preset_discovery_location_kind, *const c_char) {
         match self {
-            LocationUri::File(path) => format!(
-                "fille://{}",
-                path.to_str()
-                    .expect("The file path contained invalid UTF-8")
-            ),
-            LocationUri::Internal => String::from("plugin://"),
+            LocationValue::File(path) => (CLAP_PRESET_DISCOVERY_LOCATION_FILE, path.as_ptr()),
+            LocationValue::Internal => (CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN, std::ptr::null()),
+        }
+    }
+
+    /// Get a file name (only the base name) for this location. For internal presets this returns
+    /// `<plugin>`.
+    pub fn file_name(&self) -> Result<String> {
+        match self {
+            LocationValue::File(path) => {
+                let path = Path::new(path.to_str().context("Invalid UTF-8 in file path")?);
+
+                Ok(path
+                    .file_name()
+                    .with_context(|| format!("{path:?} is not a valid preset path"))?
+                    .to_str()
+                    .unwrap()
+                    .to_owned())
+            }
+            LocationValue::Internal => Ok(String::from("<plugin>")),
         }
     }
 }
@@ -246,7 +304,7 @@ pub struct Soundpack {
     pub description: Option<String>,
     pub homepage_url: Option<String>,
     pub vendor: Option<String>,
-    pub image_uri: Option<String>,
+    pub image_path: Option<String>,
     pub release_timestamp: Option<DateTime<Utc>>,
 }
 
@@ -255,14 +313,11 @@ impl Soundpack {
     pub fn from_descriptor(descriptor: &clap_preset_discovery_soundpack) -> Result<Self> {
         Ok(Soundpack {
             flags: Flags {
-                is_factory_content: (descriptor.flags
-                    & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT as u64)
+                is_factory_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT)
                     != 0,
-                is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT as u64)
-                    != 0,
-                is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT as u64)
-                    != 0,
-                is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE as u64) != 0,
+                is_user_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
+                is_demo_content: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
+                is_favorite: (descriptor.flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
             },
 
             id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
@@ -275,8 +330,8 @@ impl Soundpack {
                 .context("Error parsing the soundpack's 'homepage_url' field")?,
             vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
                 .context("Error parsing the soundpack's 'vendor' field")?,
-            image_uri: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_uri) }
-                .context("Error parsing the soundpack's 'image_uri' field")?,
+            image_path: unsafe { util::cstr_ptr_to_optional_string(descriptor.image_path) }
+                .context("Error parsing the soundpack's 'image_path' field")?,
             release_timestamp: util::parse_timestamp(descriptor.release_timestamp)
                 .context("Error parsing the soundpack's 'release_timestamp' field")?,
         })
