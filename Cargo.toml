@@ -15,7 +15,7 @@ chrono = { version = "0.4.23", features = ["serde"] }
 # All the claps!
 clap = { version = "4.1.8", features = ["derive", "wrap_help"] }
 # For CLAP 1.1.8 support
-clap-sys = { git = "https://github.com/robbert-vdh/clap-sys.git", rev = "e222236ccdc10fab31475dca845efcd271ab0afa" }
+clap-sys = { git = "https://github.com/robbert-vdh/clap-sys.git", rev = "04779b57663f6f3f710cb813bde0e499a6515d17" }
 colored = "2.0.0"
 crossbeam = "0.8.1"
 libloading = "0.7.3"

@@ -113,7 +113,7 @@ dependencies = [
 [[package]]
 name = "clap-sys"
 version = "0.3.0"
-source = "git+https://github.com/robbert-vdh/clap-sys.git?rev=e222236ccdc10fab31475dca845efcd271ab0afa#e222236ccdc10fab31475dca845efcd271ab0afa"
+source = "git+https://github.com/robbert-vdh/clap-sys.git?rev=04779b57663f6f3f710cb813bde0e499a6515d17#04779b57663f6f3f710cb813bde0e499a6515d17"
 
 [[package]]
 name = "clap-validator"
