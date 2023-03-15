@@ -13,9 +13,7 @@ repository = "https://github.com/free-audio/clap-validator"
 anyhow = "1.0.58"
 chrono = { version = "0.4.23", features = ["serde"] }
 # All the claps!
-clap = { version = "4.1.1", features = ["derive", "wrap_help"] }
-# For CLAP 1.1.7 support
-clap-sys = { git = "https://github.com/robbert-vdh/clap-sys.git", rev = "cf5d36e9d1daa4b052c1a9e3d6d623b75734e65d" }
+clap = { version = "4.1.8", features = ["derive", "wrap_help"] }
 colored = "2.0.0"
 crossbeam = "0.8.1"
 libloading = "0.7.3"
