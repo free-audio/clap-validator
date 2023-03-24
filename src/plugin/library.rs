@@ -111,6 +111,15 @@ impl PluginLibrary {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(path);
 
+        // This is the path passed to `clap_entry::init()`. On macOS this should point to the
+        // bundle, not the DSO.
+        let path_cstring = CString::new(
+            path.as_os_str()
+                .to_str()
+                .context("Path contains invalid UTF-8")?,
+        )
+        .context("Path contains null bytes")?;
+
         // NOTE: Apple says you can dlopen() bundles. This is a lie.
         #[cfg(target_os = "macos")]
         let path = {
@@ -133,12 +142,6 @@ impl PluginLibrary {
         // The entry point needs to be initialized before it can be used. It will be deinitialized
         // when the `Plugin` object is dropped.
         let entry_point = get_clap_entry_point(&library)?;
-        let path_cstring = CString::new(
-            path.as_os_str()
-                .to_str()
-                .context("Path contains invalid UTF-8")?,
-        )
-        .context("Path contains null bytes")?;
         if !unsafe_clap_call! { entry_point=>init(path_cstring.as_ptr()) } {
             anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false.");
         }
