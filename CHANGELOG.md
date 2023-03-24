@@ -16,6 +16,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fixed running tests out of process on macOS.
 - The path passed to `clap_entry::init()` now points to the bundle on macOS,
   rather than the DSO.
 - The `--verbosity` option's value now propagated to child processes when tests

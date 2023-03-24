@@ -17,7 +17,7 @@ pub fn test_consistency(library: &PluginLibrary, plugin_id: &str) -> Result<Test
     let metadata = library.metadata().with_context(|| {
         format!(
             "Could not fetch plugin metadata for '{}'",
-            library.library_path().display()
+            library.plugin_path().display()
         )
     })?;
     let factory_descriptor = metadata
@@ -99,7 +99,7 @@ fn plugin_features(library: &PluginLibrary, plugin_id: &str) -> Result<Vec<Strin
         .with_context(|| {
             format!(
                 "Could not fetch plugin metadata for '{}'",
-                library.library_path().display()
+                library.plugin_path().display()
             )
         })
         .and_then(|metadata| {

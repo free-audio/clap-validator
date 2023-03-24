@@ -24,9 +24,9 @@ use crate::util::{self, unsafe_clap_call};
 /// all plugins exposed by the library and to initialize plugins.
 #[derive(Debug)]
 pub struct PluginLibrary {
-    /// The path to this plugin library. On macOS, this points to the bundle's root instead of the
-    /// library contained within the bundle.
-    library_path: PathBuf,
+    /// The path to this plugin. On macOS, this points to the bundle's root instead of the library
+    /// contained within the bundle.
+    plugin_path: PathBuf,
     /// The plugin's library. Its entry point has already been initialized, and it will
     /// autoamtically be deinitialized when this object gets dropped.
     library: libloading::Library,
@@ -121,23 +121,26 @@ impl PluginLibrary {
         .context("Path contains null bytes")?;
 
         // NOTE: Apple says you can dlopen() bundles. This is a lie.
+        #[cfg(not(target_os = "macos"))]
+        let library = load(&path)?;
         #[cfg(target_os = "macos")]
-        let path = {
+        let library = {
             use core_foundation::bundle::CFBundle;
             use core_foundation::url::CFURL;
 
             let bundle =
-                CFBundle::new(CFURL::from_path(path, true).context("Could not create CFURL")?)
+                CFBundle::new(CFURL::from_path(&path, true).context("Could not create CFURL")?)
                     .context("Could not open bundle")?;
             let executable = bundle
                 .executable_url()
                 .context("Could not get executable URL within bundle")?;
 
-            executable
+            let library_path = executable
                 .to_path()
-                .context("Could not convert bundle executable path")?
+                .context("Could not convert bundle executable path")?;
+
+            load(&library_path)?
         };
-        let library = load(&path)?;
 
         // The entry point needs to be initialized before it can be used. It will be deinitialized
         // when the `Plugin` object is dropped.
@@ -147,13 +150,13 @@ impl PluginLibrary {
         }
 
         Ok(PluginLibrary {
-            library_path: path,
+            plugin_path: path,
             library,
         })
     }
 
-    pub fn library_path(&self) -> &Path {
-        &self.library_path
+    pub fn plugin_path(&self) -> &Path {
+        &self.plugin_path
     }
 
     /// Get the metadata for all plugins stored in this plugin library. Most plugin libraries

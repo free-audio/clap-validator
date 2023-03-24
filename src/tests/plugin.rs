@@ -138,7 +138,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     .unwrap()
                     .get_name(),
             )
-            .arg(library.library_path())
+            .arg(library.plugin_path())
             .arg(plugin_id)
             .arg(test_name);
     }
