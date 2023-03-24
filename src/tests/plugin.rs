@@ -1,6 +1,7 @@
 //! Tests for individual plugin instances.
 
 use clap::ValueEnum;
+use std::path::Path;
 use std::process::Command;
 
 use super::{TestCase, TestResult};
@@ -48,9 +49,9 @@ pub enum PluginTestCase {
 }
 
 impl<'a> TestCase<'a> for PluginTestCase {
-    /// A loaded CLAP plugin library and the ID of the plugin contained within that library that
-    /// should be tested.
-    type TestArgs = (&'a PluginLibrary, &'a str);
+    /// Path to a CLAP plugin library, a loaded CLAP plugin library and the ID of the plugin contained
+    /// within that library that should be tested.
+    type TestArgs = (&'a Path, &'a PluginLibrary, &'a str);
 
     fn description(&self) -> String {
         match self {
@@ -128,7 +129,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
         }
     }
 
-    fn set_out_of_process_args(&self, command: &mut Command, (library, plugin_id): Self::TestArgs) {
+    fn set_out_of_process_args(&self, command: &mut Command, (path, _library, plugin_id): Self::TestArgs) {
         let test_name = self.to_string();
 
         command
@@ -138,12 +139,12 @@ impl<'a> TestCase<'a> for PluginTestCase {
                     .unwrap()
                     .get_name(),
             )
-            .arg(library.library_path())
+            .arg(path)
             .arg(plugin_id)
             .arg(test_name);
     }
 
-    fn run_in_process(&self, (library, plugin_id): Self::TestArgs) -> TestResult {
+    fn run_in_process(&self, (_, library, plugin_id): Self::TestArgs) -> TestResult {
         let status = match self {
             PluginTestCase::DescriptorConsistency => {
                 descriptor::test_consistency(library, plugin_id)

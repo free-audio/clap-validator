@@ -215,7 +215,7 @@ pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<Va
                                         &test,
                                         verbosity,
                                         settings,
-                                        (&plugin_library, &plugin_metadata.id),
+                                        (&library_path, &plugin_library, &plugin_metadata.id),
                                     )
                                 })
                                 .collect::<Result<Vec<TestResult>>>()?,
@@ -296,7 +296,7 @@ pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<Va
                                         &test,
                                         verbosity,
                                         settings,
-                                        (&plugin_library, &plugin_metadata.id),
+                                        (&library_path, &plugin_library, &plugin_metadata.id),
                                     )
                                 })
                                 .collect::<Result<Vec<TestResult>>>()?,
@@ -365,7 +365,7 @@ pub fn run_single_test(settings: &SingleTestSettings) -> Result<()> {
                 .parse::<PluginTestCase>()
                 .with_context(|| format!("Unknown test name: {}", &settings.name))?;
 
-            test_case.run_in_process((&plugin_library, &settings.plugin_id))
+            test_case.run_in_process((&settings.path, &plugin_library, &settings.plugin_id))
         }
     };
 
