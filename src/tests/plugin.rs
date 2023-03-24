@@ -144,7 +144,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             .arg(test_name);
     }
 
-    fn run_in_process(&self, (_, library, plugin_id): Self::TestArgs) -> TestResult {
+    fn run_in_process(&self, (_path, library, plugin_id): Self::TestArgs) -> TestResult {
         let status = match self {
             PluginTestCase::DescriptorConsistency => {
                 descriptor::test_consistency(library, plugin_id)
