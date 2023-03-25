@@ -117,7 +117,7 @@ source = "git+https://github.com/robbert-vdh/clap-sys.git?rev=04779b57663f6f3f71
 
 [[package]]
 name = "clap-validator"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "chrono",
