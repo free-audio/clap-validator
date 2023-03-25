@@ -11,17 +11,17 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The preset discovery implementation has been updated for CLAP 1.1.8. Because
-  of the change from location URIs to a location kind and a value, the
-  `clap-validator list presets` output format has changed slightly.
+  this update changed the location URIs to a location kind and a value, the
+  `clap-validator list presets` output format has also changed slightly.
 
 ### Fixed
 
 - Fixed running tests out of process on macOS.
 - The path passed to `clap_entry::init()` now points to the bundle on macOS,
-  rather than the DSO.
+  rather than to the DSO.
 - The `--verbosity` option's value now propagated to child processes when tests
   are run out of process. Previously the default `debug` value would always be
-  used.
+  used regardless of the verbosity option set when running the validator.
 
 ## [0.3.1] - 2023-03-03
 
