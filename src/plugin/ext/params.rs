@@ -292,6 +292,17 @@ impl Params<'_> {
                     info.id
                 )
             }
+            if ((info.flags & CLAP_PARAM_IS_READONLY) != 0)
+                && ((info.flags & CLAP_PARAM_IS_AUTOMATABLE) != 0
+                    || (info.flags & CLAP_PARAM_IS_MODULATABLE) != 0)
+            {
+                anyhow::bail!(
+                    "Parameter '{}' (stable ID {}) has the CLAP_PARAM_IS_READONLY flag set, but \
+                     it is also marked as automatable or modulatable. This is likely a bug.",
+                    &name,
+                    info.id
+                )
+            }
 
             let processed_info = Param {
                 name,

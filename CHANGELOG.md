@@ -10,6 +10,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Having both the `CLAP_PARAM_IS_READONLY` flag and any of the
+  `CLAP_PARAM_IS_AUTOMATABLE` or `CLAP_PARAM_IS_MODULATABLE` flags set now
+  results in an error.
 - The logic for which parameters can be randomized has changed. Previously all
   parameters marked as automatable could be changed. Now parameters marked as
   hidden or readonly are ignored instead, as non-automatable parameters can
