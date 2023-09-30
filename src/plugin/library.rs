@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use super::instance::Plugin;
 use super::preset_discovery::PresetDiscoveryFactory;
@@ -231,7 +231,7 @@ impl PluginLibrary {
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
     /// `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str, host: Arc<Host>) -> Result<Plugin> {
+    pub fn create_plugin(&self, id: &str, host: Rc<Host>) -> Result<Plugin> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }

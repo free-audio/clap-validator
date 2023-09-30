@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::ext::Extension;
@@ -108,7 +109,7 @@ impl<'lib> Plugin<'lib> {
     /// unregistered when this object is dropped again.
     pub fn new(
         library: &'lib PluginLibrary,
-        host: Arc<Host>,
+        host: Rc<Host>,
         factory: &clap_plugin_factory,
         plugin_id: &CStr,
     ) -> Result<Self> {

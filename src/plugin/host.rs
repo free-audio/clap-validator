@@ -25,6 +25,7 @@ use std::collections::HashMap;
 use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::ThreadId;
@@ -93,7 +94,7 @@ pub struct InstanceState {
     pub plugin: AtomicCell<Option<PluginHandle>>,
     /// The host this `InstanceState` belongs to. This is needed to get back to the `Host`
     /// instance from a `*const clap_host`, which we can cast to this struct to access the pointer.
-    host: Arc<Host>,
+    host: Rc<Host>,
 
     /// The `clap-validator` version. Read at compile time, but it has to be stored here since it
     /// needs to be null terminated.
@@ -141,7 +142,7 @@ impl InstanceState {
     /// `clap_host` vtable for this plugin instance, and keeps track of things like the instance's
     /// audio thread and pending callbacks. The `Pin` is necessary to prevent moving the object out
     /// of the `Arc`, since that would break pointers to the `InstanceState`.
-    pub fn new(host: Arc<Host>) -> Pin<Arc<Self>> {
+    pub fn new(host: Rc<Host>) -> Pin<Arc<Self>> {
         let clap_validator_version =
             CString::new(env!("CARGO_PKG_VERSION")).expect("Invalid bytes in crate version");
         let instance = Arc::pin(Self {
@@ -233,14 +234,14 @@ impl Drop for Host {
 impl Host {
     /// Initialize a CLAP host. The thread this object is created on will be designated as the main
     /// thread for the purposes of the thread safety checks.
-    pub fn new() -> Arc<Host> {
+    pub fn new() -> Rc<Host> {
         // Normally you'd of course use bounded channel to avoid unnecessary allocations, but since
         // we're a validator it's probably better to not have to deal with the possibility that a
         // queue is full. These are used for handling callbacks on the main thread while the audio
         // thread is active.
         let (callback_task_sender, callback_task_receiver) = channel::unbounded();
 
-        Arc::new(Host {
+        Rc::new(Host {
             main_thread_id: std::thread::current().id(),
             // If the plugin never makes callbacks from the wrong thread, then this will remain an
             // None`. Otherwise this will be replaced by the first error.
