@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The logic for which parameters can be randomized has changed. Previously all
+  parameters marked as automatable could be changed. Now parameters marked as
+  hidden or readonly are ignored instead, as non-automatable parameters can
+  still be changed as the result of live user input.
+
 ## [0.3.2] - 2023-03-25
 
 ### Changed

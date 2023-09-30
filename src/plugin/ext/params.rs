@@ -6,10 +6,10 @@ use clap_sys::ext::params::{
     clap_param_info, clap_param_info_flags, clap_plugin_params, CLAP_EXT_PARAMS,
     CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_AUTOMATABLE_PER_CHANNEL,
     CLAP_PARAM_IS_AUTOMATABLE_PER_KEY, CLAP_PARAM_IS_AUTOMATABLE_PER_NOTE_ID,
-    CLAP_PARAM_IS_AUTOMATABLE_PER_PORT, CLAP_PARAM_IS_BYPASS, CLAP_PARAM_IS_MODULATABLE,
-    CLAP_PARAM_IS_MODULATABLE_PER_CHANNEL, CLAP_PARAM_IS_MODULATABLE_PER_KEY,
-    CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID, CLAP_PARAM_IS_MODULATABLE_PER_PORT,
-    CLAP_PARAM_IS_STEPPED,
+    CLAP_PARAM_IS_AUTOMATABLE_PER_PORT, CLAP_PARAM_IS_BYPASS, CLAP_PARAM_IS_HIDDEN,
+    CLAP_PARAM_IS_MODULATABLE, CLAP_PARAM_IS_MODULATABLE_PER_CHANNEL,
+    CLAP_PARAM_IS_MODULATABLE_PER_KEY, CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID,
+    CLAP_PARAM_IS_MODULATABLE_PER_PORT, CLAP_PARAM_IS_READONLY, CLAP_PARAM_IS_STEPPED,
 };
 use clap_sys::id::clap_id;
 use clap_sys::string_sizes::CLAP_NAME_SIZE;
@@ -338,6 +338,16 @@ impl Params<'_> {
 }
 
 impl Param {
+    /// Whether the parameter is hidden and should be ignored.
+    pub fn hidden(&self) -> bool {
+        (self.flags & CLAP_PARAM_IS_HIDDEN) != 0
+    }
+
+    /// Whether the parameter is read-only and should not be changed.
+    pub fn readonly(&self) -> bool {
+        (self.flags & CLAP_PARAM_IS_READONLY) != 0
+    }
+
     /// Whether this parameter is stepped.
     pub fn stepped(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_STEPPED) != 0

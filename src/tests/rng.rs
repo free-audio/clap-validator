@@ -10,7 +10,6 @@ use clap_sys::events::{
 use clap_sys::ext::note_ports::{
     CLAP_NOTE_DIALECT_CLAP, CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
 };
-use clap_sys::ext::params::CLAP_PARAM_IS_AUTOMATABLE;
 use midi_consts::channel_event as midi;
 use rand::Rng;
 use rand_pcg::Pcg32;
@@ -563,7 +562,7 @@ impl NoteEventType {
 }
 
 impl<'a> ParamFuzzer<'a> {
-    /// Create a new parameter fuzzer
+    /// Create a new parameter fuzzer. This ignores parameters that are readonly or hidden.
     pub fn new(config: &'a ParamInfo) -> Self {
         ParamFuzzer { config }
     }
@@ -582,7 +581,10 @@ impl<'a> ParamFuzzer<'a> {
         self.config
             .iter()
             .filter_map(move |(param_id, param_info)| {
-                if (param_info.flags & CLAP_PARAM_IS_AUTOMATABLE) == 0 {
+                // We can send parameter changes for parameters that are not automatable:
+                //
+                // > The host can send live user changes for this parameter regardless of this flag.
+                if param_info.readonly() || param_info.hidden() {
                     return None;
                 }
 
