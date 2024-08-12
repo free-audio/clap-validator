@@ -24,18 +24,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - { name: ubuntu-18.04,     os: ubuntu-18.04,   cross-target: '' }
-          - { name: macos-11-x86_64,  os: macos-11,       cross-target: '' }
-          - { name: macos-11-aarch64, os: macos-11,       cross-target: aarch64-apple-darwin }
+          - { name: ubuntu-22.04,     os: ubuntu-22.04,   cross-target: '' }
+          - { name: macos-12-x86_64,  os: macos-12,       cross-target: '' }
+          - { name: macos-12-aarch64, os: macos-12,       cross-target: aarch64-apple-darwin }
           - { name: windows,          os: windows-latest, cross-target: '' }
     name: Build binary
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Fetch all git history
         run: git fetch --force --prune --tags --unshallow
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -76,7 +76,7 @@ jobs:
         if: startsWith(matrix.os, 'macos') && matrix.cross-target
         run: |
           tar -C target/${{ matrix.cross-target }}/release -caf "$ARCHIVE_NAME.tar.gz" clap-validator
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: "!startsWith(matrix.os, 'windows')"
         with:
           name: ${{ env.ARCHIVE_NAME }}
@@ -84,7 +84,7 @@ jobs:
 
       # On Windows we can just upload the .exe file directly since Windows
       # doesn't have an executable bit
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: startsWith(matrix.os, 'windows')
         with:
           name: ${{ env.ARCHIVE_NAME }}
@@ -92,29 +92,29 @@ jobs:
 
   universal-binary:
     name: Build a universal macOS binary
-    runs-on: macos-11
+    runs-on: macos-12
     needs: package
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Fetch all git history
         run: git fetch --force --prune --tags --unshallow
 
       - name: Determine the previously build archive names
         run: |
-          echo "X86_64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-11-x86_64" >> "$GITHUB_ENV"
-          echo "AARCH64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-11-aarch64" >> "$GITHUB_ENV"
+          echo "X86_64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-12-x86_64" >> "$GITHUB_ENV"
+          echo "AARCH64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-12-aarch64" >> "$GITHUB_ENV"
 
       - name: Determine archive name for the universal binary
         run: |
           echo "ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-universal" >> "$GITHUB_ENV"
 
       - name: Download the previously built x86_64 binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.X86_64_ARCHIVE_NAME }}
           path: binaries/x86_64
       - name: Download the previously built AArch64 binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.AARCH64_ARCHIVE_NAME }}
           path: binaries/aarch64
@@ -130,7 +130,7 @@ jobs:
           lipo -create -output binaries/clap-validator binaries/x86_64/clap-validator binaries/aarch64/clap-validator
           tar -caf "$ARCHIVE_NAME.tar.gz" binaries/clap-validator
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.tar.gz
