@@ -57,6 +57,7 @@ pub struct IndexerResults {
 
 /// Data parsed from a `clap_preset_discovery_filetype`.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FileType {
     pub name: String,
     pub description: Option<String>,

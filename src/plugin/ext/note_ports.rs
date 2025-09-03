@@ -32,6 +32,7 @@ pub struct NotePortConfig {
 
 /// The configuration for a single note port.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct NotePort {
     /// The preferred dialect for this note port. This should only ever contain a single value.
     pub prefered_dialect: clap_note_dialect,
