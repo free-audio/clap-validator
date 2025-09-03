@@ -49,6 +49,7 @@ impl<'a> Extension<&'a Plugin<'a>> for Params<'a> {
 
 /// Information about a parameter.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Param {
     pub name: String,
     /// This should be provided to the plugin when sending automation or modulation events for this
