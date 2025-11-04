@@ -91,9 +91,29 @@ impl Drop for PluginLibrary {
 impl PluginLibrary {
     /// Load a CLAP plugin from a path to a `.clap` file or bundle. This will return an error if the
     /// plugin could not be loaded.
+    ///
+    /// Uses `RTLD_LAZY` on Unix systems for better error reporting. When plugins have issues
+    /// (e.g., code signing problems, missing dependencies), `RTLD_LAZY` provides immediate, clear
+    /// error messages, whereas `RTLD_NOW` can cause silent hangs on macOS.
     pub fn load(path: impl AsRef<Path>) -> Result<PluginLibrary> {
         Self::load_with(path, |path| {
-            unsafe { libloading::Library::new(path) }.context("Could not load the plugin library")
+            #[cfg(unix)]
+            {
+                use libloading::os::unix::Library as UnixLibrary;
+                unsafe {
+                    UnixLibrary::open(
+                        Some(path),
+                        libloading::os::unix::RTLD_LAZY | libloading::os::unix::RTLD_LOCAL,
+                    )
+                }
+                .map(libloading::Library::from)
+                .context("Could not load the plugin library using RTLD_LAZY")
+            }
+            #[cfg(not(unix))]
+            {
+                unsafe { libloading::Library::new(path) }
+                    .context("Could not load the plugin library")
+            }
         })
     }
 
