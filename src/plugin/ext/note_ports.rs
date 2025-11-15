@@ -112,7 +112,7 @@ impl NotePorts<'_> {
 
         for i in 0..num_outputs {
             let mut info: clap_note_port_info = unsafe { std::mem::zeroed() };
-            let success = unsafe_clap_call! { note_ports=>get(plugin, i, true, &mut info) };
+            let success = unsafe_clap_call! { note_ports=>get(plugin, i, false, &mut info) };
             if !success {
                 anyhow::bail!(
                     "Plugin returned an error when querying output note port {i} ({num_outputs} \
