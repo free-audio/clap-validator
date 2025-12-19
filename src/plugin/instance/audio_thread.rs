@@ -44,14 +44,10 @@ pub enum ProcessStatus {
 
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
-        match self
-            .state()
-            .status
-            .compare_exchange(PluginStatus::Processing, PluginStatus::Activated)
-        {
-            Ok(_) => self.stop_processing(),
-            Err(PluginStatus::Activated) => (),
-            Err(state) => panic!(
+        match self.status() {
+            PluginStatus::Processing => self.stop_processing(),
+            PluginStatus::Activated => (),
+            state => panic!(
                 "The plugin was in an invalid state '{state:?}' when the audio thread got \
                  dropped, this is a clap-validator bug"
             ),
