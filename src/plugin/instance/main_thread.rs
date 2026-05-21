@@ -147,6 +147,7 @@ impl<'lib> Plugin<'lib> {
     /// Initialize the plugin. This needs to be called before doing anything else.
     pub fn init(&self) -> Result<()> {
         self.status().assert_is(PluginStatus::Uninitialized);
+        self.shared.set_status(PluginStatus::Initializing);
 
         let _span = Span::begin("clap_plugin::init", ());
         let result = unsafe {
@@ -163,6 +164,7 @@ impl<'lib> Plugin<'lib> {
             self.shared.set_status(PluginStatus::Deactivated);
             Ok(())
         } else {
+            self.shared.set_status(PluginStatus::Uninitialized);
             anyhow::bail!("'clap_plugin::init()' returned false.")
         }
     }

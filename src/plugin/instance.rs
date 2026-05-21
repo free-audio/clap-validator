@@ -53,6 +53,7 @@ pub enum CallbackEvent {
 pub enum PluginStatus {
     #[default]
     Uninitialized,
+    Initializing,
     Deactivated,
     Activating,
     Activated,
