@@ -1,7 +1,7 @@
 //! Abstractions for interacting with the `preset-load` extension.
 
 use anyhow::{Context, Result};
-use clap_sys::ext::draft::preset_load::{clap_plugin_preset_load, CLAP_EXT_PRESET_LOAD};
+use clap_sys::ext::draft::preset_load::{CLAP_EXT_PRESET_LOAD, clap_plugin_preset_load};
 use std::ffi::{CStr, CString};
 use std::ptr::NonNull;
 

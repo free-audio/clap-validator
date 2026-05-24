@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, TimeZone, Utc};
-use clap_sys::factory::draft::preset_discovery::{clap_timestamp, CLAP_TIMESTAMP_UNKNOWN};
+use clap_sys::factory::draft::preset_discovery::{CLAP_TIMESTAMP_UNKNOWN, clap_timestamp};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -63,31 +63,37 @@ pub fn type_name_of_ptr<T: ?Sized>(_ptr: *const T) -> &'static str {
 ///
 /// `ptr` should point to a valid null terminated C-string.
 pub unsafe fn cstr_ptr_to_string(ptr: *const c_char) -> Result<Option<String>> {
-    if ptr.is_null() {
-        return Ok(None);
-    }
+    unsafe {
+        if ptr.is_null() {
+            return Ok(None);
+        }
 
-    CStr::from_ptr(ptr)
-        .to_str()
-        .map(|str| Some(String::from(str)))
-        .context("Error while parsing UTF-8")
+        CStr::from_ptr(ptr)
+            .to_str()
+            .map(|str| Some(String::from(str)))
+            .context("Error while parsing UTF-8")
+    }
 }
 
 /// The same as [`cstr_ptr_to_string()`], but it returns an error if the string is empty.
 pub unsafe fn cstr_ptr_to_mandatory_string(ptr: *const c_char) -> Result<String> {
-    match cstr_ptr_to_string(ptr)? {
-        Some(string) if string.is_empty() => anyhow::bail!("The string is empty."),
-        Some(string) => Ok(string),
-        None => anyhow::bail!("The string is a null pointer."),
+    unsafe {
+        match cstr_ptr_to_string(ptr)? {
+            Some(string) if string.is_empty() => anyhow::bail!("The string is empty."),
+            Some(string) => Ok(string),
+            None => anyhow::bail!("The string is a null pointer."),
+        }
     }
 }
 
 /// The same as [`cstr_ptr_to_string()`], but it treats empty strings as missing. Useful for parsing
 /// optional fields from structs.
 pub unsafe fn cstr_ptr_to_optional_string(ptr: *const c_char) -> Result<Option<String>> {
-    match cstr_ptr_to_string(ptr)? {
-        Some(string) if string.is_empty() => Ok(None),
-        x => Ok(x),
+    unsafe {
+        match cstr_ptr_to_string(ptr)? {
+            Some(string) if string.is_empty() => Ok(None),
+            x => Ok(x),
+        }
     }
 }
 
@@ -98,18 +104,20 @@ pub unsafe fn cstr_ptr_to_optional_string(ptr: *const c_char) -> Result<Option<S
 ///
 /// `ptr` should point to a valid null terminated C-string array.
 pub unsafe fn cstr_array_to_vec(mut ptr: *const *const c_char) -> Result<Option<Vec<String>>> {
-    if ptr.is_null() {
-        return Ok(None);
-    }
+    unsafe {
+        if ptr.is_null() {
+            return Ok(None);
+        }
 
-    let mut strings = Vec::new();
-    while !(*ptr).is_null() {
-        // We already checked for null pointers, so we can safely unwrap this
-        strings.push(cstr_ptr_to_string(*ptr)?.unwrap());
-        ptr = ptr.offset(1);
-    }
+        let mut strings = Vec::new();
+        while !(*ptr).is_null() {
+            // We already checked for null pointers, so we can safely unwrap this
+            strings.push(cstr_ptr_to_string(*ptr)?.unwrap());
+            ptr = ptr.offset(1);
+        }
 
-    Ok(Some(strings))
+        Ok(Some(strings))
+    }
 }
 
 /// Convert a `c_char` slice to a `String`. Returns an error if the slice did not contain a null
@@ -146,10 +154,10 @@ pub fn parse_timestamp(timestamp: clap_timestamp) -> Result<Option<DateTime<Utc>
 /// [`std::env::temp_dir`], but taking `XDG_RUNTIME_DIR` on Linux into account.
 fn temp_dir() -> PathBuf {
     #[cfg(all(unix, not(target_os = "macos")))]
-    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR").map(PathBuf::from) {
-        if dir.is_dir() {
-            return dir;
-        }
+    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR").map(PathBuf::from)
+        && dir.is_dir()
+    {
+        return dir;
     }
 
     std::env::temp_dir()

@@ -2,8 +2,8 @@
 
 use anyhow::{Context, Result};
 use clap_sys::ext::audio_ports::{
-    clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS, CLAP_PORT_MONO,
-    CLAP_PORT_STEREO,
+    CLAP_EXT_AUDIO_PORTS, CLAP_PORT_MONO, CLAP_PORT_STEREO, clap_audio_port_info,
+    clap_plugin_audio_ports,
 };
 use clap_sys::ext::draft::ambisonic::CLAP_PORT_AMBISONIC;
 use clap_sys::ext::draft::cv::CLAP_PORT_CV;

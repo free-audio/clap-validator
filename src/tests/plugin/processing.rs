@@ -4,17 +4,17 @@ use std::sync::atomic::Ordering;
 
 use anyhow::{Context, Result};
 
+use crate::plugin::ext::Extension;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
-use crate::plugin::ext::Extension;
 use crate::plugin::host::Host;
+use crate::plugin::instance::Plugin;
 use crate::plugin::instance::process::{
     AudioBuffers, OutOfPlaceAudioBuffers, ProcessConfig, ProcessData,
 };
-use crate::plugin::instance::Plugin;
 use crate::plugin::library::PluginLibrary;
-use crate::tests::rng::{new_prng, NoteGenerator};
 use crate::tests::TestStatus;
+use crate::tests::rng::{NoteGenerator, new_prng};
 
 /// A helper to handle the boilerplate that comes with testing a plugin's audio processing behavior.
 pub struct ProcessingTest<'a> {
@@ -226,7 +226,7 @@ pub fn test_process_audio_out_of_place_basic(
                     "The plugin does not implement the '{}' extension.",
                     AudioPorts::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     // Handle callbacks the plugin may have made during init or these queries. The
@@ -283,7 +283,7 @@ pub fn test_process_note_out_of_place_basic(
                     "The plugin does not implement the '{}' extension.",
                     NotePorts::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     if note_ports_config.inputs.is_empty() {
@@ -354,7 +354,7 @@ pub fn test_process_note_inconsistent(
                     "The plugin does not implement the '{}' extension.",
                     NotePorts::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     if note_port_config.inputs.is_empty() {

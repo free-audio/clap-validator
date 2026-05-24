@@ -3,9 +3,9 @@
 use anyhow::{Context, Result};
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::factory::draft::preset_discovery::{
-    clap_preset_discovery_factory, CLAP_PRESET_DISCOVERY_FACTORY_ID,
+    CLAP_PRESET_DISCOVERY_FACTORY_ID, clap_preset_discovery_factory,
 };
-use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
+use clap_sys::factory::plugin_factory::{CLAP_PLUGIN_FACTORY_ID, clap_plugin_factory};
 use clap_sys::plugin::clap_plugin_descriptor;
 use clap_sys::version::clap_version;
 use serde::Serialize;
@@ -231,7 +231,7 @@ impl PluginLibrary {
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
     /// `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str, host: Rc<Host>) -> Result<Plugin> {
+    pub fn create_plugin(&self, id: &str, host: Rc<Host>) -> Result<Plugin<'_>> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
         let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
@@ -248,7 +248,7 @@ impl PluginLibrary {
     }
 
     /// Returns the plugin's preset discovery factory, if it has one.
-    pub fn preset_discovery_factory(&self) -> Result<PresetDiscoveryFactory> {
+    pub fn preset_discovery_factory(&self) -> Result<PresetDiscoveryFactory<'_>> {
         let entry_point = get_clap_entry_point(&self.library)
             .expect("A Plugin was constructed for a plugin with no entry point");
         let preset_discovery_factory = unsafe_clap_call! {

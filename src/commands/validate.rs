@@ -5,10 +5,10 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use super::{println_wrapped, TextWrapper};
+use super::{TextWrapper, println_wrapped};
+use crate::Verbosity;
 use crate::tests::TestStatus;
 use crate::validator::{self, SingleTestSettings, ValidatorSettings};
-use crate::Verbosity;
 
 /// The main validator command. This will validate one or more plugins and print the results.
 pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<ExitCode> {

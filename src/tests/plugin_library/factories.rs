@@ -71,7 +71,7 @@ pub fn test_create_id_with_trailing_garbage(library_path: &Path) -> Result<TestS
                             "All of the coolest plugins already exists. In other words, could not \
                              come up a fake unused plugin ID.",
                         )),
-                    })
+                    });
                 }
             }
         }
@@ -80,7 +80,7 @@ pub fn test_create_id_with_trailing_garbage(library_path: &Path) -> Result<TestS
                 details: Some(String::from(
                     "The plugin library does not expose any plugins",
                 )),
-            })
+            });
         }
     };
 

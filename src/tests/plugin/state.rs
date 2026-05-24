@@ -5,18 +5,18 @@ use clap_sys::id::clap_id;
 use std::collections::BTreeMap;
 use std::io::Write;
 
+use crate::plugin::ext::Extension;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::params::{ParamInfo, Params};
 use crate::plugin::ext::state::State;
-use crate::plugin::ext::Extension;
 use crate::plugin::host::Host;
 use crate::plugin::instance::process::{Event, EventQueue, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
-use crate::tests::rng::{new_prng, ParamFuzzer};
+use crate::tests::rng::{ParamFuzzer, new_prng};
 use crate::tests::{TestCase, TestStatus};
 
-use super::processing::ProcessingTest;
 use super::PluginTestCase;
+use super::processing::ProcessingTest;
 
 /// The file name we'll use to dump the expected state when a test fails.
 const EXPECTED_STATE_FILE_NAME: &str = "state-expected";
@@ -39,7 +39,7 @@ pub fn test_state_invalid(library: &PluginLibrary, plugin_id: &str) -> Result<Te
                     "The plugin does not implement the '{}' extension.",
                     State::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();
@@ -96,7 +96,7 @@ pub fn test_state_reproducibility_null_cookies(
                         "The plugin does not implement the '{}' extension.",
                         Params::EXTENSION_ID.to_str().unwrap(),
                     )),
-                })
+                });
             }
         };
         let state = match plugin.get_extension::<State>() {
@@ -107,7 +107,7 @@ pub fn test_state_reproducibility_null_cookies(
                         "The plugin does not implement the '{}' extension.",
                         State::EXTENSION_ID.to_str().unwrap(),
                     )),
-                })
+                });
             }
         };
         host.handle_callbacks_once();
@@ -192,7 +192,7 @@ pub fn test_state_reproducibility_null_cookies(
                     "The plugin's second instance does not implement the '{}' extension.",
                     State::EXTENSION_ID.to_str().unwrap()
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();
@@ -226,12 +226,15 @@ pub fn test_state_reproducibility_null_cookies(
     if actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
     } else {
+        let test_case = if zero_out_cookies {
+            PluginTestCase::StateReproducibilityNullCookies
+        } else {
+            PluginTestCase::StateReproducibilityBasic
+        };
         let (expected_state_file_path, mut expected_state_file) =
-            PluginTestCase::StateReproducibilityBasic
-                .temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
+            test_case.temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
         let (actual_state_file_path, mut actual_state_file) =
-            PluginTestCase::StateReproducibilityBasic
-                .temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
+            test_case.temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
 
         expected_state_file.write_all(&expected_state)?;
         actual_state_file.write_all(&actual_state)?;
@@ -272,7 +275,7 @@ pub fn test_state_reproducibility_flush(
                         "The plugin does not implement the '{}' extension.",
                         Params::EXTENSION_ID.to_str().unwrap(),
                     )),
-                })
+                });
             }
         };
         let state = match plugin.get_extension::<State>() {
@@ -283,7 +286,7 @@ pub fn test_state_reproducibility_flush(
                         "The plugin does not implement the '{}' extension.",
                         State::EXTENSION_ID.to_str().unwrap(),
                     )),
-                })
+                });
             }
         };
         host.handle_callbacks_once();
@@ -481,7 +484,7 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
                         "The plugin does not implement the '{}' extension.",
                         Params::EXTENSION_ID.to_str().unwrap(),
                     )),
-                })
+                });
             }
         };
         let state = match plugin.get_extension::<State>() {
@@ -492,7 +495,7 @@ pub fn test_state_buffered_streams(library: &PluginLibrary, plugin_id: &str) -> 
                         "The plugin does not implement the '{}' extension.",
                         State::EXTENSION_ID.to_str().unwrap(),
                     )),
-                })
+                });
             }
         };
         host.handle_callbacks_once();

@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use clap_sys::ext::note_ports::{
-    clap_note_dialect, clap_note_port_info, clap_plugin_note_ports, CLAP_EXT_NOTE_PORTS,
+    CLAP_EXT_NOTE_PORTS, clap_note_dialect, clap_note_port_info, clap_plugin_note_ports,
 };
 use std::collections::HashSet;
 use std::ffi::CStr;
@@ -33,8 +33,6 @@ pub struct NotePortConfig {
 /// The configuration for a single note port.
 #[derive(Debug, Clone)]
 pub struct NotePort {
-    /// The preferred dialect for this note port. This should only ever contain a single value.
-    pub prefered_dialect: clap_note_dialect,
     /// All supported note dialects for this port. All of these note dialect values will only ever
     /// contain a single value.
     pub supported_dialects: Vec<clap_note_dialect>,
@@ -102,7 +100,6 @@ impl NotePorts<'_> {
             }
 
             config.inputs.push(NotePort {
-                prefered_dialect: info.preferred_dialect,
                 supported_dialects: (0..(mem::size_of::<clap_note_dialect>() * 8) - 1)
                     .map(|bit| 1 << bit)
                     .filter(|flag| (info.supported_dialects & flag) != 0)
@@ -144,7 +141,6 @@ impl NotePorts<'_> {
             }
 
             config.outputs.push(NotePort {
-                prefered_dialect: info.preferred_dialect,
                 supported_dialects: (0..(mem::size_of::<clap_note_dialect>() * 8) - 1)
                     .map(|bit| 1 << bit)
                     .filter(|flag| (info.supported_dialects & flag) != 0)

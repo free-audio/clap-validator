@@ -21,7 +21,7 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 use strum::IntoEnumIterator;
 
-use crate::{util, Verbosity};
+use crate::{Verbosity, util};
 
 mod plugin;
 mod plugin_library;

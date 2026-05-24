@@ -15,8 +15,8 @@ use crate::plugin::host::InstanceState;
 use crate::util::unsafe_clap_call;
 
 use super::process::ProcessData;
-use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 use super::{Plugin, PluginStatus};
+use super::{assert_plugin_state_eq, assert_plugin_state_initialized};
 use crate::plugin::ext::Extension;
 
 /// An audio thread equivalent to [`Plugin`]. This version only allows audio thread functions to be
@@ -44,14 +44,10 @@ pub enum ProcessStatus {
 
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
-        match self
-            .state()
-            .status
-            .compare_exchange(PluginStatus::Processing, PluginStatus::Activated)
-        {
-            Ok(_) => self.stop_processing(),
-            Err(PluginStatus::Activated) => (),
-            Err(state) => panic!(
+        match self.status() {
+            PluginStatus::Processing => self.stop_processing(),
+            PluginStatus::Activated => (),
+            state => panic!(
                 "The plugin was in an invalid state '{state:?}' when the audio thread got \
                  dropped, this is a clap-validator bug"
             ),

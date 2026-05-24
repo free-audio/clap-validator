@@ -12,10 +12,10 @@ use std::fs;
 use std::path::PathBuf;
 use strum::IntoEnumIterator;
 
+use crate::Verbosity;
 use crate::plugin::library::{PluginLibrary, PluginMetadata};
 use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult, TestStatus};
 use crate::util;
-use crate::Verbosity;
 
 /// The results of running the validation test suite on one or more plugins. Use the
 /// [`tally()`][Self::tally()] method to compute the number of successful and failed tests.
@@ -336,10 +336,10 @@ pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<Va
         tests.sort_by(|a, b| Ord::cmp(&a.name, &b.name));
     }
 
-    if let Some(plugin_id) = &settings.plugin_id {
-        if results.plugin_tests.is_empty() {
-            anyhow::bail!("No plugins matched the plugin ID '{plugin_id}'.");
-        }
+    if let Some(plugin_id) = &settings.plugin_id
+        && results.plugin_tests.is_empty()
+    {
+        anyhow::bail!("No plugins matched the plugin ID '{plugin_id}'.");
     }
 
     Ok(results)

@@ -5,18 +5,18 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::cell::RefCell;
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_char, c_void};
 use std::fmt::Display;
 use std::path::Path;
 use std::pin::Pin;
 use std::thread::ThreadId;
 
 use clap_sys::factory::draft::preset_discovery::{
-    clap_preset_discovery_filetype, clap_preset_discovery_indexer, clap_preset_discovery_location,
-    clap_preset_discovery_location_kind, clap_preset_discovery_soundpack,
     CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT, CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT,
     CLAP_PRESET_DISCOVERY_IS_FAVORITE, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
     CLAP_PRESET_DISCOVERY_LOCATION_FILE, CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN,
+    clap_preset_discovery_filetype, clap_preset_discovery_indexer, clap_preset_discovery_location,
+    clap_preset_discovery_location_kind, clap_preset_discovery_soundpack,
 };
 use clap_sys::version::CLAP_VERSION;
 use parking_lot::Mutex;
@@ -58,8 +58,6 @@ pub struct IndexerResults {
 /// Data parsed from a `clap_preset_discovery_filetype`.
 #[derive(Debug, Clone)]
 pub struct FileType {
-    pub name: String,
-    pub description: Option<String>,
     /// The file extension, doesn't contain a leading period.
     pub extension: String,
 }
@@ -68,10 +66,6 @@ impl FileType {
     /// Parse a `clap_preset_discovery_fileType`, returning an error if the data is not valid.
     pub fn from_descriptor(descriptor: &clap_preset_discovery_filetype) -> Result<Self> {
         let file_type = FileType {
-            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
-                .context("Error parsing the file extension's 'name' field")?,
-            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description) }
-                .context("Error parsing the file extension's 'description' field")?,
             extension: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.file_extension) }
                 .context("Error parsing the file extension's 'file_extension' field")?,
         };
@@ -227,36 +221,40 @@ impl LocationValue {
         location_kind: clap_preset_discovery_location_kind,
         location: *const c_char,
     ) -> Result<Self> {
-        match location_kind {
-            CLAP_PRESET_DISCOVERY_LOCATION_FILE => {
-                if location.is_null() {
-                    anyhow::bail!(
-                        "The location may not be a null pointer with \
+        unsafe {
+            match location_kind {
+                CLAP_PRESET_DISCOVERY_LOCATION_FILE => {
+                    if location.is_null() {
+                        anyhow::bail!(
+                            "The location may not be a null pointer with \
                          CLAP_PRESET_DISCOVERY_LOCATION_FILE."
-                    )
-                }
+                        )
+                    }
 
-                let path = CStr::from_ptr(location);
-                let path_str = path
-                    .to_str()
-                    .context("Invalid UTF-8 in preset discovery location")?;
-                if !path_str.starts_with('/') {
-                    anyhow::bail!("'{path_str}' should be an absolute path, i.e. '/{path_str}'.");
-                }
+                    let path = CStr::from_ptr(location);
+                    let path_str = path
+                        .to_str()
+                        .context("Invalid UTF-8 in preset discovery location")?;
+                    if !path_str.starts_with('/') {
+                        anyhow::bail!(
+                            "'{path_str}' should be an absolute path, i.e. '/{path_str}'."
+                        );
+                    }
 
-                Ok(LocationValue::File(path.to_owned()))
-            }
-            CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN => {
-                if !location.is_null() {
-                    anyhow::bail!(
-                        "The location must be a null pointer with \
+                    Ok(LocationValue::File(path.to_owned()))
+                }
+                CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN => {
+                    if !location.is_null() {
+                        anyhow::bail!(
+                            "The location must be a null pointer with \
                          CLAP_PRESET_DISCOVERY_LOCATION_PLUGIN."
-                    )
-                }
+                        )
+                    }
 
-                Ok(LocationValue::Internal)
+                    Ok(LocationValue::Internal)
+                }
+                n => anyhow::bail!("Unknown location kind {n}."),
             }
-            n => anyhow::bail!("Unknown location kind {n}."),
         }
     }
 
@@ -376,9 +374,9 @@ impl Indexer {
 
             clap_preset_discovery_indexer: Mutex::new(clap_preset_discovery_indexer {
                 clap_version: CLAP_VERSION,
-                name: b"clap-validator\0".as_ptr() as *const c_char,
-                vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
-                url: b"https://github.com/free-audio/clap-validator\0".as_ptr() as *const c_char,
+                name: c"clap-validator".as_ptr(),
+                vendor: c"Robbert van der Helm".as_ptr(),
+                url: c"https://github.com/free-audio/clap-validator".as_ptr(),
                 version: clap_validator_version.as_ptr(),
                 // This is filled with a pointer to this struct after the `Box` has been allocated
                 indexer_data: std::ptr::null_mut(),
@@ -454,22 +452,24 @@ impl Indexer {
         indexer: *const clap_preset_discovery_indexer,
         filetype: *const clap_preset_discovery_filetype,
     ) -> bool {
-        check_null_ptr!(indexer, (*indexer).indexer_data, filetype);
-        let this = &*((*indexer).indexer_data as *const Self);
+        unsafe {
+            check_null_ptr!(indexer, (*indexer).indexer_data, filetype);
+            let this = &*((*indexer).indexer_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_indexer::declare_filetype()");
-        match FileType::from_descriptor(&*filetype) {
-            Ok(file_type) => {
-                this.results.borrow_mut().file_types.push(file_type);
+            this.assert_same_thread("clap_preset_discovery_indexer::declare_filetype()");
+            match FileType::from_descriptor(&*filetype) {
+                Ok(file_type) => {
+                    this.results.borrow_mut().file_types.push(file_type);
 
-                true
-            }
-            Err(err) => {
-                this.set_callback_error(format!(
-                    "Error in 'clap_preset_discovery_indexer::declare_filetype()' call: {err:#}"
-                ));
+                    true
+                }
+                Err(err) => {
+                    this.set_callback_error(format!(
+                        "Error in 'clap_preset_discovery_indexer::declare_filetype()' call: {err:#}"
+                    ));
 
-                false
+                    false
+                }
             }
         }
     }
@@ -478,22 +478,24 @@ impl Indexer {
         indexer: *const clap_preset_discovery_indexer,
         location: *const clap_preset_discovery_location,
     ) -> bool {
-        check_null_ptr!(indexer, (*indexer).indexer_data, location);
-        let this = &*((*indexer).indexer_data as *const Self);
+        unsafe {
+            check_null_ptr!(indexer, (*indexer).indexer_data, location);
+            let this = &*((*indexer).indexer_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_indexer::declare_location()");
-        match Location::from_descriptor(&*location) {
-            Ok(location) => {
-                this.results.borrow_mut().locations.push(location);
+            this.assert_same_thread("clap_preset_discovery_indexer::declare_location()");
+            match Location::from_descriptor(&*location) {
+                Ok(location) => {
+                    this.results.borrow_mut().locations.push(location);
 
-                true
-            }
-            Err(err) => {
-                this.set_callback_error(format!(
-                    "Error in 'clap_preset_discovery_indexer::declare_location()' call: {err:#}"
-                ));
+                    true
+                }
+                Err(err) => {
+                    this.set_callback_error(format!(
+                        "Error in 'clap_preset_discovery_indexer::declare_location()' call: {err:#}"
+                    ));
 
-                false
+                    false
+                }
             }
         }
     }
@@ -502,22 +504,24 @@ impl Indexer {
         indexer: *const clap_preset_discovery_indexer,
         soundpack: *const clap_preset_discovery_soundpack,
     ) -> bool {
-        check_null_ptr!(indexer, (*indexer).indexer_data, soundpack);
-        let this = &*((*indexer).indexer_data as *const Self);
+        unsafe {
+            check_null_ptr!(indexer, (*indexer).indexer_data, soundpack);
+            let this = &*((*indexer).indexer_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_indexer::declare_soundpack()");
-        match Soundpack::from_descriptor(&*soundpack) {
-            Ok(soundpack) => {
-                this.results.borrow_mut().soundpacks.push(soundpack);
+            this.assert_same_thread("clap_preset_discovery_indexer::declare_soundpack()");
+            match Soundpack::from_descriptor(&*soundpack) {
+                Ok(soundpack) => {
+                    this.results.borrow_mut().soundpacks.push(soundpack);
 
-                true
-            }
-            Err(err) => {
-                this.set_callback_error(format!(
+                    true
+                }
+                Err(err) => {
+                    this.set_callback_error(format!(
                     "Error in 'clap_preset_discovery_indexer::declare_soundpack()' call: {err:#}"
                 ));
 
-                false
+                    false
+                }
             }
         }
     }
@@ -526,9 +530,11 @@ impl Indexer {
         indexer: *const clap_preset_discovery_indexer,
         extension_id: *const c_char,
     ) -> *const c_void {
-        check_null_ptr!(indexer, (*indexer).indexer_data, extension_id);
+        unsafe {
+            check_null_ptr!(indexer, (*indexer).indexer_data, extension_id);
 
-        // There are currently no extensions for the preset discovery factory
-        std::ptr::null()
+            // There are currently no extensions for the preset discovery factory
+            std::ptr::null()
+        }
     }
 }

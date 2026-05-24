@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use serde::Serialize;
+use serde_with::serde_as;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
@@ -80,6 +81,7 @@ pub enum PresetIndexResult {
 }
 
 /// Preset information declared by a preset provider.
+#[serde_as]
 #[derive(Debug, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct ProviderPresets {
@@ -92,7 +94,7 @@ pub struct ProviderPresets {
     // All presets declared by the plugin, indexed by their location. Represented by a tuple list
     // because JSON object keys must be strings, and with the change from URIs to a location
     // kind+value that's not longer the case.
-    #[serde(with = "serde_with::rust::btreemap_as_tuple_list")]
+    #[serde_as(as = "Vec<(_, _)>")]
     pub presets: BTreeMap<LocationValue, PresetFile>,
 }
 

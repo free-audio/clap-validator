@@ -5,15 +5,15 @@ use clap_sys::factory::draft::preset_discovery::CLAP_PRESET_DISCOVERY_FACTORY_ID
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::plugin::ext::Extension;
 use crate::plugin::ext::audio_ports::AudioPorts;
 use crate::plugin::ext::preset_load::PresetLoad;
-use crate::plugin::ext::Extension;
 use crate::plugin::host::Host;
 use crate::plugin::instance::process::ProcessConfig;
 use crate::plugin::library::PluginLibrary;
 use crate::plugin::preset_discovery::{LocationValue, PluginAbi, Preset, PresetFile};
-use crate::tests::plugin::ProcessingTest;
 use crate::tests::TestStatus;
+use crate::tests::plugin::ProcessingTest;
 
 // TODO: Test for duplicate locations and soundpacks in declared data across all providers
 
@@ -34,7 +34,7 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
                     "The plugin does not implement the '{}' factory.",
                     CLAP_PRESET_DISCOVERY_FACTORY_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
 
@@ -132,7 +132,7 @@ pub fn test_crawl(library_path: &Path, load_presets: bool) -> Result<TestStatus>
                             plugin_id,
                             PresetLoad::EXTENSION_ID.to_str().unwrap(),
                         )),
-                    })
+                    });
                 }
             };
             // We'll try to run some audio through the plugin to make sure the preset change was
@@ -219,7 +219,7 @@ pub fn test_descriptor_consistency(library_path: &Path) -> Result<TestStatus> {
                     "The plugin does not implement the '{}' factory.",
                     CLAP_PRESET_DISCOVERY_FACTORY_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
 

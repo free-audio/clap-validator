@@ -1,10 +1,10 @@
 //! Abstractions for interacting with the `state` extension.
 
 use anyhow::Result;
-use clap_sys::ext::state::{clap_plugin_state, CLAP_EXT_STATE};
+use clap_sys::ext::state::{CLAP_EXT_STATE, clap_plugin_state};
 use clap_sys::stream::{clap_istream, clap_ostream};
 use parking_lot::Mutex;
-use std::ffi::{c_void, CStr};
+use std::ffi::{CStr, c_void};
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -159,24 +159,26 @@ impl<'a> InputStream<'a> {
     }
 
     unsafe extern "C" fn read(stream: *const clap_istream, buffer: *mut c_void, size: u64) -> i64 {
-        check_null_ptr!(stream, (*stream).ctx, buffer);
-        let this = &*((*stream).ctx as *const Self);
+        unsafe {
+            check_null_ptr!(stream, (*stream).ctx, buffer);
+            let this = &*((*stream).ctx as *const Self);
 
-        // The reads may be limited to a certain buffering size to test the plugin's capabilities
-        let size = match this.max_read_size {
-            Some(max_read_size) => size.min(max_read_size as u64),
-            None => size,
-        };
+            // The reads may be limited to a certain buffering size to test the plugin's capabilities
+            let size = match this.max_read_size {
+                Some(max_read_size) => size.min(max_read_size as u64),
+                None => size,
+            };
 
-        let current_pos = this.read_position.load(Ordering::Relaxed);
-        let bytes_to_read = (this.buffer.len() - current_pos).min(size as usize);
-        this.read_position
-            .fetch_add(bytes_to_read, Ordering::Relaxed);
+            let current_pos = this.read_position.load(Ordering::Relaxed);
+            let bytes_to_read = (this.buffer.len() - current_pos).min(size as usize);
+            this.read_position
+                .fetch_add(bytes_to_read, Ordering::Relaxed);
 
-        std::slice::from_raw_parts_mut(buffer as *mut u8, bytes_to_read)
-            .copy_from_slice(&this.buffer[current_pos..current_pos + bytes_to_read]);
+            std::slice::from_raw_parts_mut(buffer as *mut u8, bytes_to_read)
+                .copy_from_slice(&this.buffer[current_pos..current_pos + bytes_to_read]);
 
-        bytes_to_read as i64
+            bytes_to_read as i64
+        }
     }
 }
 
@@ -224,22 +226,24 @@ impl OutputStream {
         buffer: *const c_void,
         size: u64,
     ) -> i64 {
-        check_null_ptr!(stream, (*stream).ctx, buffer);
-        let this = &*((*stream).ctx as *const Self);
+        unsafe {
+            check_null_ptr!(stream, (*stream).ctx, buffer);
+            let this = &*((*stream).ctx as *const Self);
 
-        // The writes may be limited to a certain buffering size to test the plugin's capabilities
-        let size = match this.max_write_size {
-            Some(max_write_size) => size.min(max_write_size as u64),
-            None => size,
-        };
+            // The writes may be limited to a certain buffering size to test the plugin's capabilities
+            let size = match this.max_write_size {
+                Some(max_write_size) => size.min(max_write_size as u64),
+                None => size,
+            };
 
-        this.buffer
-            .lock()
-            .extend_from_slice(std::slice::from_raw_parts(
-                buffer as *const u8,
-                size as usize,
-            ));
+            this.buffer
+                .lock()
+                .extend_from_slice(std::slice::from_raw_parts(
+                    buffer as *const u8,
+                    size as usize,
+                ));
 
-        size as i64
+            size as i64
+        }
     }
 }

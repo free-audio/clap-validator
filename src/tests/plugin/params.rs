@@ -3,20 +3,20 @@
 use anyhow::{Context, Result};
 use clap_sys::events::CLAP_EVENT_PARAM_VALUE;
 use clap_sys::id::clap_id;
-use rand::Rng;
+use rand::RngExt;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-use super::processing::ProcessingTest;
 use super::PluginTestCase;
+use super::processing::ProcessingTest;
+use crate::plugin::ext::Extension;
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::NotePorts;
 use crate::plugin::ext::params::Params;
-use crate::plugin::ext::Extension;
 use crate::plugin::host::Host;
 use crate::plugin::instance::process::{Event, ProcessConfig};
 use crate::plugin::library::PluginLibrary;
-use crate::tests::rng::{new_prng, NoteGenerator, ParamFuzzer};
+use crate::tests::rng::{NoteGenerator, ParamFuzzer, new_prng};
 use crate::tests::{TestCase, TestStatus};
 
 /// The fixed buffer size to use for these tests.
@@ -59,7 +59,7 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
                     "The plugin does not implement the '{}' extension.",
                     Params::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();
@@ -87,10 +87,10 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
         let values: [f64; VALUES_PER_PARAM] = [
             *param_info.range.start(),
             *param_info.range.end(),
-            prng.gen_range(param_info.range.clone()),
-            prng.gen_range(param_info.range.clone()),
-            prng.gen_range(param_info.range.clone()),
-            prng.gen_range(param_info.range),
+            prng.random_range(param_info.range.clone()),
+            prng.random_range(param_info.range.clone()),
+            prng.random_range(param_info.range.clone()),
+            prng.random_range(param_info.range),
         ];
         'value_loop: for starting_value in values {
             // If the plugin rounds string representations then `value` may very
@@ -207,7 +207,7 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str) -> Result
                     "The plugin does not implement the '{}' extension.",
                     Params::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();
@@ -355,7 +355,7 @@ pub fn test_param_set_wrong_namespace(
                     "The plugin does not implement the '{}' extension.",
                     Params::EXTENSION_ID.to_str().unwrap(),
                 )),
-            })
+            });
         }
     };
     host.handle_callbacks_once();

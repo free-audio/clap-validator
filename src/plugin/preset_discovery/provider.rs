@@ -182,9 +182,9 @@ impl<'a> Provider<'a> {
                 let file_path_str = file_path
                     .to_str()
                     .context("Invalid UTF-8 in location path")?;
-                let metadata = std::fs::metadata(file_path_str).with_context(|| {
-                    "Could not query metadata for the declared file location '{file_path_str}'"
-                })?;
+                let metadata = std::fs::metadata(file_path_str).with_context(
+                    || "Could not query metadata for the declared file location '{file_path_str}'",
+                )?;
                 if metadata.is_dir() {
                     // If the plugin declared valid file extensions, then we'll filter by those file
                     // extensions

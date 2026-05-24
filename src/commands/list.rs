@@ -5,7 +5,7 @@ use colored::Colorize;
 use std::path::Path;
 use std::process::ExitCode;
 
-use super::{println_wrapped, println_wrapped_no_indent, TextWrapper};
+use super::{TextWrapper, println_wrapped, println_wrapped_no_indent};
 use crate::index::PresetIndexResult;
 use crate::plugin::preset_discovery::PresetFile;
 

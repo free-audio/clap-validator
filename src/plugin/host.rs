@@ -1,17 +1,17 @@
 //! Data structures and utilities for hosting plugins.
 
 use anyhow::{Context, Result};
-use clap_sys::ext::audio_ports::{clap_host_audio_ports, CLAP_EXT_AUDIO_PORTS};
-use clap_sys::ext::draft::preset_load::{clap_host_preset_load, CLAP_EXT_PRESET_LOAD};
+use clap_sys::ext::audio_ports::{CLAP_EXT_AUDIO_PORTS, clap_host_audio_ports};
+use clap_sys::ext::draft::preset_load::{CLAP_EXT_PRESET_LOAD, clap_host_preset_load};
 use clap_sys::ext::note_ports::{
-    clap_host_note_ports, clap_note_dialect, CLAP_EXT_NOTE_PORTS, CLAP_NOTE_DIALECT_CLAP,
-    CLAP_NOTE_DIALECT_MIDI, CLAP_NOTE_DIALECT_MIDI_MPE,
+    CLAP_EXT_NOTE_PORTS, CLAP_NOTE_DIALECT_CLAP, CLAP_NOTE_DIALECT_MIDI,
+    CLAP_NOTE_DIALECT_MIDI_MPE, clap_host_note_ports, clap_note_dialect,
 };
 use clap_sys::ext::params::{
-    clap_host_params, clap_param_clear_flags, clap_param_rescan_flags, CLAP_EXT_PARAMS,
+    CLAP_EXT_PARAMS, clap_host_params, clap_param_clear_flags, clap_param_rescan_flags,
 };
-use clap_sys::ext::state::{clap_host_state, CLAP_EXT_STATE};
-use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
+use clap_sys::ext::state::{CLAP_EXT_STATE, clap_host_state};
+use clap_sys::ext::thread_check::{CLAP_EXT_THREAD_CHECK, clap_host_thread_check};
 use clap_sys::factory::draft::preset_discovery::clap_preset_discovery_location_kind;
 use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
@@ -22,12 +22,12 @@ use crossbeam::channel;
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 use std::os::raw::c_char;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::ThreadId;
 
 use crate::plugin::instance::{PluginHandle, PluginStatus};
@@ -153,9 +153,9 @@ impl InstanceState {
                 clap_version: CLAP_VERSION,
                 // This is populated with a pointer to the `Arc<Self>`'s data after creating the Arc
                 host_data: std::ptr::null_mut(),
-                name: b"clap-validator\0".as_ptr() as *const c_char,
-                vendor: b"Robbert van der Helm\0".as_ptr() as *const c_char,
-                url: b"https://github.com/free-audio/clap-validator\0".as_ptr() as *const c_char,
+                name: c"clap-validator".as_ptr(),
+                vendor: c"Robbert van der Helm".as_ptr(),
+                url: c"https://github.com/free-audio/clap-validator".as_ptr(),
                 version: clap_validator_version.as_ptr(),
                 get_extension: Some(Host::get_extension),
                 request_restart: Some(Host::request_restart),
@@ -180,12 +180,14 @@ impl InstanceState {
 
     /// Get the `InstanceState` and the host from a valid `clap_host` pointer.
     pub unsafe fn from_clap_host_ptr<'a>(ptr: *const clap_host) -> (&'a InstanceState, &'a Host) {
-        // This should have already been asserted before calling this function, but this is a
-        // validator and you can never be too sure
-        assert!(!ptr.is_null() && !(*ptr).host_data.is_null());
+        unsafe {
+            // This should have already been asserted before calling this function, but this is a
+            // validator and you can never be too sure
+            assert!(!ptr.is_null() && !(*ptr).host_data.is_null());
 
-        let this = &*((*ptr).host_data as *const Self);
-        (this, &*this.host)
+            let this = &*((*ptr).host_data as *const Self);
+            (this, &*this.host)
+        }
     }
 
     /// Get the host instance if this is called from the main thread. Returns `None` if this is not
@@ -471,99 +473,119 @@ impl Host {
         host: *const clap_host,
         extension_id: *const c_char,
     ) -> *const c_void {
-        check_null_ptr!(host, (*host).host_data, extension_id);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data, extension_id);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        // Right now there's no way to have the host only expose certain extensions. We can always
-        // add that when test cases need it.
-        let extension_id_cstr = CStr::from_ptr(extension_id);
-        if extension_id_cstr == CLAP_EXT_AUDIO_PORTS {
-            &this.clap_host_audio_ports as *const _ as *const c_void
-        } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS {
-            &this.clap_host_note_ports as *const _ as *const c_void
-        } else if extension_id_cstr == CLAP_EXT_PRESET_LOAD {
-            &this.clap_host_preset_load as *const _ as *const c_void
-        } else if extension_id_cstr == CLAP_EXT_PARAMS {
-            &this.clap_host_params as *const _ as *const c_void
-        } else if extension_id_cstr == CLAP_EXT_STATE {
-            &this.clap_host_state as *const _ as *const c_void
-        } else if extension_id_cstr == CLAP_EXT_THREAD_CHECK {
-            &this.clap_host_thread_check as *const _ as *const c_void
-        } else {
-            std::ptr::null()
+            // Right now there's no way to have the host only expose certain extensions. We can always
+            // add that when test cases need it.
+            let extension_id_cstr = CStr::from_ptr(extension_id);
+            if extension_id_cstr == CLAP_EXT_AUDIO_PORTS {
+                &this.clap_host_audio_ports as *const _ as *const c_void
+            } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS {
+                &this.clap_host_note_ports as *const _ as *const c_void
+            } else if extension_id_cstr == CLAP_EXT_PRESET_LOAD {
+                &this.clap_host_preset_load as *const _ as *const c_void
+            } else if extension_id_cstr == CLAP_EXT_PARAMS {
+                &this.clap_host_params as *const _ as *const c_void
+            } else if extension_id_cstr == CLAP_EXT_STATE {
+                &this.clap_host_state as *const _ as *const c_void
+            } else if extension_id_cstr == CLAP_EXT_THREAD_CHECK {
+                &this.clap_host_thread_check as *const _ as *const c_void
+            } else {
+                std::ptr::null()
+            }
         }
     }
 
     unsafe extern "C" fn request_restart(host: *const clap_host) {
-        check_null_ptr!(host, (*host).host_data);
-        let (instance, _) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (instance, _) = InstanceState::from_clap_host_ptr(host);
 
-        // This flag will be reset at the start of one of the `ProcessingTest::run*` functions, and
-        // in the multi-iteration run function it will trigger a deactivate->reactivate cycle
-        log::trace!("'clap_host::request_restart()' was called by the plugin, setting the flag");
-        instance.requested_restart.store(true, Ordering::SeqCst);
+            // This flag will be reset at the start of one of the `ProcessingTest::run*` functions, and
+            // in the multi-iteration run function it will trigger a deactivate->reactivate cycle
+            log::trace!(
+                "'clap_host::request_restart()' was called by the plugin, setting the flag"
+            );
+            instance.requested_restart.store(true, Ordering::SeqCst);
+        }
     }
 
     unsafe extern "C" fn request_process(host: *const clap_host) {
-        check_null_ptr!(host, (*host).host_data);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
 
-        // Handling this within the context of the validator would be a bit messy. Do plugins use
-        // this?
-        log::debug!("TODO: Handle 'clap_host::request_process()'");
+            // Handling this within the context of the validator would be a bit messy. Do plugins use
+            // this?
+            log::debug!("TODO: Handle 'clap_host::request_process()'");
+        }
     }
 
     unsafe extern "C" fn request_callback(host: *const clap_host) {
-        check_null_ptr!(host, (*host).host_data);
-        let (instance, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (instance, this) = InstanceState::from_clap_host_ptr(host);
 
-        // This this is either handled by `handle_callbacks_blocking()` while the audio thread is
-        // active, or by an explicit call to `handle_callbacks_once()`. We print a warning if the
-        // callback is not handled before the plugin is destroyed.
-        log::trace!("'clap_host::request_callback()' was called by the plugin, setting the flag");
-        instance.requested_callback.store(true, Ordering::SeqCst);
-        this.callback_task_sender.send(CallbackTask::Poll).unwrap();
+            // This this is either handled by `handle_callbacks_blocking()` while the audio thread is
+            // active, or by an explicit call to `handle_callbacks_once()`. We print a warning if the
+            // callback is not handled before the plugin is destroyed.
+            log::trace!(
+                "'clap_host::request_callback()' was called by the plugin, setting the flag"
+            );
+            instance.requested_callback.store(true, Ordering::SeqCst);
+            this.callback_task_sender.send(CallbackTask::Poll).unwrap();
+        }
     }
 
     unsafe extern "C" fn ext_audio_ports_is_rescan_flag_supported(
         host: *const clap_host,
         _flag: u32,
     ) -> bool {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_audio_ports::is_rescan_flag_supported()");
-        log::debug!("TODO: Handle 'clap_host_audio_ports::is_rescan_flag_supported()'");
+            this.assert_main_thread("clap_host_audio_ports::is_rescan_flag_supported()");
+            log::debug!("TODO: Handle 'clap_host_audio_ports::is_rescan_flag_supported()'");
 
-        true
+            true
+        }
     }
 
     unsafe extern "C" fn ext_audio_ports_rescan(host: *const clap_host, _flags: u32) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        // TODO: A couple of these flags are only allowed when the plugin is not activated, make
-        //       sure to check for this when implementing this functionality
-        this.assert_main_thread("clap_host_audio_ports::rescan()");
-        log::debug!("TODO: Handle 'clap_host_audio_ports::rescan()'");
+            // TODO: A couple of these flags are only allowed when the plugin is not activated, make
+            //       sure to check for this when implementing this functionality
+            this.assert_main_thread("clap_host_audio_ports::rescan()");
+            log::debug!("TODO: Handle 'clap_host_audio_ports::rescan()'");
+        }
     }
 
     unsafe extern "C" fn ext_note_ports_supported_dialects(
         host: *const clap_host,
     ) -> clap_note_dialect {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_note_ports::supported_dialects()");
+            this.assert_main_thread("clap_host_note_ports::supported_dialects()");
 
-        CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE
+            CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE
+        }
     }
 
     unsafe extern "C" fn ext_note_ports_rescan(host: *const clap_host, _flags: u32) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_note_ports::rescan()");
-        log::debug!("TODO: Handle 'clap_host_note_ports::rescan()'");
+            this.assert_main_thread("clap_host_note_ports::rescan()");
+            log::debug!("TODO: Handle 'clap_host_note_ports::rescan()'");
+        }
     }
 
     unsafe extern "C" fn ext_preset_load_on_error(
@@ -574,33 +596,37 @@ impl Host {
         os_error: i32,
         msg: *const c_char,
     ) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_preset_load::on_error()");
+            this.assert_main_thread("clap_host_preset_load::on_error()");
 
-        let location = LocationValue::new(location_kind, location)
-            .context("'clap_host_preset_load::on_error()' called with invalid location parameters");
-        let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }.context(
-            "'clap_host_preset_load::on_error()' called with an invalid load_key parameter",
-        );
-        let msg = unsafe { util::cstr_ptr_to_mandatory_string(msg) }
-            .context("'clap_host_preset_load::on_error()' called with an invalid msg parameter");
-        match (location, load_key, msg) {
-            (Ok(location), Ok(Some(load_key)), Ok(msg)) => {
-                this.set_callback_error(format!(
-                    "'clap_host_preset_load::on_error()' called for {location} with load key \
+            let location = LocationValue::new(location_kind, location).context(
+                "'clap_host_preset_load::on_error()' called with invalid location parameters",
+            );
+            let load_key = util::cstr_ptr_to_optional_string(load_key).context(
+                "'clap_host_preset_load::on_error()' called with an invalid load_key parameter",
+            );
+            let msg = util::cstr_ptr_to_mandatory_string(msg).context(
+                "'clap_host_preset_load::on_error()' called with an invalid msg parameter",
+            );
+            match (location, load_key, msg) {
+                (Ok(location), Ok(Some(load_key)), Ok(msg)) => {
+                    this.set_callback_error(format!(
+                        "'clap_host_preset_load::on_error()' called for {location} with load key \
                      {load_key}, OS error code {os_error}, and the following error message: {msg}"
-                ));
-            }
-            (Ok(location), Ok(None), Ok(msg)) => {
-                this.set_callback_error(format!(
+                    ));
+                }
+                (Ok(location), Ok(None), Ok(msg)) => {
+                    this.set_callback_error(format!(
                     "'clap_host_preset_load::on_error()' called for {location} with no load key, \
                      OS error code {os_error}, and the following error message: {msg}"
                 ));
-            }
-            (Err(err), _, _) | (_, Err(err), _) | (_, _, Err(err)) => {
-                this.set_callback_error(format!("{err:#}"));
+                }
+                (Err(err), _, _) | (_, Err(err), _) | (_, _, Err(err)) => {
+                    this.set_callback_error(format!("{err:#}"));
+                }
             }
         }
     }
@@ -611,21 +637,25 @@ impl Host {
         location: *const c_char,
         load_key: *const c_char,
     ) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_preset_load::loaded()");
+            this.assert_main_thread("clap_host_preset_load::loaded()");
 
-        let location = LocationValue::new(location_kind, location)
-            .context("'clap_host_preset_load::loaded()' called with invalid location parameters");
-        let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }
-            .context("'clap_host_preset_load::loaded()' called with an invalid load_key parameter");
-        match (location, load_key) {
-            (Ok(_location), Ok(_load_key)) => {
-                log::debug!("TODO: Handle 'clap_host_preset_load::loaded()'");
-            }
-            (Err(err), _) | (_, Err(err)) => {
-                this.set_callback_error(format!("{err:#}"));
+            let location = LocationValue::new(location_kind, location).context(
+                "'clap_host_preset_load::loaded()' called with invalid location parameters",
+            );
+            let load_key = util::cstr_ptr_to_optional_string(load_key).context(
+                "'clap_host_preset_load::loaded()' called with an invalid load_key parameter",
+            );
+            match (location, load_key) {
+                (Ok(_location), Ok(_load_key)) => {
+                    log::debug!("TODO: Handle 'clap_host_preset_load::loaded()'");
+                }
+                (Err(err), _) | (_, Err(err)) => {
+                    this.set_callback_error(format!("{err:#}"));
+                }
             }
         }
     }
@@ -634,11 +664,13 @@ impl Host {
         host: *const clap_host,
         _flags: clap_param_rescan_flags,
     ) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_params::rescan()");
-        log::debug!("TODO: Handle 'clap_host_params::rescan()'");
+            this.assert_main_thread("clap_host_params::rescan()");
+            log::debug!("TODO: Handle 'clap_host_params::rescan()'");
+        }
     }
 
     unsafe extern "C" fn ext_params_clear(
@@ -646,40 +678,50 @@ impl Host {
         _param_id: clap_id,
         _flags: clap_param_clear_flags,
     ) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_params::clear()");
-        log::debug!("TODO: Handle 'clap_host_params::clear()'");
+            this.assert_main_thread("clap_host_params::clear()");
+            log::debug!("TODO: Handle 'clap_host_params::clear()'");
+        }
     }
 
     unsafe extern "C" fn ext_params_request_flush(host: *const clap_host) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_not_audio_thread("clap_host_params::request_flush()");
-        log::debug!("TODO: Handle 'clap_host_params::request_flush()'");
+            this.assert_not_audio_thread("clap_host_params::request_flush()");
+            log::debug!("TODO: Handle 'clap_host_params::request_flush()'");
+        }
     }
 
     unsafe extern "C" fn ext_state_mark_dirty(host: *const clap_host) {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.assert_main_thread("clap_host_state::mark_dirty()");
-        log::debug!("TODO: Handle 'clap_host_state::mark_dirty()'");
+            this.assert_main_thread("clap_host_state::mark_dirty()");
+            log::debug!("TODO: Handle 'clap_host_state::mark_dirty()'");
+        }
     }
 
     unsafe extern "C" fn ext_thread_check_is_main_thread(host: *const clap_host) -> bool {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        std::thread::current().id() == this.main_thread_id
+            std::thread::current().id() == this.main_thread_id
+        }
     }
 
     unsafe extern "C" fn ext_thread_check_is_audio_thread(host: *const clap_host) -> bool {
-        check_null_ptr!(host, (*host).host_data);
-        let (_, this) = InstanceState::from_clap_host_ptr(host);
+        unsafe {
+            check_null_ptr!(host, (*host).host_data);
+            let (_, this) = InstanceState::from_clap_host_ptr(host);
 
-        this.is_audio_thread(std::thread::current().id())
+            this.is_audio_thread(std::thread::current().id())
+        }
     }
 }

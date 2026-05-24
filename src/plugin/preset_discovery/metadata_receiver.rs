@@ -5,9 +5,9 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap_sys::factory::draft::preset_discovery::{
-    clap_plugin_id, clap_preset_discovery_metadata_receiver, clap_timestamp,
     CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT, CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT,
-    CLAP_PRESET_DISCOVERY_IS_FAVORITE, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
+    CLAP_PRESET_DISCOVERY_IS_FAVORITE, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT, clap_plugin_id,
+    clap_preset_discovery_metadata_receiver, clap_timestamp,
 };
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -388,23 +388,25 @@ impl<'a> MetadataReceiver<'a> {
         os_error: i32,
         error_message: *const c_char,
     ) {
-        // We'll have a dedicated error message for a missing `error_message`
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            // We'll have a dedicated error message for a missing `error_message`
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::on_error()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::on_error()");
 
-        let error_message = unsafe { util::cstr_ptr_to_mandatory_string(error_message) }.context(
+            let error_message = util::cstr_ptr_to_mandatory_string(error_message).context(
             "'clap_preset_discovery_metadata_receiver::on_error()' called with an invalid error \
              message",
         );
-        match error_message {
+            match error_message {
             Ok(error_message) => this.set_callback_error(format!(
                 "'clap_preset_discovery_metadata_receiver::on_error()' called for OS error code \
                  {os_error} with the following error message: {error_message}"
             )),
             // This would be quite ironic
             Err(err) => this.set_callback_error(format!("{err:#}")),
+        }
         }
     }
 
@@ -413,94 +415,96 @@ impl<'a> MetadataReceiver<'a> {
         name: *const c_char,
         load_key: *const c_char,
     ) -> bool {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::begin_preset()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::begin_preset()");
 
-        let name = unsafe { util::cstr_ptr_to_optional_string(name) }.context(
-            "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
+            let name = util::cstr_ptr_to_optional_string(name).context(
+                "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
              name parameter",
-        );
-        let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }.context(
-            "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
+            );
+            let load_key = util::cstr_ptr_to_optional_string(load_key).context(
+                "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
              load_key parameter",
-        );
-        match (name, load_key) {
-            (Ok(name), Ok(load_key)) => {
-                // We'll check for some errorous situations first. The `result` borrow needs to be
-                // dropped before calling `maybe_write_preset()` as it will try to borrow it mutably
-                {
-                    let result = this.result.borrow();
-                    let error_message = match (&*result, &load_key) {
-                        // If there was an error then just immediately exit since nothing will change that
-                        (Some(Err(_)), _) => return false,
-                        (Some(Ok(PresetFile::Single(_))), None) => Some(
-                            "calling 'begin_preset()' a second time for a non-container preset \
+            );
+            match (name, load_key) {
+                (Ok(name), Ok(load_key)) => {
+                    // We'll check for some errorous situations first. The `result` borrow needs to be
+                    // dropped before calling `maybe_write_preset()` as it will try to borrow it mutably
+                    {
+                        let result = this.result.borrow();
+                        let error_message = match (&*result, &load_key) {
+                            // If there was an error then just immediately exit since nothing will change that
+                            (Some(Err(_)), _) => return false,
+                            (Some(Ok(PresetFile::Single(_))), None) => Some(
+                                "calling 'begin_preset()' a second time for a non-container preset \
                              file with no load key is not allowed.",
-                        ),
-                        (Some(Ok(PresetFile::Single(_))), Some(_)) => Some(
-                            "'begin_preset()' was called without a load key for the first time, \
+                            ),
+                            (Some(Ok(PresetFile::Single(_))), Some(_)) => Some(
+                                "'begin_preset()' was called without a load key for the first time, \
                              and with a load key the second time. This is invalid behavior.",
-                        ),
-                        (Some(Ok(PresetFile::Container(_))), None) => Some(
-                            "'begin_preset()' was called with a load key for the first time, and \
+                            ),
+                            (Some(Ok(PresetFile::Container(_))), None) => Some(
+                                "'begin_preset()' was called with a load key for the first time, and \
                              without a load key the second time. This is invalid behavior.",
-                        ),
-                        // If this is the first call and there are no errors then everything's fine
-                        (None, _) | (Some(Ok(PresetFile::Container(_))), Some(_)) => None,
-                    };
+                            ),
+                            // If this is the first call and there are no errors then everything's fine
+                            (None, _) | (Some(Ok(PresetFile::Container(_))), Some(_)) => None,
+                        };
 
-                    if let Some(error_message) = error_message {
-                        this.set_callback_error(format!(
+                        if let Some(error_message) = error_message {
+                            this.set_callback_error(format!(
                             "Error in 'clap_preset_discovery_metadata_receiver::begin_preset()' \
                              call: {error_message}"
                         ));
-                        return false;
-                    }
-                }
-
-                // Container presets have a load key, single-preset files don't have a load key. The
-                // name field is mandatory for container presets, and optional for non-container
-                // presets. If it's not specified we'll use the file name instead.
-                let preset_name = match (name, &load_key) {
-                    (None, None) => PresetName::Filename(match this.location.file_name() {
-                        Ok(file_name) => file_name,
-                        Err(err) => {
-                            this.set_callback_error(format!(
-                                "Could not derive a file name from {}: {:#}",
-                                this.location, err
-                            ));
                             return false;
                         }
-                    }),
-                    (Some(name), _) => PresetName::Explicit(name),
-                    (None, Some(_)) => {
-                        this.set_callback_error(
-                            "Container presets must specify a preset name.".to_string(),
-                        );
-                        return false;
                     }
-                };
 
-                // If this is a subsequent `begin_preset()` call for a container preset, then the
-                // old preset is written to `self.result` before starting a new one.
-                if load_key.is_some() {
-                    this.maybe_write_preset();
+                    // Container presets have a load key, single-preset files don't have a load key. The
+                    // name field is mandatory for container presets, and optional for non-container
+                    // presets. If it's not specified we'll use the file name instead.
+                    let preset_name = match (name, &load_key) {
+                        (None, None) => PresetName::Filename(match this.location.file_name() {
+                            Ok(file_name) => file_name,
+                            Err(err) => {
+                                this.set_callback_error(format!(
+                                    "Could not derive a file name from {}: {:#}",
+                                    this.location, err
+                                ));
+                                return false;
+                            }
+                        }),
+                        (Some(name), _) => PresetName::Explicit(name),
+                        (None, Some(_)) => {
+                            this.set_callback_error(
+                                "Container presets must specify a preset name.".to_string(),
+                            );
+                            return false;
+                        }
+                    };
+
+                    // If this is a subsequent `begin_preset()` call for a container preset, then the
+                    // old preset is written to `self.result` before starting a new one.
+                    if load_key.is_some() {
+                        this.maybe_write_preset();
+                    }
+
+                    // This starts the declaration of a new preset. The methods below this write to this
+                    // data structure, and it is finally added to `self.result` in a
+                    // `maybe_write_preset()` call either from here or from the drop handler.
+                    *this.next_load_key.borrow_mut() = load_key;
+                    *this.next_preset_data.borrow_mut() = Some(PartialPreset::new(preset_name));
+
+                    true
                 }
+                (Err(err), _) | (_, Err(err)) => {
+                    this.set_callback_error(format!("{err:#}"));
 
-                // This starts the declaration of a new preset. The methods below this write to this
-                // data structure, and it is finally added to `self.result` in a
-                // `maybe_write_preset()` call either from here or from the drop handler.
-                *this.next_load_key.borrow_mut() = load_key;
-                *this.next_preset_data.borrow_mut() = Some(PartialPreset::new(preset_name));
-
-                true
-            }
-            (Err(err), _) | (_, Err(err)) => {
-                this.set_callback_error(format!("{err:#}"));
-
-                false
+                    false
+                }
             }
         }
     }
@@ -509,53 +513,55 @@ impl<'a> MetadataReceiver<'a> {
         receiver: *const clap_preset_discovery_metadata_receiver,
         plugin_id: *const clap_plugin_id,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data, plugin_id);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data, plugin_id);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_plugin_id()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_plugin_id()");
 
-        let abi = unsafe { util::cstr_ptr_to_mandatory_string((*plugin_id).abi) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_plugin_id()' called with an invalid \
+            let abi = util::cstr_ptr_to_mandatory_string((*plugin_id).abi).context(
+                "'clap_preset_discovery_metadata_receiver::add_plugin_id()' called with an invalid \
              abi field",
-        );
-        let id = unsafe { util::cstr_ptr_to_mandatory_string((*plugin_id).id) }.context(
+            );
+            let id = util::cstr_ptr_to_mandatory_string((*plugin_id).id).context(
             "'clap_preset_discovery_metadata_receiver::add_plugin_id()' called with an invalid id \
              field",
         );
-        match (abi, id) {
-            (Ok(abi), Ok(id)) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
+            match (abi, id) {
+                (Ok(abi), Ok(id)) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
                             "'clap_preset_discovery_metadata_receiver::add_plugin_id()' with no \
                              preceding 'begin_preset()' call. This is not valid.",
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
-                if abi == "clap" {
-                    next_preset_data.plugin_ids.push(PluginId {
-                        abi: PluginAbi::Clap,
-                        id,
-                    });
-                } else if abi.trim().eq_ignore_ascii_case("clap") {
-                    // Let's just assume noone comes up with a painfully sarcastic 'ClAp' standard
-                    this.set_callback_error(format!(
-                        "'{abi}' was provided as an ABI argument to \
+                    if abi == "clap" {
+                        next_preset_data.plugin_ids.push(PluginId {
+                            abi: PluginAbi::Clap,
+                            id,
+                        });
+                    } else if abi.trim().eq_ignore_ascii_case("clap") {
+                        // Let's just assume noone comes up with a painfully sarcastic 'ClAp' standard
+                        this.set_callback_error(format!(
+                            "'{abi}' was provided as an ABI argument to \
                          'clap_preset_discovery_metadata_receiver::add_plugin_id()'. This is \
                          probably a typo. The expected value is 'clap' in all lowercase."
-                    ));
-                } else {
-                    next_preset_data.plugin_ids.push(PluginId {
-                        abi: PluginAbi::Other(abi),
-                        id,
-                    });
+                        ));
+                    } else {
+                        next_preset_data.plugin_ids.push(PluginId {
+                            abi: PluginAbi::Other(abi),
+                            id,
+                        });
+                    }
                 }
+                (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
             }
-            (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
         }
     }
 
@@ -563,32 +569,34 @@ impl<'a> MetadataReceiver<'a> {
         receiver: *const clap_preset_discovery_metadata_receiver,
         soundpack_id: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_soundpack_id()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_soundpack_id()");
 
-        let soundpack_id = unsafe { util::cstr_ptr_to_mandatory_string(soundpack_id) }.context(
+            let soundpack_id = util::cstr_ptr_to_mandatory_string(soundpack_id).context(
             "'clap_preset_discovery_metadata_receiver::set_soundpack_id()' called with an invalid \
              parameter",
         );
-        match soundpack_id {
-            Ok(soundpack_id) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
+            match soundpack_id {
+                Ok(soundpack_id) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
                             "'clap_preset_discovery_metadata_receiver::set_soundpack_id()' with \
                              no preceding 'begin_preset()' call. This is not valid.",
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
-                next_preset_data.soundpack_id = Some(soundpack_id);
+                    next_preset_data.soundpack_id = Some(soundpack_id);
+                }
+                Err(err) => this.set_callback_error(format!("{err:#}")),
             }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
         }
     }
 
@@ -596,61 +604,65 @@ impl<'a> MetadataReceiver<'a> {
         receiver: *const clap_preset_discovery_metadata_receiver,
         flags: u32,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_flags()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_flags()");
 
-        let mut next_preset_data = this.next_preset_data.borrow_mut();
-        let next_preset_data = match &mut *next_preset_data {
-            Some(next_preset_data) => next_preset_data,
-            None => {
-                this.set_callback_error(
-                    "'clap_preset_discovery_metadata_receiver::set_flags()' with no preceding \
+            let mut next_preset_data = this.next_preset_data.borrow_mut();
+            let next_preset_data = match &mut *next_preset_data {
+                Some(next_preset_data) => next_preset_data,
+                None => {
+                    this.set_callback_error(
+                        "'clap_preset_discovery_metadata_receiver::set_flags()' with no preceding \
                      'begin_preset()' call. This is not valid.",
-                );
-                return;
-            }
-        };
+                    );
+                    return;
+                }
+            };
 
-        next_preset_data.flags = Some(Flags {
-            is_factory_content: (flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
-            is_user_content: (flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
-            is_demo_content: (flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
-            is_favorite: (flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
-        });
+            next_preset_data.flags = Some(Flags {
+                is_factory_content: (flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
+                is_user_content: (flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
+                is_demo_content: (flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
+                is_favorite: (flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            });
+        }
     }
 
     unsafe extern "C" fn add_creator(
         receiver: *const clap_preset_discovery_metadata_receiver,
         creator: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_creator()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_creator()");
 
-        let creator = unsafe { util::cstr_ptr_to_mandatory_string(creator) }.context(
-            "'clap_preset_discovery_metadata_receiver::set_creator()' called with an invalid \
+            let creator = util::cstr_ptr_to_mandatory_string(creator).context(
+                "'clap_preset_discovery_metadata_receiver::set_creator()' called with an invalid \
              parameter",
-        );
-        match creator {
-            Ok(creator) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::set_creator()' with no \
+            );
+            match creator {
+                Ok(creator) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
+                                "'clap_preset_discovery_metadata_receiver::set_creator()' with no \
                              preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
-                };
+                            );
+                            return;
+                        }
+                    };
 
-                next_preset_data.creators.push(creator);
+                    next_preset_data.creators.push(creator);
+                }
+                Err(err) => this.set_callback_error(format!("{err:#}")),
             }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
         }
     }
 
@@ -658,32 +670,34 @@ impl<'a> MetadataReceiver<'a> {
         receiver: *const clap_preset_discovery_metadata_receiver,
         description: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_description()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_description()");
 
-        let description = unsafe { util::cstr_ptr_to_mandatory_string(description) }.context(
+            let description = util::cstr_ptr_to_mandatory_string(description).context(
             "'clap_preset_discovery_metadata_receiver::set_description()' called with an invalid \
              parameter",
         );
-        match description {
-            Ok(description) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
+            match description {
+                Ok(description) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
                             "'clap_preset_discovery_metadata_receiver::set_description()' with no \
                              preceding 'begin_preset()' call. This is not valid.",
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
-                next_preset_data.description = Some(description);
+                    next_preset_data.description = Some(description);
+                }
+                Err(err) => this.set_callback_error(format!("{err:#}")),
             }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
         }
     }
 
@@ -692,43 +706,45 @@ impl<'a> MetadataReceiver<'a> {
         creation_time: clap_timestamp,
         modification_time: clap_timestamp,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_timestamps()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_timestamps()");
 
-        // These are parsed to `None` values if the timestamp is 0/CLAP_TIMESTAMP_UNKNOWN
-        let creation_time = util::parse_timestamp(creation_time).context(
+            // These are parsed to `None` values if the timestamp is 0/CLAP_TIMESTAMP_UNKNOWN
+            let creation_time = util::parse_timestamp(creation_time).context(
             "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with an invalid \
              creation_time parameter",
         );
-        let modification_time = util::parse_timestamp(modification_time).context(
+            let modification_time = util::parse_timestamp(modification_time).context(
             "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with an invalid \
              modification_time parameter",
         );
-        match (creation_time, modification_time) {
-            // Calling the function like htis doesn't make any sense, so we'll point that out
-            (Ok(None), Ok(None)) => this.set_callback_error(
-                "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with both \
+            match (creation_time, modification_time) {
+                // Calling the function like htis doesn't make any sense, so we'll point that out
+                (Ok(None), Ok(None)) => this.set_callback_error(
+                    "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with both \
                  arguments set to 'CLAP_TIMESTAMP_UNKNOWN'.",
-            ),
-            (Ok(creation_time), Ok(modification_time)) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
+                ),
+                (Ok(creation_time), Ok(modification_time)) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
                             "'clap_preset_discovery_metadata_receiver::set_timestamps()' with no \
                              preceding 'begin_preset()' call. This is not valid.",
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
-                next_preset_data.creation_time = creation_time;
-                next_preset_data.modification_time = modification_time;
+                    next_preset_data.creation_time = creation_time;
+                    next_preset_data.modification_time = modification_time;
+                }
+                (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
             }
-            (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
         }
     }
 
@@ -736,32 +752,34 @@ impl<'a> MetadataReceiver<'a> {
         receiver: *const clap_preset_discovery_metadata_receiver,
         feature: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_feature()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_feature()");
 
-        let feature = unsafe { util::cstr_ptr_to_mandatory_string(feature) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_feature()' called with an invalid \
+            let feature = util::cstr_ptr_to_mandatory_string(feature).context(
+                "'clap_preset_discovery_metadata_receiver::add_feature()' called with an invalid \
              parameter",
-        );
-        match feature {
-            Ok(feature) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
+            );
+            match feature {
+                Ok(feature) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
                             "'clap_preset_discovery_metadata_receiver::add_plugin_id()' with no \
                              preceding 'begin_preset()' call. This is not valid.",
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
-                next_preset_data.features.push(feature);
+                    next_preset_data.features.push(feature);
+                }
+                Err(err) => this.set_callback_error(format!("{err:#}")),
             }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
         }
     }
 
@@ -770,36 +788,38 @@ impl<'a> MetadataReceiver<'a> {
         key: *const c_char,
         value: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        unsafe {
+            check_null_ptr!(receiver, (*receiver).receiver_data);
+            let this = &*((*receiver).receiver_data as *const Self);
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_extra_info()");
+            this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_extra_info()");
 
-        let key = unsafe { util::cstr_ptr_to_mandatory_string(key) }.context(
+            let key = util::cstr_ptr_to_mandatory_string(key).context(
             "'clap_preset_discovery_metadata_receiver::add_extra_info()' called with an invalid \
              key parameter",
         );
-        let value = unsafe { util::cstr_ptr_to_mandatory_string(value) }.context(
+            let value = util::cstr_ptr_to_mandatory_string(value).context(
             "'clap_preset_discovery_metadata_receiver::add_extra_info()' called with an invalid \
              value parameter",
         );
-        match (key, value) {
-            (Ok(key), Ok(value)) => {
-                let mut next_preset_data = this.next_preset_data.borrow_mut();
-                let next_preset_data = match &mut *next_preset_data {
-                    Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
+            match (key, value) {
+                (Ok(key), Ok(value)) => {
+                    let mut next_preset_data = this.next_preset_data.borrow_mut();
+                    let next_preset_data = match &mut *next_preset_data {
+                        Some(next_preset_data) => next_preset_data,
+                        None => {
+                            this.set_callback_error(
                             "'clap_preset_discovery_metadata_receiver::add_extra_info()' with no \
                              preceding 'begin_preset()' call. This is not valid.",
                         );
-                        return;
-                    }
-                };
+                            return;
+                        }
+                    };
 
-                next_preset_data.extra_info.insert(key, value);
+                    next_preset_data.extra_info.insert(key, value);
+                }
+                (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
             }
-            (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
         }
     }
 }
