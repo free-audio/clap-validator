@@ -1,15 +1,13 @@
 use crate::cli::tracing::{Recordable, Recorder, Span, record};
 use crate::plugin::ext::Extension;
-use crate::plugin::ext::ambisonic::Ambisonic;
-use crate::plugin::ext::audio_ports::{AudioPort, check_audio_port_info_valid, check_audio_port_type_consistent};
-use crate::plugin::ext::surround::Surround;
+use crate::plugin::ext::audio_ports::{AudioPort, check_audio_port_info_valid};
 use crate::plugin::instance::Plugin;
 use crate::plugin::util::{c_char_slice_to_string, clap_call, cstr_ptr_to_string};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap_sys::ext::audio_ports::clap_audio_port_info;
 use clap_sys::ext::audio_ports_config::*;
 use clap_sys::id::clap_id;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::mem::zeroed;
 use std::ptr::NonNull;
 
@@ -31,6 +29,9 @@ pub struct AudioPortsConfigConfig {
 
     pub input_port_count: u32,
     pub output_port_count: u32,
+
+    pub main_input_port_type: Option<CString>,
+    pub main_output_port_type: Option<CString>,
 
     pub main_input_channel_count: Option<u32>,
     pub main_output_channel_count: Option<u32>,
@@ -69,52 +70,27 @@ impl<'a> Extension for AudioPortsConfigInfo<'a> {
 
 impl AudioPortsConfig<'_> {
     pub fn enumerate(&self) -> Result<Vec<AudioPortsConfigConfig>> {
-        let ext_ambisonic = self.plugin.get_extension::<Ambisonic>();
-        let ext_surround = self.plugin.get_extension::<Surround>();
-
         (0..self.get_raw_config_count())
             .map(|i| unsafe {
                 let info = self.get_raw_config_info(i)?;
 
-                if info.has_main_input {
-                    let port_type = if info.main_input_port_type.is_null() {
-                        None
-                    } else {
-                        Some(CStr::from_ptr(info.main_input_port_type))
-                    };
+                let input_port_type = if info.main_input_port_type.is_null() {
+                    None
+                } else {
+                    Some(CStr::from_ptr(info.main_input_port_type))
+                };
 
-                    check_audio_port_type_consistent(
-                        true,
-                        0,
-                        port_type,
-                        info.main_input_channel_count,
-                        ext_ambisonic.as_ref(),
-                        ext_surround.as_ref(),
-                    )
-                    .with_context(|| format!("Inconsistent main input port info for config {i}"))?;
-                }
-
-                if info.has_main_output {
-                    let port_type = if info.main_output_port_type.is_null() {
-                        None
-                    } else {
-                        Some(CStr::from_ptr(info.main_output_port_type))
-                    };
-
-                    check_audio_port_type_consistent(
-                        false,
-                        0,
-                        port_type,
-                        info.main_output_channel_count,
-                        ext_ambisonic.as_ref(),
-                        ext_surround.as_ref(),
-                    )
-                    .with_context(|| format!("Inconsistent main output port info for config {i}"))?;
-                }
+                let output_port_type = if info.main_output_port_type.is_null() {
+                    None
+                } else {
+                    Some(CStr::from_ptr(info.main_output_port_type))
+                };
 
                 Ok(AudioPortsConfigConfig {
                     id: info.id,
                     name: c_char_slice_to_string(&info.name)?,
+                    main_input_port_type: input_port_type.map(|s| s.to_owned()),
+                    main_output_port_type: output_port_type.map(|s| s.to_owned()),
                     input_port_count: info.input_port_count,
                     output_port_count: info.output_port_count,
                     main_input_channel_count: info.has_main_input.then_some(info.main_input_channel_count),

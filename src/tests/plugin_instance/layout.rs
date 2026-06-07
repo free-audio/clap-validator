@@ -96,6 +96,18 @@ pub fn test_layout_audio_ports_config(library: &PluginLibrary, plugin_id: &str) 
                 .filter(|x| x.is_main)
                 .map(|x| x.channel_count);
 
+            let main_input_port_type = config_audio_ports
+                .inputs
+                .first()
+                .filter(|x| x.is_main)
+                .and_then(|x| x.port_type.as_deref());
+
+            let main_output_port_type = config_audio_ports
+                .outputs
+                .first()
+                .filter(|x| x.is_main)
+                .and_then(|x| x.port_type.as_deref());
+
             anyhow::ensure!(
                 config_audio_ports.inputs.len() as u32 == config_audio_ports_config.input_port_count,
                 "The number of input audio ports for configuration '{}' ({}) does not match the number reported by \
@@ -112,6 +124,24 @@ pub fn test_layout_audio_ports_config(library: &PluginLibrary, plugin_id: &str) 
                 config_audio_ports_config.name,
                 config_audio_ports_config.output_port_count,
                 config_audio_ports.outputs.len() as u32,
+            );
+
+            anyhow::ensure!(
+                main_input_port_type == config_audio_ports_config.main_input_port_type.as_deref(),
+                "The main input port type for the '{}' configuration info ({:?}) does not match the type reported by \
+                 'audio-ports' ({:?})",
+                config_audio_ports_config.name,
+                config_audio_ports_config.main_input_port_type,
+                main_input_port_type,
+            );
+
+            anyhow::ensure!(
+                main_output_port_type == config_audio_ports_config.main_output_port_type.as_deref(),
+                "The main output port type for the '{}' configuration info ({:?}) does not match the type reported by \
+                 'audio-ports' ({:?})",
+                config_audio_ports_config.name,
+                config_audio_ports_config.main_output_port_type,
+                main_output_port_type,
             );
 
             match (main_input_channels, config_audio_ports_config.main_input_channel_count) {

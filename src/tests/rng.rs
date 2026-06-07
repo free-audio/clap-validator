@@ -1091,6 +1091,7 @@ pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut impl Rng) -> 
             }
             _ => {
                 const SURROUND_MAPS: &[&[u8]] = &[
+                    &[2],                 // Mono;   FC
                     &[0, 1],              // Stereo; FL FR
                     &[0, 2, 1],           // 3.0;    FL FC FR
                     &[0, 2, 1, 3],        // 3.1;    FL FC FR LFE
@@ -1098,6 +1099,12 @@ pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut impl Rng) -> 
                     &[0, 2, 1, 8, 3],     // 4.1;    FL FC FR BC LFE
                     &[0, 2, 1, 9, 10],    // 5.0;    FL FC FR SL SR
                     &[0, 2, 1, 9, 10, 3], // 5.1;    FL FC FR SL SR LFE
+                    &[0, 1, 2],           // 3.0;    FL FR FC
+                    &[0, 1, 2, 3],        // 3.1;    FL FR FC LFE
+                    &[0, 1, 2, 8],        // 4.0;    FL FR FC BC
+                    &[0, 1, 2, 3, 8],     // 4.1;    FL FR FC LFE BC
+                    &[0, 1, 2, 9, 10],    // 5.0;    FL FR FC SL SR
+                    &[0, 1, 2, 3, 9, 10], // 5.1;    FL FR FC LFE SL SR
                 ];
 
                 AudioPortsRequestInfo::Surround {
