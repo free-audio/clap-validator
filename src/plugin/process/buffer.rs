@@ -3,8 +3,7 @@ use crate::plugin::process::ConstantMask;
 use anyhow::Result;
 use clap_sys::audio_buffer::*;
 use either::Either;
-use rand::RngExt;
-use rand_pcg::Pcg32;
+use rand::{Rng, RngExt};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem::zeroed;
@@ -245,7 +244,7 @@ impl AudioBuffers {
         self.samples
     }
 
-    pub fn fill_white_noise(&mut self, prng: &mut Pcg32) {
+    pub fn fill_white_noise(&mut self, prng: &mut impl Rng) {
         for buffer in self.buffers.iter_mut() {
             if buffer.port().input().is_some() {
                 buffer.fill_white_noise(prng);
@@ -259,6 +258,10 @@ impl AudioBuffers {
                 buffer.fill_silence();
             }
         }
+    }
+
+    pub fn num_outputs(&self) -> usize {
+        self.clap_outputs.len()
     }
 }
 
@@ -303,7 +306,7 @@ impl AudioBuffer {
         self.output_latency
     }
 
-    pub fn fill_white_noise(&mut self, prng: &mut Pcg32) {
+    pub fn fill_white_noise(&mut self, prng: &mut impl Rng) {
         for channel in 0..self.channels() {
             match self.channel_mut(channel) {
                 Either::Left(data) => data.fill_with(|| prng.random_range(-1.0..1.0)),
@@ -374,33 +377,6 @@ impl AudioBuffer {
             Either::Right(data) => Either::Right(data[channel as usize][sample as usize]),
         }
     }
-
-    pub fn is_same(&self, other: &Self) -> bool {
-        if self.channels() != other.channels() {
-            return false;
-        }
-
-        for channel in 0..self.channels() {
-            let left = self.channel(channel);
-            let right = other.channel(channel);
-
-            match (left, right) {
-                (Either::Left(left), Either::Left(right)) => {
-                    if left != right {
-                        return false;
-                    }
-                }
-                (Either::Right(left), Either::Right(right)) => {
-                    if left != right {
-                        return false;
-                    }
-                }
-                _ => return false,
-            }
-        }
-
-        true
-    }
 }
 
 impl AudioBufferPort {
@@ -470,7 +446,6 @@ fn resolve_in_place_pairs(config: &AudioPortConfig) -> Result<Vec<AudioBufferPor
     fn is_same_layout(port: &AudioPort, other: &AudioPort) -> bool {
         port.channel_count == other.channel_count
             && port.port_type == other.port_type
-            && port.is_main == other.is_main
             && port.supports_double_sample_size == other.supports_double_sample_size
             && port.requires_common_sample_size == other.requires_common_sample_size
             && port.prefers_double_sample_size == other.prefers_double_sample_size

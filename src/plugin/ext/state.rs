@@ -63,11 +63,8 @@ impl<'a> Extension for State<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_state;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            state: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, state: NonNull<Self::Struct>) -> Self {
+        Self { plugin, state }
     }
 }
 

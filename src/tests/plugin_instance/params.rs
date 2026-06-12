@@ -1,6 +1,6 @@
 //! Tests that focus on parameters.
 
-use super::PluginTestCase;
+use super::PluginInstanceTestCase;
 use crate::cli::tracing::{Span, record};
 use crate::plugin::ext::audio_ports::{AudioPortConfig, AudioPorts};
 use crate::plugin::ext::note_ports::{NotePortConfig, NotePorts};
@@ -8,7 +8,7 @@ use crate::plugin::ext::params::{Param, ParamInfo, Params};
 use crate::plugin::library::PluginLibrary;
 use crate::plugin::process::{AudioBuffers, Event, InputEventQueue, OutputEventQueue, ProcessScope};
 use crate::tests::rng::{NoteGenerator, ParamFuzzer, new_prng};
-use crate::tests::{TestCase, TestStatus};
+use crate::tests::{TestStatus, temporary_file};
 use anyhow::{Context, Result};
 use clap_sys::events::CLAP_EVENT_PARAM_VALUE;
 use clap_sys::id::clap_id;
@@ -156,18 +156,32 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
     }
 
     if num_supported_value_to_text != expected_conversions {
+        let failed_value_to_text_calls = failed_value_to_text_calls
+            .into_iter()
+            .take(10)
+            .map(|(name, value)| format!("\n - {name}: {value:.4}"))
+            .collect::<Vec<_>>()
+            .join("");
+
         anyhow::bail!(
             "'clap_plugin_params::value_to_text()' returned true for {num_supported_value_to_text} out of \
              {expected_conversions} calls. This function is expected to be supported for either none of the \
-             parameters or for all of them. Examples of failing conversions were: {failed_value_to_text_calls:#?}"
+             parameters or for all of them. Examples of failing conversions were: {failed_value_to_text_calls}"
         );
     }
 
     if num_supported_text_to_value != expected_conversions {
+        let failed_text_to_value_calls = failed_text_to_value_calls
+            .into_iter()
+            .take(10)
+            .map(|(name, text)| format!("\n - {name}: '{text}'"))
+            .collect::<Vec<_>>()
+            .join("");
+
         anyhow::bail!(
             "'clap_plugin_params::text_to_value()' returned true for {num_supported_text_to_value} out of \
              {expected_conversions} calls. This function is expected to be supported for either none of the \
-             parameters or for all of them. Examples of failing conversions were: {failed_text_to_value_calls:#?}"
+             parameters or for all of them. Examples of failing conversions were: {failed_text_to_value_calls}"
         );
     }
 
@@ -257,6 +271,7 @@ pub fn test_param_set_events(library: &PluginLibrary, plugin_id: &str, null_cook
     // we have to recreate the events because of cookies (they can be different between plugin instances)
     let param_info = params.info().context("Failure while fetching the parameters")?;
     let mut param_events = ParamFuzzer::new(&param_info)
+        .with_no_cookies(null_cookies)
         .randomize_params_at(&mut new_prng(), 0)
         .collect::<Vec<_>>();
 
@@ -278,6 +293,7 @@ pub fn test_param_set_events(library: &PluginLibrary, plugin_id: &str, null_cook
             let mut buffers = AudioBuffers::new_out_of_place_f32(&audio_ports_config, BUFFER_SIZE);
             let mut process = ProcessScope::new(&plugin, &mut buffers)?;
 
+            plugin.poll_callback();
             process.add_events(param_events);
             process.run()
         })?;
@@ -343,11 +359,7 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str, snap_to_b
     // For each set of runs we'll generate new parameter values, and if the plugin supports notes
     // we'll also generate note events.
     let param_info = params.info().context("Could not fetch the parameters")?;
-    let mut param_fuzzer = ParamFuzzer::new(&param_info);
-    if snap_to_bounds {
-        param_fuzzer = param_fuzzer.snap_to_bounds();
-    }
-
+    let param_fuzzer = ParamFuzzer::new(&param_info).snap_to_bounds(snap_to_bounds);
     let mut note_rng = NoteGenerator::new(&note_ports_config).with_sample_offset_range(-1..=128);
 
     // We'll keep track of the current and the previous set of parameter value so we can write them
@@ -365,6 +377,7 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str, snap_to_b
             process.add_events(current_events.clone().unwrap());
 
             for _ in 0..FUZZ_RUNS_PER_PERMUTATION {
+                plugin.poll_callback();
                 process.audio_buffers().fill_white_noise(&mut prng);
                 process.add_events(note_rng.generate_events(&mut prng, BUFFER_SIZE));
                 process.run()?;
@@ -375,10 +388,17 @@ pub fn test_param_fuzz_basic(library: &PluginLibrary, plugin_id: &str, snap_to_b
 
         // If the run failed we'll want to write the parameter values to a file first
         if run_result.is_err() {
-            let (previous_param_values_file_path, previous_param_values_file) =
-                PluginTestCase::ParamFuzzBasic.temporary_file(plugin_id, PREVIOUS_PARAM_VALUES_FILE_NAME)?;
-            let (current_param_values_file_path, current_param_values_file) =
-                PluginTestCase::ParamFuzzBasic.temporary_file(plugin_id, CURRENT_PARAM_VALUES_FILE_NAME)?;
+            let (previous_param_values_file_path, previous_param_values_file) = temporary_file(
+                &PluginInstanceTestCase::ParamFuzzBasic.to_string(),
+                plugin_id,
+                PREVIOUS_PARAM_VALUES_FILE_NAME,
+            )?;
+
+            let (current_param_values_file_path, current_param_values_file) = temporary_file(
+                &PluginInstanceTestCase::ParamFuzzBasic.to_string(),
+                plugin_id,
+                CURRENT_PARAM_VALUES_FILE_NAME,
+            )?;
 
             serde_json::to_writer_pretty(
                 previous_param_values_file,
@@ -478,6 +498,7 @@ pub fn test_param_fuzz_sample_accurate(library: &PluginLibrary, plugin_id: &str)
 
                 // Audio and MIDI/note events are randomized in accordance to what the plugin
                 // supports
+                plugin.poll_callback();
                 process.audio_buffers().fill_white_noise(&mut prng);
                 process.add_events(note_rng.generate_events(&mut prng, BUFFER_SIZE));
                 process.run()?;
@@ -529,6 +550,7 @@ pub fn test_param_fuzz_modulation(library: &PluginLibrary, plugin_id: &str) -> R
     plugin.on_audio_thread(|plugin| -> Result<()> {
         let mut process = ProcessScope::new(&plugin, &mut audio_buffers)?;
 
+        plugin.poll_callback();
         process.audio_buffers().fill_white_noise(&mut prng);
         process.add_events(param_fuzzer.generate_events(&mut prng, process.max_block_size()));
         process.add_events(note_rng.generate_events(&mut prng, process.max_block_size()));
@@ -587,6 +609,7 @@ pub fn test_param_set_wrong_namespace(library: &PluginLibrary, plugin_id: &str) 
         let mut buffers = AudioBuffers::new_out_of_place_f32(&audio_ports_config, BUFFER_SIZE);
         let mut process = ProcessScope::new(&plugin, &mut buffers)?;
 
+        plugin.poll_callback();
         process.audio_buffers().fill_white_noise(&mut prng);
         process.add_events(random_param_set_events);
         process.run()

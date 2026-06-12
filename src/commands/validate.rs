@@ -1,7 +1,7 @@
 //! Commands for validating plugins.
 
 use crate::cli::{Config, Report, ReportItem, pluralize};
-use crate::tests::{TestResult, TestStatus};
+use crate::tests::{TestGroup, TestResult, TestStatus};
 use crate::validator::{ValidationResult, ValidationTally};
 use crate::{Verbosity, validator};
 use anyhow::{Context, Result};
@@ -37,7 +37,7 @@ pub struct ValidatorSettings {
     /// When running the validation out-of-process, hide the plugin's output.
     ///
     /// This can be useful for validating noisy plugins.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "in_process")]
     pub hide_output: bool,
     /// Only show failed tests.
     ///
@@ -51,12 +51,9 @@ pub struct ValidatorSettings {
     /// Using this option will remove those protections, but in turn the tests may run faster.
     #[arg(long)]
     pub in_process: bool,
-    /// Don't run tests in parallel.
-    ///
-    /// This will cause the out-of-process tests to be run sequentially. Implied when the
-    /// --in-process option is used. Can be useful for keeping plugin output in the correct order.
-    #[arg(long, conflicts_with = "in_process")]
-    pub no_parallel: bool,
+    /// Set the amount of parallelism when running the tests. Only for out-of-process tests.
+    #[arg(long, short = 'j', conflicts_with = "in_process")]
+    pub jobs: Option<usize>,
     /// When running the validation in-process, emit a JSON trace file that can be viewed with
     /// Chrome's tracing viewer or <https://ui.perfetto.dev>.
     ///
@@ -66,10 +63,10 @@ pub struct ValidatorSettings {
 }
 
 /// The main validator command. This will validate one or more plugins and print the results.
-pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<ExitCode> {
+pub fn validate(verbosity: Verbosity, settings: ValidatorSettings) -> Result<ExitCode> {
     let config = Config::from_current()?;
 
-    let mut result = validator::validate(verbosity, settings, &config).context("Could not run the validator")?;
+    let mut result = validator::validate(verbosity, &settings, &config).context("Could not run the validator")?;
     let tally = result.tally();
 
     if settings.only_failed {
@@ -91,8 +88,8 @@ pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<Ex
 }
 
 fn pretty_print(result: &ValidationResult, tally: &ValidationTally) {
-    fn report_test(test: &TestResult) -> Report {
-        let status_text = match test.status {
+    fn report_test(result: &TestResult) -> Report {
+        let status_text = match result.status {
             TestStatus::Success { .. } => "PASSED".green(),
             TestStatus::Skipped { .. } => "SKIPPED".dim(),
             TestStatus::Warning { .. } => "WARNING".yellow(),
@@ -100,9 +97,9 @@ fn pretty_print(result: &ValidationResult, tally: &ValidationTally) {
             TestStatus::Crashed { .. } => "CRASHED".red().bold(),
         };
 
-        let mut items = vec![ReportItem::Text(test.description.clone())];
+        let mut items = vec![ReportItem::Text(result.test.description())];
 
-        if let Some(details) = test.status.details() {
+        if let Some(details) = result.status.details() {
             items.push(ReportItem::Child(Report {
                 header: "".to_string(),
                 footer: vec![],
@@ -112,46 +109,50 @@ fn pretty_print(result: &ValidationResult, tally: &ValidationTally) {
 
         Report {
             items,
-            header: test.name.clone(),
+            header: result.test.name(),
             footer: vec![
                 status_text.to_string(),
-                format!("{}ms", test.duration.as_millis()).dim().to_string(),
+                format!("{}ms", result.duration.as_millis()).dim().to_string(),
             ],
         }
     }
 
-    for (library_path, tests) in result.plugin_library_tests.iter() {
-        let mut items = vec![ReportItem::Text(library_path.to_string_lossy().to_string())];
+    for (group, tests) in result.group() {
+        match group {
+            TestGroup::PluginLibrary(library_path) => {
+                let mut items = vec![ReportItem::Text(library_path.to_string_lossy().to_string())];
 
-        for test in tests {
-            items.push(ReportItem::Child(report_test(test)));
-        }
+                for test in &tests {
+                    items.push(ReportItem::Child(report_test(test)));
+                }
 
-        println!(
-            "\n{}",
-            Report {
-                header: "Plugin Library".to_string(),
-                footer: vec![pluralize(tests.len(), "test")],
-                items,
+                println!(
+                    "\n{}",
+                    Report {
+                        header: "Plugin Library".to_string(),
+                        footer: vec![pluralize(tests.len(), "test")],
+                        items,
+                    }
+                );
             }
-        );
-    }
 
-    for (plugin_id, tests) in result.plugin_tests.iter() {
-        let mut items = vec![ReportItem::Text(plugin_id.clone())];
+            TestGroup::PluginInstance(_, plugin_id) => {
+                let mut items = vec![ReportItem::Text(plugin_id.clone())];
 
-        for test in tests {
-            items.push(ReportItem::Child(report_test(test)));
-        }
+                for test in &tests {
+                    items.push(ReportItem::Child(report_test(test)));
+                }
 
-        println!(
-            "\n{}",
-            Report {
-                header: "Plugin".to_string(),
-                footer: vec![pluralize(tests.len(), "test")],
-                items,
+                println!(
+                    "\n{}",
+                    Report {
+                        header: "Plugin".to_string(),
+                        footer: vec![pluralize(tests.len(), "test")],
+                        items,
+                    }
+                );
             }
-        );
+        }
     }
 
     println!(

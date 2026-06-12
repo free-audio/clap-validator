@@ -3,7 +3,7 @@
 use super::{Plugin, PluginStatus};
 use crate::cli::tracing::{Recordable, Recorder, Span, record};
 use crate::plugin::ext::Extension;
-use crate::plugin::instance::{CallbackEvent, MainThreadTask, PluginShared};
+use crate::plugin::instance::{CallbackEvent, PluginShared};
 use crate::plugin::process::{InputEventQueue, OutputEventQueue};
 use crate::plugin::util::{Proxy, clap_call};
 use anyhow::Result;
@@ -14,6 +14,9 @@ use clap_sys::process::*;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::mpsc::Sender;
+
+pub type MainThreadTask = Box<dyn FnOnce(&Plugin) -> Result<()> + Send>;
 
 /// An audio thread equivalent to [`Plugin`]. This version only allows audio thread functions to be
 /// called. It can be constructed using [`Plugin::on_audio_thread()`].
@@ -21,6 +24,10 @@ pub struct PluginAudioThread<'a> {
     /// Information about this plugin instance stored on the host. This keeps track of things like
     /// audio thread IDs, whether the plugin has pending callbacks, and what state it is in.
     shared: Proxy<PluginShared>,
+
+    /// A channel to send tasks to the main thread.
+    /// Allows for ergonomic access to the main thread OR executing tasks on the main thread in parallel with the audio thread.
+    sender: Sender<MainThreadTask>,
 
     _plugin_marker: PhantomData<&'a Plugin<'a>>,
 
@@ -53,15 +60,15 @@ pub struct ProcessInfo<'a> {
 impl Drop for PluginAudioThread<'_> {
     fn drop(&mut self) {
         self.shared.audio_thread_id.store(None);
-        self.shared.task_sender.send(MainThreadTask::StopAudioThread).unwrap();
     }
 }
 
 impl<'a> PluginAudioThread<'a> {
-    pub(super) fn new(shared: Proxy<PluginShared>) -> PluginAudioThread<'a> {
+    pub(super) fn new(shared: Proxy<PluginShared>, sender: Sender<MainThreadTask>) -> PluginAudioThread<'a> {
         shared.audio_thread_id.store(Some(std::thread::current().id()));
 
         PluginAudioThread {
+            sender,
             shared,
             _plugin_marker: PhantomData,
             _send_sync_marker: PhantomData,
@@ -94,19 +101,21 @@ impl<'a> PluginAudioThread<'a> {
     pub fn on_main_thread<F: FnOnce(&Plugin) -> T + Send, T: Send>(&self, callback: F) -> T {
         let (sender, recv) = std::sync::mpsc::sync_channel(0);
 
-        let callback: Box<dyn FnOnce(&Plugin) + Send> = Box::new(move |plugin| {
+        #[allow(clippy::type_complexity)]
+        let callback: Box<dyn FnOnce(&Plugin) -> Result<()> + Send> = Box::new(move |plugin| {
             let result = catch_unwind(AssertUnwindSafe(|| callback(plugin)));
             sender.send(result).unwrap();
+            Ok(())
         });
 
-        self.shared
-            .task_sender
-            .send(MainThreadTask::Dispatch(unsafe {
+        self.sender
+            .send(unsafe {
                 // SAFETY: we just erase the lifetime here, as we guarantee that the callback is valid until Receiver is dropped, at that point the callback has been dropped already.
-                std::mem::transmute::<Box<dyn FnOnce(&Plugin) + Send>, Box<dyn FnOnce(&Plugin) + Send + 'static>>(
-                    callback,
-                )
-            }))
+                std::mem::transmute::<
+                    Box<dyn FnOnce(&Plugin) -> Result<()> + Send>,
+                    Box<dyn FnOnce(&Plugin) -> Result<()> + Send + 'static>,
+                >(callback)
+            })
             .unwrap();
 
         match recv.recv().unwrap() {
@@ -117,15 +126,27 @@ impl<'a> PluginAudioThread<'a> {
 
     /// Same as [`Self::on_main_thread`], but does not wait for the result and does not block.
     #[allow(unused)]
-    pub fn send_main_thread<F: FnOnce(&Plugin) + Send + 'static>(&self, callback: F) {
-        self.shared
-            .task_sender
-            .send(MainThreadTask::Dispatch(Box::new(callback)))
-            .unwrap();
+    pub fn send_main_thread<F: FnOnce(&Plugin) -> Result<()> + Send + 'static>(&self, callback: F) {
+        self.sender.send(Box::new(callback)).unwrap();
     }
 
-    pub fn poll_callback(&self, mut f: impl FnMut(&Plugin, CallbackEvent) -> Result<()> + Send) -> Result<()> {
-        self.on_main_thread(|plugin| plugin.poll_callback(|event| f(plugin, event)))
+    /// Process pending callbacks.
+    pub fn poll_callback_with(&self, mut f: impl FnMut(&Plugin, CallbackEvent) -> Result<()> + Send) -> Result<()> {
+        if self.shared.requested_callback.load() {
+            self.on_main_thread(move |plugin| plugin.poll_callback(|event| f(plugin, event)))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Process pending callbacks, ignoring the callback events. Does not block.
+    pub fn poll_callback(&self) {
+        if self.shared.requested_callback.load() {
+            self.send_main_thread(move |plugin| {
+                plugin.poll_callback_unchecked();
+                Ok(())
+            });
+        }
     }
 
     /// Prepare for audio processing. Returns an error if the plugin returned `false`. See

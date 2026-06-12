@@ -1,7 +1,6 @@
 //! Various utility functions for the plugin host.
 
 use anyhow::{Context, Result};
-use rayon::iter::{ParallelBridge, ParallelIterator};
 use std::ffi::{CStr, CString, c_char, c_void};
 use std::sync::OnceLock;
 
@@ -258,23 +257,5 @@ mod proxy {
         fn drop(&mut self) {
             untrack(&self.vtable);
         }
-    }
-}
-
-impl<T: ?Sized> IteratorExt for T where T: Iterator {}
-pub trait IteratorExt: Iterator {
-    /// Map the iterator in parallel if `parallel` is `true`, or sequentially if it is `false`.
-    /// Returns an iterator over the mapped values, in arbitrary order.
-    fn map_parallel<R: Send>(self, parallel: bool, f: impl Fn(Self::Item) -> R + Send + Sync) -> impl Iterator<Item = R>
-    where
-        Self: Sized + Send,
-        Self::Item: Send,
-    {
-        if parallel {
-            self.par_bridge().map(f).collect::<Vec<_>>()
-        } else {
-            self.map(f).collect::<Vec<_>>()
-        }
-        .into_iter()
     }
 }

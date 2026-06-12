@@ -1,13 +1,13 @@
 //! Tests surrounding state handling.
 
-use super::PluginTestCase;
+use super::PluginInstanceTestCase;
 use crate::plugin::ext::params::Params;
 use crate::plugin::ext::state::State;
 use crate::plugin::library::PluginLibrary;
 use crate::plugin::process::{InputEventQueue, OutputEventQueue};
-use crate::tests::plugin::params::{param_generate_diff, param_get_values};
+use crate::tests::plugin_instance::params::{param_generate_diff, param_get_values};
 use crate::tests::rng::{ParamFuzzer, new_prng};
-use crate::tests::{TestCase, TestStatus};
+use crate::tests::{TestStatus, temporary_file};
 use anyhow::{Context, Result};
 use rand::RngExt;
 use std::io::Write;
@@ -230,10 +230,17 @@ pub fn test_state_reproducibility(
     if !binary_equality || actual_state == expected_state {
         Ok(TestStatus::Success { details: None })
     } else {
-        let (expected_state_file_path, mut expected_state_file) =
-            PluginTestCase::StateReproducibilityBinary.temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
-        let (actual_state_file_path, mut actual_state_file) =
-            PluginTestCase::StateReproducibilityBinary.temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
+        let (expected_state_file_path, mut expected_state_file) = temporary_file(
+            &PluginInstanceTestCase::StateReproducibilityBinary.to_string(),
+            plugin_id,
+            EXPECTED_STATE_FILE_NAME,
+        )?;
+
+        let (actual_state_file_path, mut actual_state_file) = temporary_file(
+            &PluginInstanceTestCase::StateReproducibilityBinary.to_string(),
+            plugin_id,
+            ACTUAL_STATE_FILE_NAME,
+        )?;
 
         expected_state_file.write_all(&expected_state)?;
         actual_state_file.write_all(&actual_state)?;

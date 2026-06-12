@@ -24,7 +24,8 @@ pub enum CallbackEvent {
     ParamsRescanAll,
 
     AudioPortsRescanNames,
-    AudioPortsRescanAll,
+    AudioPortsRescanInfo,
+    AudioPortsRescanList,
 
     NotePortsRescanNames,
     NotePortsRescanAll,
@@ -47,11 +48,12 @@ pub enum CallbackEvent {
 /// The plugin's current lifecycle state. This is checked extensively to ensure that the plugin is
 /// in the correct state, and things like double activations can't happen. `Plugin` and
 /// `PluginAudioThread` will drop down to the previous state automatically when the object is
-/// dropped and the stop processing or deactivate functions have not yet been calle.d
+/// dropped and the stop processing or deactivate functions have not yet been called
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PluginStatus {
     #[default]
     Uninitialized,
+    Initializing,
     Deactivated,
     Activating,
     Activated,

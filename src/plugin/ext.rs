@@ -14,6 +14,7 @@ pub mod latency;
 pub mod note_ports;
 pub mod params;
 pub mod preset_load;
+pub mod render;
 pub mod state;
 pub mod surround;
 pub mod tail;

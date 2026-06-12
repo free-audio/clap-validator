@@ -19,17 +19,15 @@ impl<'a> Extension for VoiceInfo<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_voice_info;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            voice_info: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, voice_info: NonNull<Self::Struct>) -> Self {
+        Self { plugin, voice_info }
     }
 }
 
 impl<'a> VoiceInfo<'a> {
-    #[allow(unused)]
     pub fn get(&self) -> Option<clap_voice_info> {
+        self.plugin.status().assert_active();
+
         let voice_info = self.voice_info.as_ptr();
         let plugin = self.plugin.as_ptr();
 

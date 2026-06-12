@@ -1,6 +1,5 @@
 //! Tests for individual plugin instances.
 
-use super::TestCase;
 use crate::cli::tracing::{Span, record};
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
@@ -24,268 +23,236 @@ mod transport;
     strum_macros::IntoStaticStr,
     Serialize,
     Deserialize,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
 )]
-pub enum PluginTestCase {
-    #[strum(serialize = "descriptor-consistency")]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum PluginInstanceTestCase {
     DescriptorConsistency,
-    #[strum(serialize = "features-categories")]
     FeaturesCategories,
-    #[strum(serialize = "features-duplicates")]
     FeaturesDuplicates,
-    #[strum(serialize = "features-standard")]
-    FeaturesStandard,
-    #[strum(serialize = "layout-audio-ports-activation")]
-    LayoutAudioPortsActivation,
-    #[strum(serialize = "layout-audio-ports-config")]
-    LayoutAudioPortsConfig,
-    #[strum(serialize = "layout-configurable-audio-ports")]
-    LayoutConfigurableAudioPorts,
-    #[strum(serialize = "process-audio-basic-out-of-place")]
     ProcessAudioBasicOutOfPlace,
-    #[strum(serialize = "process-audio-basic-in-place")]
     ProcessAudioBasicInPlace,
-    #[strum(serialize = "process-audio-double-out-of-place")]
     ProcessAudioDoubleOutOfPlace,
-    #[strum(serialize = "process-audio-double-in-place")]
     ProcessAudioDoubleInPlace,
-    #[strum(serialize = "process-audio-denormals")]
     ProcessAudioDenormals,
-    #[strum(serialize = "process-sleep-constant-mask")]
     ProcessSleepConstantMask,
-    #[strum(serialize = "process-sleep-process-status")]
     ProcessSleepProcessStatus,
-    #[strum(serialize = "process-note-out-of-place-basic")]
     ProcessNoteOutOfPlaceBasic,
-    #[strum(serialize = "process-note-inconsistent")]
     ProcessNoteInconsistent,
-    #[strum(serialize = "process-varying-sample-rates")]
+    ProcessNoteWildcard,
     ProcessVaryingSampleRates,
-    #[strum(serialize = "process-varying-block-sizes")]
     ProcessVaryingBlockSizes,
-    #[strum(serialize = "process-random-block-sizes")]
     ProcessRandomBlockSizes,
-    #[strum(serialize = "process-reset-reactivate")]
     ProcessResetReactivate,
-    #[strum(serialize = "param-conversions")]
-    ParamConversions,
-    #[strum(serialize = "param-fuzz-basic")]
-    ParamFuzzBasic,
-    #[strum(serialize = "param-fuzz-bounds")]
-    ParamFuzzBounds,
-    #[strum(serialize = "param-fuzz-sample-accurate")]
-    ParamFuzzSampleAccurate,
-    #[strum(serialize = "param-fuzz-modulation")]
-    ParamFuzzModulation,
-    #[strum(serialize = "param-set-events")]
+    LayoutAudioPortsActivation,
+    LayoutAudioPortsConfig,
+    LayoutConfigurableAudioPorts,
     ParamSetEvents,
-    #[strum(serialize = "param-set-no-cookies")]
     ParamSetNoCookies,
-    #[strum(serialize = "param-set-wrong-namespace")]
     ParamSetWrongNamespace,
-    #[strum(serialize = "param-default-values")]
+    ParamFuzzBasic,
+    ParamFuzzBounds,
+    ParamFuzzSampleAccurate,
+    ParamFuzzModulation,
+    ParamConversions,
     ParamDefaultValues,
-    #[strum(serialize = "state-invalid-empty")]
     StateInvalidEmpty,
-    #[strum(serialize = "state-invalid-random")]
     StateInvalidRandom,
-    #[strum(serialize = "state-reproducibility-basic")]
     StateReproducibilityBasic,
-    #[strum(serialize = "state-reproducibility-binary")]
     StateReproducibilityBinary,
-    #[strum(serialize = "state-reproducibility-buffered")]
     StateReproducibilityBuffered,
-    #[strum(serialize = "transport-null")]
     TransportNull,
-    #[strum(serialize = "transport-fuzz")]
     TransportFuzz,
-    #[strum(serialize = "transport-fuzz-sample-accurate")]
     TransportFuzzSampleAccurate,
 }
 
-impl<'a> TestCase<'a> for PluginTestCase {
-    /// A loaded CLAP plugin library and the ID of the plugin contained within that library that
-    /// should be tested.
-    type TestArgs = (&'a Path, &'a str);
-
-    fn description(&self) -> String {
+impl PluginInstanceTestCase {
+    pub fn description(&self) -> String {
         match self {
-            PluginTestCase::DescriptorConsistency => String::from(
+            Self::DescriptorConsistency => String::from(
                 "The plugin descriptor returned from the plugin factory and the plugin descriptor stored on the \
                  'clap_plugin' object should be equivalent.",
             ),
-            PluginTestCase::FeaturesCategories => {
+            Self::FeaturesCategories => {
                 String::from("The plugin needs to have at least one of the main CLAP category features.")
             }
-            PluginTestCase::FeaturesDuplicates => {
-                String::from("The plugin's features array should not contain any duplicates.")
-            }
-            PluginTestCase::FeaturesStandard => String::from(
-                "Check that every unnamespaced feature that the plugin declares is part of the CLAP standard features.",
-            ),
-            PluginTestCase::ProcessAudioBasicOutOfPlace => String::from(
+            Self::FeaturesDuplicates => String::from("The plugin's features array should not contain any duplicates."),
+            Self::ProcessAudioBasicOutOfPlace => String::from(
                 "Processes random audio through the plugin with its default parameter values and tests whether the \
                  output does not contain any non-finite or subnormal values. Uses out-of-place audio processing.",
             ),
-            PluginTestCase::ProcessAudioBasicInPlace => String::from(
+            Self::ProcessAudioBasicInPlace => String::from(
                 "Processes random audio through the plugin with its default parameter values and tests whether the \
                  output does not contain any non-finite or subnormal values. Uses in-place audio processing for buses \
                  that support it.",
             ),
-            PluginTestCase::ProcessAudioDoubleOutOfPlace => format!(
+            Self::ProcessAudioDoubleOutOfPlace => format!(
                 "Same as '{}', but uses 64-bit floating point audio buffers instead of 32-bit ones for ports that \
                  support it.",
-                PluginTestCase::ProcessAudioBasicOutOfPlace,
+                Self::ProcessAudioBasicOutOfPlace,
             ),
-            PluginTestCase::ProcessAudioDoubleInPlace => format!(
+            Self::ProcessAudioDoubleInPlace => format!(
                 "Same as '{}', but uses 64-bit floating point audio buffers instead of 32-bit ones for ports that \
                  support it.",
-                PluginTestCase::ProcessAudioBasicInPlace,
+                Self::ProcessAudioBasicInPlace,
             ),
-            PluginTestCase::ProcessAudioDenormals => String::from(
+            Self::ProcessAudioDenormals => String::from(
                 "Processes random audio through the plugin with its default parameter values two times: without and \
                  with denormals as the input. Emits a warning if processing denormals causes a significant slowdown.",
             ),
-            PluginTestCase::LayoutAudioPortsActivation => format!(
+            Self::LayoutAudioPortsActivation => format!(
                 "Same as '{}', but this time it toggles the activation state of audio ports on and off via the \
                  'audio-ports-activation' extension.",
-                PluginTestCase::ProcessAudioBasicOutOfPlace,
+                Self::ProcessAudioBasicOutOfPlace,
             ),
-            PluginTestCase::LayoutConfigurableAudioPorts => format!(
+            Self::LayoutConfigurableAudioPorts => format!(
                 "Same as '{}', but this time it tries random configurations exposed via the \
                  'configurable-audio-ports' extension.",
-                PluginTestCase::ProcessAudioBasicOutOfPlace,
+                Self::ProcessAudioBasicOutOfPlace,
             ),
-            PluginTestCase::LayoutAudioPortsConfig => format!(
+            Self::LayoutAudioPortsConfig => format!(
                 "Same as '{}', but this time it tries all available port configurations exposed via the \
                  'audio-ports-config' extension.",
-                PluginTestCase::ProcessAudioBasicInPlace,
+                Self::ProcessAudioBasicInPlace,
             ),
-            PluginTestCase::ProcessSleepConstantMask => String::from(
+            Self::ProcessSleepConstantMask => String::from(
                 "Processes random audio through the plugin with its default parameter values while setting the \
                  constant mask on silent blocks, and tests whether the output does not contain any non-finite or \
                  subnormal values and that the plugin sets the constant mask correctly",
             ),
-            PluginTestCase::ProcessSleepProcessStatus => String::from(
+            Self::ProcessSleepProcessStatus => String::from(
                 "Processes random audio through the plugin with its default parameter values while checking if the \
                  output is consistent with the returned process status, and tests whether the output does not contain \
                  any non-finite or subnormal values and that the plugin sets the process status correctly",
             ),
-            PluginTestCase::ProcessNoteOutOfPlaceBasic => String::from(
+            Self::ProcessNoteOutOfPlaceBasic => String::from(
                 "Sends audio and random note and MIDI events to the plugin with its default parameter values and \
                  tests the output for consistency. Uses out-of-place audio processing.",
             ),
-            PluginTestCase::ProcessNoteInconsistent => String::from(
+            Self::ProcessNoteInconsistent => String::from(
                 "Sends intentionally inconsistent and mismatching note and MIDI events to the plugin with its default \
                  parameter values and tests the output for consistency. Uses out-of-place audio processing.",
             ),
-            PluginTestCase::ProcessVaryingSampleRates => String::from(
+            Self::ProcessNoteWildcard => format!(
+                "Same as {}, but this time some note events have their note ID, port index, channel, or key set to \
+                 -1, which means they can match multiple notes at the same time. This tests whether the plugin can \
+                 handle such wildcard events without crashing or producing invalid output. Uses out-of-place audio \
+                 processing.",
+                Self::ProcessNoteOutOfPlaceBasic
+            ),
+            Self::ProcessVaryingSampleRates => String::from(
                 "Processes random audio and random note events through the plugin with its default parameter values \
                  while trying different sample rates ranging from 1kHz to 768kHz, including fractional rates, and \
                  tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place \
                  audio processing.",
             ),
-            PluginTestCase::ProcessVaryingBlockSizes => String::from(
+            Self::ProcessVaryingBlockSizes => String::from(
                 "Processes random audio and random note events through the plugin with its default parameter values \
                  while trying different maximum block sizes ranging from 1 to 16k, including non-power-of-two ones, \
                  and tests whether the output does not contain any non-finite or subnormal values. Uses out-of-place \
                  audio processing.",
             ),
-            PluginTestCase::ProcessRandomBlockSizes => String::from(
+            Self::ProcessRandomBlockSizes => String::from(
                 "Processes random audio and random note events through the plugin with maximum block size of 2048 \
                  while randomizing block sizes for each process call, and tests whether the output does not contain \
                  any non-finite or subnormal values. Uses out-of-place audio processing.",
             ),
-            PluginTestCase::ProcessResetReactivate => String::from(
+            Self::ProcessResetReactivate => String::from(
                 "Asserts that resetting the plugin via 'clap_plugin::reset()' and via re-activation does not cause \
                  any crashes, and that the plugin still produces valid (non-NaN and non-infinite) output",
             ),
-            PluginTestCase::ParamConversions => String::from(
+            Self::ParamConversions => String::from(
                 "Asserts that value to string and string to value conversions are supported for ether all or none of \
                  the plugin's parameters, and that conversions between values and strings roundtrip consistently.",
             ),
-            PluginTestCase::ParamSetEvents => String::from(
+            Self::ParamSetEvents => String::from(
                 "Asserts that the resulting parameter values after a flush are the same as if the parameter changes \
                  were sent via a process call.",
             ),
-            PluginTestCase::ParamSetNoCookies => format!(
+            Self::ParamSetNoCookies => format!(
                 "Same as '{}', but this time the parameter change events are sent with null cookies. The plugin \
                  should behave identically to when the cookies are set to non-null values.",
-                PluginTestCase::ParamSetEvents,
+                Self::ParamSetEvents,
             ),
-            PluginTestCase::ParamFuzzBasic => format!(
+            Self::ParamFuzzBasic => format!(
                 "Generates {} sets of random parameter values, sets those on the plugin, and has the plugin process \
                  {} buffers of random audio and note events. The plugin passes the test if it doesn't produce any \
                  infinite or NaN values, and doesn't crash.",
                 params::FUZZ_NUM_PERMUTATIONS,
                 params::FUZZ_RUNS_PER_PERMUTATION
             ),
-            PluginTestCase::ParamFuzzBounds => format!(
+            Self::ParamFuzzBounds => format!(
                 "The exact same test as '{}', but this time the parameter values are snapped to the minimum and \
                  maximum values.",
-                PluginTestCase::ParamFuzzBasic
+                Self::ParamFuzzBasic
             ),
-            PluginTestCase::ParamFuzzSampleAccurate => String::from(
+            Self::ParamFuzzSampleAccurate => String::from(
                 "Sets parameter values in a sample-accurate fashion while processing audio, generating them at fixed \
                  intervals (10, 100, 1000 samples). The plugin passes the test if it doesn't produce any infinite or \
                  NaN values, and doesn't crash.",
             ),
-            PluginTestCase::ParamFuzzModulation => String::from(
+            Self::ParamFuzzModulation => String::from(
                 "Sends parameter change events, including monophonic modulation and polyphonic automation/modulation \
                  events at random irregular unsynchronized intervals, and have the plugin process them. The plugin \
                  passes the test if it doesn't produce any infinite or NaN values, and doesn't crash.",
             ),
-            PluginTestCase::ParamSetWrongNamespace => String::from(
+            Self::ParamSetWrongNamespace => String::from(
                 "Sends events to the plugin with the 'CLAP_EVENT_PARAM_VALUE' event type but with a mismatching \
                  namespace ID. Asserts that the plugin's parameter values don't change.",
             ),
-            PluginTestCase::ParamDefaultValues => String::from(
+            Self::ParamDefaultValues => String::from(
                 "Asserts that the values for all parameters are set correctly to their default values when the plugin \
                  is initialized.",
             ),
-            PluginTestCase::StateInvalidEmpty => String::from(
+            Self::StateInvalidEmpty => String::from(
                 "The plugin should return false when 'clap_plugin_state::load()' is called with an empty state.",
             ),
-            PluginTestCase::StateInvalidRandom => String::from(
+            Self::StateInvalidRandom => String::from(
                 "Loads 3x1MB chunks of random bytes via 'clap_plugin_state::load()' and asserts that the plugin \
                  doesn't crash.",
             ),
-            PluginTestCase::StateReproducibilityBasic => String::from(
+            Self::StateReproducibilityBasic => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin instance, reloads the state, \
                  and then checks whether the parameter values are the same and whether saving the state once more \
                  results in the same parameters as before. The parameter values are updated using the process \
                  function.",
             ),
-            PluginTestCase::StateReproducibilityBuffered => format!(
+            Self::StateReproducibilityBuffered => format!(
                 "Performs the same parameter reproducibility check as in '{}', but this time the plugin is only \
                  allowed to read a small prime number of bytes at a time when reloading and resaving the state.",
-                PluginTestCase::StateReproducibilityBasic
+                Self::StateReproducibilityBasic
             ),
-            PluginTestCase::StateReproducibilityBinary => format!(
+            Self::StateReproducibilityBinary => format!(
                 "Performs the same parameter reproducibility check as in '{}', but also checks that the saved state \
                  data is exactly the same byte for byte. This means that the plugin needs to save the state in a \
                  completely deterministic way, without any non-determinism coming from things like uninitialized \
                  memory or random bytes.",
-                PluginTestCase::StateReproducibilityBasic
+                Self::StateReproducibilityBasic
             ),
-            PluginTestCase::TransportNull => String::from(
+            Self::TransportNull => String::from(
                 "Performs audio processing with a 'null' transport pointer, simulating a free-running transport \
                  state. The plugin passes the test if it doesn't produce any infinite or NaN values, and doesn't \
                  crash.",
             ),
-            PluginTestCase::TransportFuzz => String::from(
+            Self::TransportFuzz => String::from(
                 "Performs audio processing while randomly changing the transport state on every block. The plugin \
                  passes the test if it doesn't produce any infinite or NaN values, and doesn't crash.",
             ),
-            PluginTestCase::TransportFuzzSampleAccurate => format!(
+            Self::TransportFuzzSampleAccurate => format!(
                 "Same as '{}', but this time the test sends 'clap_event_transport' events in sample-accurate fashion \
                  while processing audio, generating them at fixed intervals (1, 100, 1000 samples). The plugin passes \
                  the test if it doesn't produce any infinite or NaN values, and doesn't crash.",
-                PluginTestCase::TransportFuzz
+                Self::TransportFuzz
             ),
         }
     }
 
-    fn run(&self, (library_path, plugin_id): Self::TestArgs) -> Result<TestStatus> {
+    pub fn run(&self, library_path: &Path, plugin_id: &str) -> Result<TestStatus> {
         let _span = Span::begin(
             self.into(),
             record! {
@@ -299,74 +266,47 @@ impl<'a> TestCase<'a> for PluginTestCase {
             .with_context(|| format!("Could not load '{}'", library_path.display()))?;
 
         match self {
-            PluginTestCase::DescriptorConsistency => descriptor::test_consistency(library, plugin_id),
-            PluginTestCase::FeaturesCategories => descriptor::test_features_categories(library, plugin_id),
-            PluginTestCase::FeaturesDuplicates => descriptor::test_features_duplicates(library, plugin_id),
-            PluginTestCase::FeaturesStandard => descriptor::test_features_standard(library, plugin_id),
-            PluginTestCase::LayoutAudioPortsActivation => {
-                layout::test_layout_audio_ports_activation(library, plugin_id)
+            Self::DescriptorConsistency => descriptor::test_consistency(library, plugin_id),
+            Self::FeaturesCategories => descriptor::test_features_categories(library, plugin_id),
+            Self::FeaturesDuplicates => descriptor::test_features_duplicates(library, plugin_id),
+            Self::LayoutAudioPortsActivation => layout::test_layout_audio_ports_activation(library, plugin_id),
+            Self::LayoutAudioPortsConfig => layout::test_layout_audio_ports_config(library, plugin_id),
+            Self::LayoutConfigurableAudioPorts => layout::test_layout_configurable_audio_ports(library, plugin_id),
+            Self::ProcessAudioBasicOutOfPlace => processing::test_process_audio_basic(library, plugin_id, false),
+            Self::ProcessAudioBasicInPlace => processing::test_process_audio_basic(library, plugin_id, true),
+            Self::ProcessAudioDoubleOutOfPlace => processing::test_process_audio_double(library, plugin_id, false),
+            Self::ProcessAudioDoubleInPlace => processing::test_process_audio_double(library, plugin_id, true),
+            Self::ProcessAudioDenormals => processing::test_process_audio_denormals(library, plugin_id),
+            Self::ProcessSleepConstantMask => processing::test_process_sleep_constant_mask(library, plugin_id),
+            Self::ProcessSleepProcessStatus => processing::test_process_sleep_process_status(library, plugin_id),
+            Self::ProcessNoteOutOfPlaceBasic => {
+                processing::test_process_note_out_of_place(library, plugin_id, false, false)
             }
-            PluginTestCase::LayoutAudioPortsConfig => layout::test_layout_audio_ports_config(library, plugin_id),
-            PluginTestCase::LayoutConfigurableAudioPorts => {
-                layout::test_layout_configurable_audio_ports(library, plugin_id)
+            Self::ProcessNoteInconsistent => {
+                processing::test_process_note_out_of_place(library, plugin_id, true, false)
             }
-            PluginTestCase::ProcessAudioBasicOutOfPlace => {
-                processing::test_process_audio_basic(library, plugin_id, false)
-            }
-            PluginTestCase::ProcessAudioBasicInPlace => processing::test_process_audio_basic(library, plugin_id, true),
-            PluginTestCase::ProcessAudioDoubleOutOfPlace => {
-                processing::test_process_audio_double(library, plugin_id, false)
-            }
-            PluginTestCase::ProcessAudioDoubleInPlace => {
-                processing::test_process_audio_double(library, plugin_id, true)
-            }
-            PluginTestCase::ProcessAudioDenormals => processing::test_process_audio_denormals(library, plugin_id),
-            PluginTestCase::ProcessSleepConstantMask => {
-                processing::test_process_sleep_constant_mask(library, plugin_id)
-            }
-            PluginTestCase::ProcessSleepProcessStatus => {
-                processing::test_process_sleep_process_status(library, plugin_id)
-            }
-            PluginTestCase::ProcessNoteOutOfPlaceBasic => {
-                processing::test_process_note_out_of_place(library, plugin_id, true)
-            }
-            PluginTestCase::ProcessNoteInconsistent => {
-                processing::test_process_note_out_of_place(library, plugin_id, false)
-            }
-            PluginTestCase::ProcessVaryingSampleRates => {
-                processing::test_process_varying_sample_rates(library, plugin_id)
-            }
-            PluginTestCase::ProcessVaryingBlockSizes => {
-                processing::test_process_varying_block_sizes(library, plugin_id)
-            }
-            PluginTestCase::ProcessRandomBlockSizes => processing::test_process_random_block_sizes(library, plugin_id),
-            PluginTestCase::ProcessResetReactivate => processing::test_process_reset_reactivate(library, plugin_id),
-            PluginTestCase::ParamConversions => params::test_param_conversions(library, plugin_id),
-            PluginTestCase::ParamSetEvents => params::test_param_set_events(library, plugin_id, false),
-            PluginTestCase::ParamSetNoCookies => params::test_param_set_events(library, plugin_id, true),
-            PluginTestCase::ParamSetWrongNamespace => params::test_param_set_wrong_namespace(library, plugin_id),
-            PluginTestCase::ParamFuzzBasic => params::test_param_fuzz_basic(library, plugin_id, false),
-            PluginTestCase::ParamFuzzBounds => params::test_param_fuzz_basic(library, plugin_id, true),
-            PluginTestCase::ParamFuzzSampleAccurate => params::test_param_fuzz_sample_accurate(library, plugin_id),
-            PluginTestCase::ParamFuzzModulation => params::test_param_fuzz_modulation(library, plugin_id),
-            PluginTestCase::ParamDefaultValues => params::test_param_default_values(library, plugin_id),
-            PluginTestCase::StateInvalidEmpty => state::test_state_invalid_empty(library, plugin_id),
-            PluginTestCase::StateInvalidRandom => state::test_state_invalid_random(library, plugin_id),
-            PluginTestCase::StateReproducibilityBasic => {
-                state::test_state_reproducibility(library, plugin_id, false, false)
-            }
-            PluginTestCase::StateReproducibilityBuffered => {
-                state::test_state_reproducibility(library, plugin_id, true, false)
-            }
-            PluginTestCase::StateReproducibilityBinary => {
-                state::test_state_reproducibility(library, plugin_id, false, true)
-            }
-
-            PluginTestCase::TransportNull => transport::test_transport_null(library, plugin_id),
-            PluginTestCase::TransportFuzz => transport::test_transport_fuzz(library, plugin_id),
-            PluginTestCase::TransportFuzzSampleAccurate => {
-                transport::test_transport_fuzz_sample_accurate(library, plugin_id)
-            }
+            Self::ProcessNoteWildcard => processing::test_process_note_out_of_place(library, plugin_id, false, true),
+            Self::ProcessVaryingSampleRates => processing::test_process_varying_sample_rates(library, plugin_id),
+            Self::ProcessVaryingBlockSizes => processing::test_process_varying_block_sizes(library, plugin_id),
+            Self::ProcessRandomBlockSizes => processing::test_process_random_block_sizes(library, plugin_id),
+            Self::ProcessResetReactivate => processing::test_process_reset_reactivate(library, plugin_id),
+            Self::ParamConversions => params::test_param_conversions(library, plugin_id),
+            Self::ParamSetEvents => params::test_param_set_events(library, plugin_id, false),
+            Self::ParamSetNoCookies => params::test_param_set_events(library, plugin_id, true),
+            Self::ParamSetWrongNamespace => params::test_param_set_wrong_namespace(library, plugin_id),
+            Self::ParamFuzzBasic => params::test_param_fuzz_basic(library, plugin_id, false),
+            Self::ParamFuzzBounds => params::test_param_fuzz_basic(library, plugin_id, true),
+            Self::ParamFuzzSampleAccurate => params::test_param_fuzz_sample_accurate(library, plugin_id),
+            Self::ParamFuzzModulation => params::test_param_fuzz_modulation(library, plugin_id),
+            Self::ParamDefaultValues => params::test_param_default_values(library, plugin_id),
+            Self::StateInvalidEmpty => state::test_state_invalid_empty(library, plugin_id),
+            Self::StateInvalidRandom => state::test_state_invalid_random(library, plugin_id),
+            Self::StateReproducibilityBasic => state::test_state_reproducibility(library, plugin_id, false, false),
+            Self::StateReproducibilityBuffered => state::test_state_reproducibility(library, plugin_id, true, false),
+            Self::StateReproducibilityBinary => state::test_state_reproducibility(library, plugin_id, false, true),
+            Self::TransportNull => transport::test_transport_null(library, plugin_id),
+            Self::TransportFuzz => transport::test_transport_fuzz(library, plugin_id),
+            Self::TransportFuzzSampleAccurate => transport::test_transport_fuzz_sample_accurate(library, plugin_id),
         }
     }
 }

@@ -130,11 +130,11 @@ pub fn from_fn(f: impl Fn(&mut dyn Recorder)) -> impl Recordable {
 }
 
 macro_rules! record {
-    ($($name:ident: $value:expr),*) => {
+    ($($name:ident: $value:expr),*) => {{
         $crate::cli::tracing::from_fn(|record| {
-            $(record.record_entry(stringify!($name), &$value);)*
+            $(record.record_entry(stringify!($name), &$value as &dyn $crate::cli::tracing::Recordable);)*
         })
-    };
+    }};
 }
 
 pub(crate) use record;

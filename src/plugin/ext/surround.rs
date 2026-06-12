@@ -17,11 +17,8 @@ impl<'a> Extension for Surround<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_surround;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            surround: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, surround: NonNull<Self::Struct>) -> Self {
+        Self { plugin, surround }
     }
 }
 

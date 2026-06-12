@@ -18,11 +18,8 @@ impl<'a> Extension for Latency<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_latency;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            latency: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, latency: NonNull<Self::Struct>) -> Self {
+        Self { plugin, latency }
     }
 }
 

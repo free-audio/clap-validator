@@ -308,6 +308,10 @@ impl Recordable for Event {
             Event::Midi(event) => {
                 record.record("info.port_index", event.port_index);
                 record.record("info.raw", format_args!("{:X?}", event.data));
+
+                if let Some(midi_event) = MidiEvent::parse(event.data) {
+                    record.record("info.midi", midi_event);
+                }
             }
             Event::Midi2(event) => {
                 record.record("info.port_index", event.port_index);
@@ -331,6 +335,121 @@ impl Recordable for Event {
                 record.record("info.transport", event);
             }
             Event::Unknown(..) => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MidiEvent {
+    NoteOn { key: u8, velocity: u8, channel: u8 },
+    NoteOff { key: u8, velocity: u8, channel: u8 },
+    NotePressure { key: u8, pressure: u8, channel: u8 },
+    ControlChange { param: u8, value: u8, channel: u8 },
+    ProgramChange { program: u8, channel: u8 },
+    ChannelPressure { pressure: u8, channel: u8 },
+    PitchBend { value: f32, channel: u8 },
+}
+
+impl MidiEvent {
+    pub fn into_bytes(self) -> [u8; 3] {
+        match self {
+            MidiEvent::NoteOn { key, velocity, channel } => [0x90 | channel, key & 0x7F, velocity & 0x7F],
+            MidiEvent::NoteOff { key, velocity, channel } => [0x80 | channel, key & 0x7F, velocity & 0x7F],
+            MidiEvent::NotePressure { key, pressure, channel } => [0xA0 | channel, key & 0x7F, pressure & 0x7F],
+            MidiEvent::ControlChange { param, value, channel } => [0xB0 | channel, param & 0x7F, value & 0x7F],
+            MidiEvent::ProgramChange { program, channel } => [0xC0 | channel, program & 0x7F, 0],
+            MidiEvent::ChannelPressure { pressure, channel } => [0xD0 | channel, pressure & 0x7F, 0],
+            MidiEvent::PitchBend { value, channel } => {
+                let value = (value.clamp(-1.0, 1.0) * 8192.0) as i16 + 8192;
+                [0xE0 | channel, (value & 0x7F) as u8, ((value >> 7) & 0x7F) as u8]
+            }
+        }
+    }
+
+    pub fn parse([a, b, c]: [u8; 3]) -> Option<Self> {
+        let status = a & 0xF0;
+        let channel = a & 0x0F;
+
+        match status {
+            0x80 => Some(MidiEvent::NoteOff {
+                key: b,
+                velocity: c,
+                channel,
+            }),
+            0x90 if c == 0 => Some(MidiEvent::NoteOff {
+                key: b,
+                velocity: 0,
+                channel,
+            }),
+            0x90 => Some(MidiEvent::NoteOn {
+                key: b,
+                velocity: c,
+                channel,
+            }),
+            0xA0 => Some(MidiEvent::NotePressure {
+                key: b,
+                pressure: c,
+                channel,
+            }),
+            0xB0 => Some(MidiEvent::ControlChange {
+                param: b,
+                value: c,
+                channel,
+            }),
+            0xC0 => Some(MidiEvent::ProgramChange { program: b, channel }),
+            0xD0 => Some(MidiEvent::ChannelPressure { pressure: b, channel }),
+            0xE0 => {
+                let value = ((c as u16) << 7) | (b as u16);
+                let value = (value as i32 - 8192) as f32 / 8192.0;
+                Some(MidiEvent::PitchBend { value, channel })
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Recordable for MidiEvent {
+    fn record(&self, record: &mut dyn Recorder) {
+        match self {
+            MidiEvent::NoteOn { key, velocity, channel } => {
+                record.record("type", "Note On");
+                record.record("key", *key);
+                record.record("velocity", *velocity);
+                record.record("channel", *channel);
+            }
+            MidiEvent::NoteOff { key, velocity, channel } => {
+                record.record("type", "Note Off");
+                record.record("key", *key);
+                record.record("velocity", *velocity);
+                record.record("channel", *channel);
+            }
+            MidiEvent::NotePressure { key, pressure, channel } => {
+                record.record("type", "Aftertouch");
+                record.record("key", *key);
+                record.record("pressure", *pressure);
+                record.record("channel", *channel);
+            }
+            MidiEvent::ControlChange { param, value, channel } => {
+                record.record("type", "Control Change");
+                record.record("control", *param);
+                record.record("value", *value);
+                record.record("channel", *channel);
+            }
+            MidiEvent::ProgramChange { program, channel } => {
+                record.record("type", "Program Change");
+                record.record("program", *program);
+                record.record("channel", *channel);
+            }
+            MidiEvent::ChannelPressure { pressure, channel } => {
+                record.record("type", "Channel Pressure");
+                record.record("pressure", *pressure);
+                record.record("channel", *channel);
+            }
+            MidiEvent::PitchBend { value, channel } => {
+                record.record("type", "Pitch Wheel");
+                record.record("value", *value);
+                record.record("channel", *channel);
+            }
         }
     }
 }

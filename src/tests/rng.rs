@@ -4,18 +4,18 @@ use crate::plugin::ext::audio_ports::AudioPortConfig;
 use crate::plugin::ext::configurable_audio_ports::{AudioPortsRequest, AudioPortsRequestInfo};
 use crate::plugin::ext::note_ports::NotePortConfig;
 use crate::plugin::ext::params::{Param, ParamInfo};
-use crate::plugin::process::{Event, TransportState};
+use crate::plugin::process::{Event, MidiEvent, TransportState};
 use clap_sys::events::*;
 use clap_sys::ext::ambisonic::*;
-use midi_consts::channel_event as midi;
-use rand::RngExt;
+use core::f64;
 use rand::seq::{IndexedRandom, IteratorRandom};
-use rand_pcg::Pcg32;
+use rand::{Rng, RngExt, SeedableRng};
 use std::ops::RangeInclusive;
+use std::ptr::null_mut;
 
 /// Create a new pseudo-random number generator with a fixed seed.
-pub fn new_prng() -> Pcg32 {
-    Pcg32::new(1337, 420)
+pub fn new_prng() -> rand::rngs::Xoshiro128PlusPlus {
+    rand::rngs::Xoshiro128PlusPlus::seed_from_u64(0x1337_6767)
 }
 
 /// A random note and MIDI event generator that generates consistent events based on the
@@ -33,31 +33,39 @@ pub struct NoteGenerator<'a> {
     /// active.
     only_consistent_events: bool,
 
+    /// Send events with wildcard values for the note ID, port index, channel, and key.
+    wildcard_events: bool,
+
+    /// Allow overlapping notes to be sent.
+    overlapping_events: bool,
+
     /// The range for the next event's timing relative to the previous event.
     /// This will be capped to 0 when generating events
     sample_offset_range: RangeInclusive<i32>,
 
-    /// Contains the currently playing notes per-port. We'll be nice and not send overlapping notes
-    /// or note-offs without a corresponding note-on.
-    ///
-    /// TODO: Do send overlapping notes with different note IDs if the plugin claims to support it.
-    active_notes: Vec<Vec<Note>>,
+    /// Contains the currently playing notes. We'll be nice and not send note-offs without a corresponding note-on or
+    /// overlapping note-ons if overlapping notes are not supported.
+    active_notes: Vec<Note>,
+
     /// The CLAP note ID for the next note on event.
-    next_note_id: i32,
+    next_note_id: u32,
 }
 
 /// A helper to generate random parameter automation and modulation events in a couple different
 /// ways to stress test a plugin's parameter handling.
 pub struct ParamFuzzer<'a> {
     /// The parameter info to generate random events for.
-    params: &'a ParamInfo,
+    pub params: &'a ParamInfo,
 
     /// Whether to snap generated parameter values to the parameter's minimum or maximum value.
-    snap_to_bounds: bool,
+    pub snap_to_bounds: bool,
+
+    /// Set parameter cookies to `null` instead of the actual cookie value.
+    pub no_cookies: bool,
 
     /// The range for the next event's timing relative to the previous event.
     /// This will be capped to 0 when generating events
-    sample_offset_range: RangeInclusive<i32>,
+    pub sample_offset_range: RangeInclusive<i32>,
 }
 
 /// A helper to generate random transport events in a couple different ways to stress test a plugin's transport handling.
@@ -68,11 +76,21 @@ pub struct TransportFuzzer {
 /// The description of an active note in the [`NoteGenerator`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Note {
-    pub key: i16,
-    pub channel: i16,
-    pub note_id: i32,
+    pub key: u8,
+    pub channel: u8,
+    pub port: u32,
+    pub note_id: u32,
     /// Whether the note has been choked, we can only send this event once per note.
     pub choked: bool,
+    /// Whether to set the 'live' flag on events or not.
+    pub live: bool,
+}
+
+struct NoteFilter {
+    pub port: Option<u32>,
+    pub channel: Option<u8>,
+    pub key: Option<u8>,
+    pub note_id: Option<u32>,
 }
 
 /// The different kinds of events we can generate. The event type chosen depends on the plugin.
@@ -131,13 +149,51 @@ impl NoteEventType {
 }
 
 impl Note {
-    fn random(prng: &mut Pcg32) -> Self {
+    fn random(prng: &mut impl Rng) -> Self {
         Note {
+            port: prng.random_range(0..10),
             key: prng.random_range(0..128),
             channel: prng.random_range(0..16),
             note_id: prng.random_range(0..100),
+            live: prng.random_bool(0.1),
             choked: false,
         }
+    }
+
+    fn matches(&self, filter: &NoteFilter) -> bool {
+        (filter.port.is_none() || filter.port == Some(self.port))
+            && (filter.channel.is_none() || filter.channel == Some(self.channel))
+            && (filter.key.is_none() || filter.key == Some(self.key))
+            && (filter.note_id.is_none() || filter.note_id == Some(self.note_id))
+    }
+}
+
+impl NoteFilter {
+    fn from_note(note: &Note) -> Self {
+        NoteFilter {
+            port: Some(note.port),
+            channel: Some(note.channel),
+            key: Some(note.key),
+            note_id: Some(note.note_id),
+        }
+    }
+
+    fn random_wildcard(&self, prng: &mut impl Rng) -> Self {
+        NoteFilter {
+            port: if prng.random_bool(0.1) { None } else { self.port },
+            channel: if prng.random_bool(0.1) { None } else { self.channel },
+            key: if prng.random_bool(0.1) { None } else { self.key },
+            note_id: if prng.random_bool(0.1) { None } else { self.note_id },
+        }
+    }
+
+    fn raw_pckn(&self) -> (i16, i16, i16, i32) {
+        (
+            self.port.map(|p| p as i16).unwrap_or(-1),
+            self.channel.map(|c| c as i16).unwrap_or(-1),
+            self.key.map(|k| k as i16).unwrap_or(-1),
+            self.note_id.map(|id| id as i32).unwrap_or(-1),
+        )
     }
 }
 
@@ -146,20 +202,20 @@ impl<'a> NoteGenerator<'a> {
     /// these events are consistent, meaning that there are no things like note offs before a note
     /// on, duplicate note ons, or note expressions for notes that don't exist.
     pub fn new(config: &'a NotePortConfig) -> Self {
-        let num_inputs = config.inputs.len();
-
         NoteGenerator {
             config,
             params: None,
 
             only_consistent_events: true,
+            overlapping_events: false,
+            wildcard_events: false,
 
             // The range for the next event's timing relative to the `current_sample`. This will be
             // capped at 0, so there's a ~58% chance the next event occurs on the same time interval as
             // the previous event.
             sample_offset_range: -6..=5,
 
-            active_notes: vec![Vec::new(); num_inputs],
+            active_notes: vec![],
             next_note_id: 0,
         }
     }
@@ -184,10 +240,22 @@ impl<'a> NoteGenerator<'a> {
         self
     }
 
+    /// Allow wildcard events, where the note ID, port index, channel, and key can be set to -1.
+    pub fn with_wildcard_events(mut self) -> Self {
+        self.wildcard_events = true;
+        self
+    }
+
+    /// Allow overlapping notes (notes with different IDs but same key-port-channel triple).
+    pub fn with_overlapping_notes(mut self) -> Self {
+        self.overlapping_events = true;
+        self
+    }
+
     /// Fill an event queue with random events for the next `num_samples` samples. This does not
     /// clear the event queue. If the queue was not empty, then this will do a stable sort after
     /// inserting _all_ events.
-    pub fn generate_events(&mut self, prng: &mut Pcg32, num_samples: u32) -> Vec<Event> {
+    pub fn generate_events(&mut self, prng: &mut impl Rng, num_samples: u32) -> Vec<Event> {
         let mut events = vec![];
         let mut sample = prng.random_range(self.sample_offset_range.clone()).max(0) as u32;
 
@@ -206,7 +274,7 @@ impl<'a> NoteGenerator<'a> {
     /// Generate a random note event for one of the plugin's note ports depending on the port's
     /// capabilities. Returns an error if the plugin doesn't have any note ports or if the note
     /// ports don't support either MIDI or CLAP note events.
-    pub fn generate_event(&mut self, prng: &mut Pcg32, time_offset: u32) -> Option<Event> {
+    pub fn generate_event(&mut self, prng: &mut impl Rng, time_offset: u32) -> Option<Event> {
         if self.config.inputs.is_empty() {
             return None;
         }
@@ -230,18 +298,28 @@ impl<'a> NoteGenerator<'a> {
                     let note = if self.only_consistent_events {
                         let note = Note {
                             note_id: self.next_note_id,
+                            port: note_port_idx as u32,
                             ..Note::random(prng)
                         };
 
-                        if self.active_notes[note_port_idx].contains(&note) {
+                        if !self.overlapping_events
+                            && self
+                                .active_notes
+                                .iter()
+                                .any(|n| n.port == note.port && n.channel == note.channel && n.key == note.key)
+                        {
                             continue;
                         }
-                        self.active_notes[note_port_idx].push(note);
+
+                        self.active_notes.push(note);
                         self.next_note_id = self.next_note_id.wrapping_add(1);
 
                         note
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
 
                     let velocity = prng.random_range(0.0..=1.0);
@@ -251,90 +329,112 @@ impl<'a> NoteGenerator<'a> {
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_NOTE_ON,
-                            // TODO: There's a live flag here, should we also randomize this?
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
-                        key: note.key,
+                        note_id: note.note_id as i32,
+                        port_index: note.port as i16,
+                        channel: note.channel as i16,
+                        key: note.key as i16,
                         velocity,
                     }));
                 }
                 NoteEventType::ClapNoteOff => {
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) => *note,
+                            _ => continue,
                         }
-
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        self.active_notes[note_port_idx].remove(note_idx)
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
 
+                    let filter = if self.wildcard_events {
+                        NoteFilter::from_note(&note).random_wildcard(prng)
+                    } else {
+                        NoteFilter::from_note(&note)
+                    };
+
+                    self.active_notes.retain(|n| !n.matches(&filter));
+
                     let velocity = prng.random_range(0.0..=1.0);
+                    let (port_index, channel, key, note_id) = filter.raw_pckn();
                     return Some(Event::Note(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_NOTE_OFF,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
-                        key: note.key,
+                        note_id,
+                        port_index,
+                        channel,
+                        key,
                         velocity,
                     }));
                 }
                 NoteEventType::ClapNoteChoke => {
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) if !note.choked => *note,
+                            _ => continue,
                         }
-
-                        // A note can only be choked once
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        let note = &mut self.active_notes[note_port_idx][note_idx];
-                        if note.choked {
-                            continue;
-                        }
-                        note.choked = true;
-
-                        *note
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
 
-                    // Does a velocity make any sense here? Probably not.
-                    let velocity = prng.random_range(0.0..=1.0);
+                    let filter = if self.wildcard_events {
+                        NoteFilter::from_note(&note).random_wildcard(prng)
+                    } else {
+                        NoteFilter::from_note(&note)
+                    };
+
+                    for note in self.active_notes.iter_mut() {
+                        if note.matches(&filter) {
+                            note.choked = true;
+                        }
+                    }
+
+                    let (port_index, channel, key, note_id) = filter.raw_pckn();
                     return Some(Event::Note(clap_event_note {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_note>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_NOTE_CHOKE,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
-                        key: note.key,
-                        velocity,
+                        note_id,
+                        port_index,
+                        channel,
+                        key,
+                        velocity: f64::NAN,
                     }));
                 }
+
                 NoteEventType::ClapNoteExpression => {
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) => *note,
+                            _ => continue,
                         }
-
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        self.active_notes[note_port_idx][note_idx]
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
+                    };
+
+                    let filter = if self.wildcard_events {
+                        NoteFilter::from_note(&note).random_wildcard(prng)
+                    } else {
+                        NoteFilter::from_note(&note)
                     };
 
                     let expression_id = prng.random_range(CLAP_NOTE_EXPRESSION_VOLUME..=CLAP_NOTE_EXPRESSION_PRESSURE);
@@ -344,6 +444,7 @@ impl<'a> NoteGenerator<'a> {
                         _ => 0.0..=1.0,
                     };
                     let value = prng.random_range(value_range);
+                    let (port_index, channel, key, note_id) = filter.raw_pckn();
 
                     return Some(Event::NoteExpression(clap_event_note_expression {
                         header: clap_event_header {
@@ -351,13 +452,13 @@ impl<'a> NoteGenerator<'a> {
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_NOTE_EXPRESSION,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         expression_id,
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
-                        key: note.key,
+                        note_id,
+                        port_index,
+                        channel,
+                        key,
                         value,
                     }));
                 }
@@ -365,64 +466,84 @@ impl<'a> NoteGenerator<'a> {
                     let note = if self.only_consistent_events {
                         let note = Note {
                             note_id: self.next_note_id,
+                            port: note_port_idx as u32,
                             ..Note::random(prng)
                         };
 
-                        if self.active_notes[note_port_idx].contains(&note) {
+                        if !self.overlapping_events
+                            && self
+                                .active_notes
+                                .iter()
+                                .any(|n| n.port == note.port && n.channel == note.channel && n.key == note.key)
+                        {
                             continue;
                         }
-                        self.active_notes[note_port_idx].push(note);
+
+                        self.active_notes.push(note);
                         self.next_note_id = self.next_note_id.wrapping_add(1);
 
                         note
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
 
-                    let velocity = prng.random_range(0.0..=1.0);
+                    let velocity = prng.random_range(0.0..=1.0f32);
+                    let velocity = (velocity * 127.0).round().clamp(0.0, 127.0) as u8;
+
                     return Some(Event::Midi(clap_event_midi {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         port_index: note_port_idx as u16,
-                        data: [
-                            midi::NOTE_ON | note.channel as u8,
-                            note.key as u8,
-                            (velocity * 127.0f32).round().clamp(0.0, 127.0) as u8,
-                        ],
+                        data: MidiEvent::NoteOn {
+                            key: note.key,
+                            channel: note.channel,
+                            velocity,
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::MidiNoteOff => {
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) => *note,
+                            _ => continue,
                         }
-
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        self.active_notes[note_port_idx].remove(note_idx)
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
 
-                    let velocity = prng.random_range(0.0..=1.0);
+                    self.active_notes
+                        .retain(|n| n.port != note.port || n.channel != note.channel || n.key != note.key);
+
+                    let velocity = prng.random_range(0.0..=1.0f32);
+                    let velocity = (velocity * 127.0).round().clamp(0.0, 127.0) as u8;
+
                     return Some(Event::Midi(clap_event_midi {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_midi>() as u32,
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         port_index: note_port_idx as u16,
-                        data: [
-                            midi::NOTE_OFF | note.channel as u8,
-                            note.key as u8,
-                            (velocity * 127.0f32).round().clamp(0.0, 127.0) as u8,
-                        ],
+                        data: MidiEvent::NoteOff {
+                            key: note.key,
+                            channel: note.channel,
+                            velocity,
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::MidiChannelPressure => {
@@ -437,19 +558,24 @@ impl<'a> NoteGenerator<'a> {
                             flags: 0,
                         },
                         port_index: note_port_idx as u16,
-                        data: [midi::CHANNEL_KEY_PRESSURE | channel, pressure, 0],
+                        data: MidiEvent::ChannelPressure {
+                            pressure,
+                            channel: channel as u8,
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::MidiPolyKeyPressure => {
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) => *note,
+                            _ => continue,
                         }
-
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        self.active_notes[note_port_idx][note_idx]
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
 
                     let pressure = prng.random_range(0..128);
@@ -459,21 +585,20 @@ impl<'a> NoteGenerator<'a> {
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_MIDI,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         port_index: note_port_idx as u16,
-                        data: [
-                            midi::POLYPHONIC_KEY_PRESSURE | note.channel as u8,
-                            note.key as u8,
+                        data: MidiEvent::NotePressure {
+                            key: note.key,
+                            channel: note.channel,
                             pressure,
-                        ],
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::MidiPitchBend => {
-                    // May as well just generate the two bytes directly instead of doing fancy things
                     let channel = prng.random_range(0..16);
-                    let byte1 = prng.random_range(0..128);
-                    let byte2 = prng.random_range(0..128);
+                    let value = prng.random_range(-1.0..=1.0);
                     return Some(Event::Midi(clap_event_midi {
                         header: clap_event_header {
                             size: std::mem::size_of::<clap_event_midi>() as u32,
@@ -483,12 +608,16 @@ impl<'a> NoteGenerator<'a> {
                             flags: 0,
                         },
                         port_index: note_port_idx as u16,
-                        data: [midi::PITCH_BEND_CHANGE | channel, byte1, byte2],
+                        data: MidiEvent::PitchBend {
+                            value,
+                            channel: channel as u8,
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::MidiCc => {
                     let channel = prng.random_range(0..16);
-                    let cc = prng.random_range(0..128);
+                    let param = prng.random_range(0..128);
                     let value = prng.random_range(0..128);
                     return Some(Event::Midi(clap_event_midi {
                         header: clap_event_header {
@@ -499,7 +628,12 @@ impl<'a> NoteGenerator<'a> {
                             flags: 0,
                         },
                         port_index: note_port_idx as u16,
-                        data: [midi::CONTROL_CHANGE | channel, cc, value],
+                        data: MidiEvent::ControlChange {
+                            param,
+                            value,
+                            channel: channel as u8,
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::MidiProgramChange => {
@@ -514,7 +648,11 @@ impl<'a> NoteGenerator<'a> {
                             flags: 0,
                         },
                         port_index: note_port_idx as u16,
-                        data: [midi::PROGRAM_CHANGE | channel, program_number, 0],
+                        data: MidiEvent::ProgramChange {
+                            program: program_number,
+                            channel: channel as u8,
+                        }
+                        .into_bytes(),
                     }));
                 }
                 NoteEventType::ParamValue => {
@@ -531,15 +669,25 @@ impl<'a> NoteGenerator<'a> {
                     };
 
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) => *note,
+                            _ => continue,
                         }
-
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        self.active_notes[note_port_idx][note_idx]
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
+
+                    let filter = if self.wildcard_events {
+                        NoteFilter::from_note(&note).random_wildcard(prng)
+                    } else {
+                        NoteFilter::from_note(&note)
+                    };
+
+                    let (port_index, channel, key, note_id) = filter.raw_pckn();
+                    let value = ParamFuzzer::random_value(param, prng);
 
                     return Some(Event::ParamValue(clap_event_param_value {
                         header: clap_event_header {
@@ -547,15 +695,15 @@ impl<'a> NoteGenerator<'a> {
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_PARAM_VALUE,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         param_id: *param_id,
                         cookie: param.cookie,
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
-                        key: note.key,
-                        value: ParamFuzzer::random_value(param, prng),
+                        note_id,
+                        port_index,
+                        channel,
+                        key,
+                        value,
                     }));
                 }
                 NoteEventType::ParamModulation => {
@@ -572,15 +720,25 @@ impl<'a> NoteGenerator<'a> {
                     };
 
                     let note = if self.only_consistent_events {
-                        if self.active_notes[note_port_idx].is_empty() {
-                            continue;
+                        match self.active_notes.choose(prng) {
+                            Some(note) => *note,
+                            _ => continue,
                         }
-
-                        let note_idx = prng.random_range(0..self.active_notes[note_port_idx].len());
-                        self.active_notes[note_port_idx][note_idx]
                     } else {
-                        Note::random(prng)
+                        Note {
+                            port: note_port_idx as u32,
+                            ..Note::random(prng)
+                        }
                     };
+
+                    let filter = if self.wildcard_events {
+                        NoteFilter::from_note(&note).random_wildcard(prng)
+                    } else {
+                        NoteFilter::from_note(&note)
+                    };
+
+                    let (port_index, channel, key, note_id) = filter.raw_pckn();
+                    let value = ParamFuzzer::random_value(param, prng);
 
                     return Some(Event::ParamValue(clap_event_param_value {
                         header: clap_event_header {
@@ -588,15 +746,15 @@ impl<'a> NoteGenerator<'a> {
                             time: time_offset,
                             space_id: CLAP_CORE_EVENT_SPACE_ID,
                             type_: CLAP_EVENT_PARAM_VALUE,
-                            flags: 0,
+                            flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         param_id: *param_id,
                         cookie: param.cookie,
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
-                        key: note.key,
-                        value: ParamFuzzer::random_modulation(param, prng),
+                        note_id,
+                        port_index,
+                        channel,
+                        key,
+                        value,
                     }));
                 }
             }
@@ -607,38 +765,41 @@ impl<'a> NoteGenerator<'a> {
 
     pub fn stop_all_voices(&mut self, time_offset: u32) -> Vec<Event> {
         let mut events = vec![];
-        for (note_port_idx, active_notes) in self.active_notes.iter_mut().enumerate() {
-            let supports_clap = self.config.inputs[note_port_idx].supports_clap();
+        for note in self.active_notes.drain(..) {
+            let supports_clap = self.config.inputs[note.port as usize].supports_clap();
 
-            for note in active_notes.drain(..) {
-                if supports_clap {
-                    events.push(Event::Note(clap_event_note {
-                        header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_note>() as u32,
-                            time: time_offset,
-                            space_id: CLAP_CORE_EVENT_SPACE_ID,
-                            type_: CLAP_EVENT_NOTE_OFF,
-                            flags: 0,
-                        },
-                        note_id: note.note_id,
-                        port_index: note_port_idx as i16,
-                        channel: note.channel,
+            if supports_clap {
+                events.push(Event::Note(clap_event_note {
+                    header: clap_event_header {
+                        size: std::mem::size_of::<clap_event_note>() as u32,
+                        time: time_offset,
+                        space_id: CLAP_CORE_EVENT_SPACE_ID,
+                        type_: CLAP_EVENT_NOTE_OFF,
+                        flags: 0,
+                    },
+                    note_id: note.note_id as i32,
+                    port_index: note.port as i16,
+                    channel: note.channel as i16,
+                    key: note.key as i16,
+                    velocity: 0.0,
+                }));
+            } else {
+                events.push(Event::Midi(clap_event_midi {
+                    header: clap_event_header {
+                        size: std::mem::size_of::<clap_event_midi>() as u32,
+                        time: time_offset,
+                        space_id: CLAP_CORE_EVENT_SPACE_ID,
+                        type_: CLAP_EVENT_MIDI,
+                        flags: 0,
+                    },
+                    port_index: note.port as u16,
+                    data: MidiEvent::NoteOff {
                         key: note.key,
-                        velocity: 0.0,
-                    }));
-                } else {
-                    events.push(Event::Midi(clap_event_midi {
-                        header: clap_event_header {
-                            size: std::mem::size_of::<clap_event_midi>() as u32,
-                            time: time_offset,
-                            space_id: CLAP_CORE_EVENT_SPACE_ID,
-                            type_: CLAP_EVENT_MIDI,
-                            flags: 0,
-                        },
-                        port_index: note_port_idx as u16,
-                        data: [midi::NOTE_OFF | note.channel as u8, note.key as u8, 0],
-                    }));
-                }
+                        channel: note.channel,
+                        velocity: 0,
+                    }
+                    .into_bytes(),
+                }));
             }
         }
 
@@ -647,9 +808,7 @@ impl<'a> NoteGenerator<'a> {
 
     pub fn reset(&mut self) {
         self.next_note_id = 0;
-        for active_notes in &mut self.active_notes {
-            active_notes.clear();
-        }
+        self.active_notes.clear();
     }
 }
 
@@ -658,13 +817,24 @@ impl<'a> ParamFuzzer<'a> {
     pub fn new(params: &'a ParamInfo) -> Self {
         ParamFuzzer {
             params,
+            no_cookies: false,
             snap_to_bounds: false,
             sample_offset_range: -10..=20,
         }
     }
 
-    pub fn snap_to_bounds(mut self) -> Self {
-        self.snap_to_bounds = true;
+    pub fn with_sample_offset_range(mut self, range: RangeInclusive<i32>) -> Self {
+        self.sample_offset_range = range;
+        self
+    }
+
+    pub fn with_no_cookies(mut self, no_cookies: bool) -> Self {
+        self.no_cookies = no_cookies;
+        self
+    }
+
+    pub fn snap_to_bounds(mut self, snap_to_bounds: bool) -> Self {
+        self.snap_to_bounds = snap_to_bounds;
         self
     }
 
@@ -674,7 +844,7 @@ impl<'a> ParamFuzzer<'a> {
     ///
     /// Unlike [`ParamFuzzer::randomize_params_at`], this generates [`Event::ParamMod`] events as well as
     /// generating events at random irregular unsynchronized (between different parameters) intervals.
-    pub fn generate_events(&self, prng: &mut Pcg32, num_samples: u32) -> Vec<Event> {
+    pub fn generate_events(&self, prng: &mut impl Rng, num_samples: u32) -> Vec<Event> {
         let mut events = vec![];
         let mut sample = prng.random_range(self.sample_offset_range.clone()).max(0) as u32;
         while sample < num_samples {
@@ -690,7 +860,7 @@ impl<'a> ParamFuzzer<'a> {
     }
 
     /// Generate a single random parameter change event for one of the plugin's parameters.
-    pub fn generate_event(&self, prng: &mut Pcg32) -> Option<Event> {
+    pub fn generate_event(&self, prng: &mut impl Rng) -> Option<Event> {
         let (param_id, param_info) = self
             .params
             .iter()
@@ -707,7 +877,7 @@ impl<'a> ParamFuzzer<'a> {
                     flags: 0,
                 },
                 param_id: *param_id,
-                cookie: param_info.cookie,
+                cookie: if self.no_cookies { null_mut() } else { param_info.cookie },
                 note_id: -1,
                 port_index: -1,
                 channel: -1,
@@ -728,7 +898,7 @@ impl<'a> ParamFuzzer<'a> {
                     },
                 },
                 param_id: *param_id,
-                cookie: param_info.cookie,
+                cookie: if self.no_cookies { null_mut() } else { param_info.cookie },
                 note_id: -1,
                 port_index: -1,
                 channel: -1,
@@ -740,7 +910,7 @@ impl<'a> ParamFuzzer<'a> {
 
     /// Randomize _all_ parameters at a certain sample index using **automation**, returning an
     /// iterator yielding automation events for all parameters.
-    pub fn randomize_params_at(&'a self, prng: &'a mut Pcg32, time_offset: u32) -> impl Iterator<Item = Event> + 'a {
+    pub fn randomize_params_at(&'a self, prng: &'a mut impl Rng, time_offset: u32) -> impl Iterator<Item = Event> + 'a {
         self.params.iter().filter_map(move |(param_id, param_info)| {
             // We can send parameter changes for parameters that are not automatable:
             //
@@ -772,7 +942,7 @@ impl<'a> ParamFuzzer<'a> {
                     },
                 },
                 param_id: *param_id,
-                cookie: param_info.cookie,
+                cookie: if self.no_cookies { null_mut() } else { param_info.cookie },
                 note_id: -1,
                 port_index: -1,
                 channel: -1,
@@ -782,7 +952,7 @@ impl<'a> ParamFuzzer<'a> {
         })
     }
 
-    pub fn random_value(param: &Param, prng: &mut Pcg32) -> f64 {
+    pub fn random_value(param: &Param, prng: &mut impl Rng) -> f64 {
         if param.stepped() {
             // We already confirmed that the range starts and ends in an integer when
             // constructing the parameter info
@@ -792,7 +962,7 @@ impl<'a> ParamFuzzer<'a> {
         }
     }
 
-    pub fn random_modulation(param: &Param, prng: &mut Pcg32) -> f64 {
+    pub fn random_modulation(param: &Param, prng: &mut impl Rng) -> f64 {
         let range = (param.range.end() - param.range.start()).abs() * 0.5;
 
         if param.stepped() {
@@ -812,7 +982,7 @@ impl TransportFuzzer {
     }
 
     /// Mutates an existing transport state.
-    pub fn mutate(&mut self, prng: &mut Pcg32, transport: &mut TransportState) {
+    pub fn mutate(&mut self, prng: &mut impl Rng, transport: &mut TransportState) {
         // toggle playback state with 20% probability
         if prng.random_bool(self.probability_change) {
             transport.is_playing = !transport.is_playing;
@@ -888,8 +1058,8 @@ impl TransportFuzzer {
     }
 }
 
-pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut Pcg32) -> Vec<AudioPortsRequest<'static>> {
-    fn random_request_info(prng: &mut Pcg32) -> AudioPortsRequestInfo<'static> {
+pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut impl Rng) -> Vec<AudioPortsRequest<'static>> {
+    fn random_request_info(prng: &mut impl Rng) -> AudioPortsRequestInfo<'static> {
         match prng.random_range(0..=4) {
             0 => AudioPortsRequestInfo::Mono,
             1 => AudioPortsRequestInfo::Stereo,
@@ -921,6 +1091,7 @@ pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut Pcg32) -> Vec
             }
             _ => {
                 const SURROUND_MAPS: &[&[u8]] = &[
+                    &[2],                 // Mono;   FC
                     &[0, 1],              // Stereo; FL FR
                     &[0, 2, 1],           // 3.0;    FL FC FR
                     &[0, 2, 1, 3],        // 3.1;    FL FC FR LFE
@@ -928,6 +1099,12 @@ pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut Pcg32) -> Vec
                     &[0, 2, 1, 8, 3],     // 4.1;    FL FC FR BC LFE
                     &[0, 2, 1, 9, 10],    // 5.0;    FL FC FR SL SR
                     &[0, 2, 1, 9, 10, 3], // 5.1;    FL FC FR SL SR LFE
+                    &[0, 1, 2],           // 3.0;    FL FR FC
+                    &[0, 1, 2, 3],        // 3.1;    FL FR FC LFE
+                    &[0, 1, 2, 8],        // 4.0;    FL FR FC BC
+                    &[0, 1, 2, 3, 8],     // 4.1;    FL FR FC LFE BC
+                    &[0, 1, 2, 9, 10],    // 5.0;    FL FR FC SL SR
+                    &[0, 1, 2, 3, 9, 10], // 5.1;    FL FR FC LFE SL SR
                 ];
 
                 AudioPortsRequestInfo::Surround {
@@ -961,6 +1138,22 @@ pub fn random_layout_requests(config: &AudioPortConfig, prng: &mut Pcg32) -> Vec
         requests.push(AudioPortsRequest {
             is_input: false,
             port_index: index as u32,
+            request_info: random_request_info(prng),
+        });
+    }
+
+    // throw in random (maybe invalid) requests
+    while prng.random_bool(0.2) {
+        let is_input = prng.random_bool(0.5);
+        let port_index = if is_input {
+            prng.random_range(config.inputs.len() as u32..=config.inputs.len() as u32 + 10)
+        } else {
+            prng.random_range(config.outputs.len() as u32..=config.outputs.len() as u32 + 10)
+        };
+
+        requests.push(AudioPortsRequest {
+            is_input,
+            port_index,
             request_info: random_request_info(prng),
         });
     }

@@ -41,11 +41,8 @@ impl<'a> Extension for NotePorts<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_note_ports;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            note_ports: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, note_ports: NonNull<Self::Struct>) -> Self {
+        Self { plugin, note_ports }
     }
 }
 

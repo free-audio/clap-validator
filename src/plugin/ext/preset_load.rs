@@ -23,11 +23,8 @@ impl<'a> Extension for PresetLoad<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_preset_load;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            preset_load: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, preset_load: NonNull<Self::Struct>) -> Self {
+        Self { plugin, preset_load }
     }
 }
 

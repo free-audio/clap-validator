@@ -11,7 +11,7 @@ use crate::plugin::ext::state::State;
 use crate::plugin::ext::tail::Tail;
 use crate::plugin::ext::thread_pool::ThreadPool;
 use crate::plugin::ext::voice_info::VoiceInfo;
-use crate::plugin::instance::{CallbackEvent, MainThreadTask, Plugin, PluginStatus};
+use crate::plugin::instance::{CallbackEvent, Plugin, PluginStatus};
 use crate::plugin::preset_discovery::LocationValue;
 use crate::plugin::util::{self, CHECK_POINTER, Proxy, Proxyable, clap_call, cstr_ptr_to_string, validator_version};
 use anyhow::{Context, Result};
@@ -33,18 +33,51 @@ use clap_sys::host::clap_host;
 use clap_sys::id::clap_id;
 use clap_sys::plugin::clap_plugin;
 use clap_sys::version::CLAP_VERSION;
-use crossbeam::atomic::AtomicCell;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use crossbeam_utils::atomic::AtomicCell;
 use std::ffi::{CStr, c_char, c_void};
 use std::ptr::NonNull;
 use std::sync::Mutex;
 use std::sync::mpsc::{Sender, channel};
 use std::thread::ThreadId;
 
+#[derive(Debug, Clone, Copy)]
+pub struct HostCapabilities {
+    pub has_tail_extension: bool,
+    pub has_latency_extension: bool,
+    pub has_state_extension: bool,
+    pub has_params_extension: bool,
+    pub has_audio_ports_extension: bool,
+    pub has_note_ports_extension: bool,
+    pub has_thread_pool_extension: bool,
+
+    pub supports_clap_dialect: bool,
+    pub supports_midi_dialect: bool,
+    pub can_rescan_audio_ports: bool,
+}
+
+impl Default for HostCapabilities {
+    fn default() -> Self {
+        Self {
+            has_tail_extension: true,
+            has_latency_extension: true,
+            has_state_extension: true,
+            has_params_extension: true,
+            has_audio_ports_extension: true,
+            has_note_ports_extension: true,
+            has_thread_pool_extension: true,
+
+            supports_clap_dialect: true,
+            supports_midi_dialect: true,
+            can_rescan_audio_ports: false,
+        }
+    }
+}
+
 /// Plugin instance state that is shared between the main thread, audio thread and any external unmanaged threads.
 /// This struct also acts as the `clap_host` implementation for the plugin instance.
 pub struct PluginShared {
-    pub task_sender: Sender<MainThreadTask>,
+    pub capabilities: HostCapabilities,
+
     pub callback_sender: Sender<CallbackEvent>,
     pub callback_error: Mutex<Option<anyhow::Error>>,
 
@@ -102,12 +135,16 @@ impl PluginShared {
     /// # Safety
     /// The `factory` object must be valid.
     /// The caller must ensure that this is called from the OS main thread.
-    pub unsafe fn create_plugin<'a>(factory: *const clap_plugin_factory, plugin_id: &CStr) -> Result<Plugin<'a>> {
+    pub unsafe fn create_plugin<'a>(
+        factory: *const clap_plugin_factory,
+        plugin_id: &CStr,
+        capabilities: HostCapabilities,
+    ) -> Result<Plugin<'a>> {
         let (callback_sender, callback_receiver) = channel();
-        let (task_sender, task_receiver) = channel();
 
         let shared = Proxy::new(PluginShared {
-            task_sender,
+            capabilities,
+
             callback_sender,
             callback_error: Mutex::new(None),
 
@@ -147,7 +184,6 @@ impl PluginShared {
         Ok(Plugin {
             shared,
             callback_receiver,
-            task_receiver,
 
             _library: std::marker::PhantomData,
             _thread: std::marker::PhantomData,
@@ -363,38 +399,39 @@ impl PluginShared {
 
         // Right now there's no way to have the host only expose certain extensions. We can always
         // add that when test cases need it.
-        Self::wrap(host, span.name(), |_| {
+        Self::wrap(host, span.name(), |host| {
             let Some(extension_id_cstr) = extension_id_cstr else {
                 anyhow::bail!("Null extension ID");
             };
 
-            let extension_ptr = if extension_id_cstr == CLAP_EXT_AUDIO_PORTS {
-                &Self::EXT_AUDIO_PORTS as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS {
-                &Self::EXT_NOTE_PORTS as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_PRESET_LOAD {
-                &Self::EXT_PRESET_LOAD as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_PARAMS {
-                &Self::EXT_PARAMS as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_STATE {
-                &Self::EXT_STATE as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_THREAD_CHECK {
-                &Self::EXT_THREAD_CHECK as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_THREAD_POOL {
-                &Self::EXT_THREAD_POOL as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_LOG {
-                &Self::EXT_LOG as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_LATENCY {
-                &Self::EXT_LATENCY as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_TAIL {
-                &Self::EXT_TAIL as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_VOICE_INFO {
-                &Self::EXT_VOICE_INFO as *const _ as *const c_void
-            } else if extension_id_cstr == CLAP_EXT_AUDIO_PORTS_CONFIG {
-                &Self::EXT_AUDIO_PORTS_CONFIG as *const _ as *const c_void
-            } else {
-                std::ptr::null()
-            };
+            let extension_ptr =
+                if extension_id_cstr == CLAP_EXT_AUDIO_PORTS && host.capabilities.has_audio_ports_extension {
+                    &Self::EXT_AUDIO_PORTS as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_NOTE_PORTS && host.capabilities.has_note_ports_extension {
+                    &Self::EXT_NOTE_PORTS as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_PRESET_LOAD {
+                    &Self::EXT_PRESET_LOAD as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_PARAMS && host.capabilities.has_params_extension {
+                    &Self::EXT_PARAMS as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_STATE && host.capabilities.has_state_extension {
+                    &Self::EXT_STATE as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_THREAD_CHECK {
+                    &Self::EXT_THREAD_CHECK as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_THREAD_POOL && host.capabilities.has_thread_pool_extension {
+                    &Self::EXT_THREAD_POOL as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_LOG {
+                    &Self::EXT_LOG as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_LATENCY && host.capabilities.has_latency_extension {
+                    &Self::EXT_LATENCY as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_TAIL && host.capabilities.has_tail_extension {
+                    &Self::EXT_TAIL as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_VOICE_INFO {
+                    &Self::EXT_VOICE_INFO as *const _ as *const c_void
+                } else if extension_id_cstr == CLAP_EXT_AUDIO_PORTS_CONFIG {
+                    &Self::EXT_AUDIO_PORTS_CONFIG as *const _ as *const c_void
+                } else {
+                    std::ptr::null()
+                };
 
             span.finish(record!(result: format_args!("{:p}", extension_ptr)));
 
@@ -426,7 +463,6 @@ impl PluginShared {
 
         Self::wrap(host, span.name(), |this| {
             this.requested_callback.store(true);
-            this.task_sender.send(MainThreadTask::CallbackRequest).unwrap();
             Ok(())
         });
     }
@@ -450,7 +486,7 @@ impl PluginShared {
         Self::wrap(host, span.name(), |this| {
             this.assert_main_thread()?;
             this.assert_has_extension::<AudioPorts>()?;
-            Ok(false)
+            Ok(this.capabilities.can_rescan_audio_ports)
         })
         .unwrap_or(false)
     }
@@ -472,17 +508,35 @@ impl PluginShared {
             this.assert_main_thread()?;
             this.assert_has_extension::<AudioPorts>()?;
 
+            anyhow::ensure!(
+                this.capabilities.can_rescan_audio_ports,
+                "Called when the host reported that it doesn't support rescanning audio ports."
+            );
+
             if flags & CLAP_AUDIO_PORTS_RESCAN_NAMES != 0 {
                 this.callback_sender.send(CallbackEvent::AudioPortsRescanNames).unwrap();
             }
 
-            if flags & !CLAP_AUDIO_PORTS_RESCAN_NAMES != 0 {
+            if (flags & CLAP_AUDIO_PORTS_RESCAN_FLAGS != 0)
+                || (flags & CLAP_AUDIO_PORTS_RESCAN_CHANNEL_COUNT != 0)
+                || (flags & CLAP_AUDIO_PORTS_RESCAN_PORT_TYPE != 0)
+                || (flags & CLAP_AUDIO_PORTS_RESCAN_IN_PLACE_PAIR != 0)
+            {
                 anyhow::ensure!(
                     this.status() <= PluginStatus::Activated,
                     "Called while the plugin is active"
                 );
 
-                this.callback_sender.send(CallbackEvent::AudioPortsRescanAll).unwrap();
+                this.callback_sender.send(CallbackEvent::AudioPortsRescanInfo).unwrap();
+            }
+
+            if flags & CLAP_AUDIO_PORTS_RESCAN_LIST != 0 {
+                anyhow::ensure!(
+                    this.status() <= PluginStatus::Activated,
+                    "Called while the plugin is active"
+                );
+
+                this.callback_sender.send(CallbackEvent::AudioPortsRescanList).unwrap();
             }
 
             Ok(())
@@ -495,7 +549,18 @@ impl PluginShared {
         Self::wrap(host, span.name(), |this| {
             this.assert_main_thread()?;
             this.assert_has_extension::<NotePorts>()?;
-            Ok(CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE)
+
+            let mut flags = 0;
+
+            if this.capabilities.supports_clap_dialect {
+                flags |= CLAP_NOTE_DIALECT_CLAP;
+            }
+
+            if this.capabilities.supports_midi_dialect {
+                flags |= CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE;
+            }
+
+            Ok(flags)
         })
         .unwrap_or(0)
     }
@@ -767,11 +832,19 @@ impl PluginShared {
             // We already checked that we're on the audio thread, so this is sufficient
             anyhow::ensure!(
                 this.is_currently_in_process_call.load(),
-                "May only be called from within the audio thread's 'clap_plugin::process' function."
+                "Must only be called from within the 'clap_plugin::process' function."
             );
 
             let extension = this.get_extension::<ThreadPool>().unwrap();
-            (0..num_tasks).into_par_iter().for_each(|index| extension.exec(index));
+
+            std::thread::scope(|s| {
+                for i in 0..num_tasks {
+                    s.spawn(move || {
+                        extension.exec(i);
+                    });
+                }
+            });
+
             Ok(true)
         })
         .unwrap_or(false)

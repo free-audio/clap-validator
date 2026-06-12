@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 mod record;
@@ -7,7 +8,7 @@ pub use record::*;
 
 static WRITER: OnceLock<Mutex<writer::TraceWriter>> = OnceLock::new();
 
-pub fn install(path: &str) {
+pub fn install(path: &Path) {
     WRITER
         .set(Mutex::new(writer::TraceWriter::new(path)))
         .map_err(|_| ())

@@ -18,11 +18,8 @@ impl<'a> Extension for Ambisonic<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_ambisonic;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            ambisonic: extension_struct,
-        }
+    unsafe fn new(plugin: &'a Plugin<'a>, ambisonic: NonNull<Self::Struct>) -> Self {
+        Self { plugin, ambisonic }
     }
 }
 

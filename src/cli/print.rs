@@ -2,6 +2,8 @@ use std::fmt::{Display, Write};
 use textwrap::core::display_width;
 use yansi::Paint;
 
+/// A pretty-printed report that consists of a header, a body with multiple items, and an optional footer.
+/// The body items can be tables, text, or sub-reports.
 #[derive(Debug, Default)]
 pub struct Report {
     pub header: String,

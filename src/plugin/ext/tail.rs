@@ -17,11 +17,8 @@ impl<'a> Extension for Tail<'a> {
     type Plugin = &'a PluginAudioThread<'a>;
     type Struct = clap_plugin_tail;
 
-    unsafe fn new(plugin: &'a PluginAudioThread<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
-        Self {
-            plugin,
-            tail: extension_struct,
-        }
+    unsafe fn new(plugin: &'a PluginAudioThread<'a>, tail: NonNull<Self::Struct>) -> Self {
+        Self { plugin, tail }
     }
 }
 

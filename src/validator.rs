@@ -3,13 +3,11 @@
 
 use crate::Verbosity;
 use crate::cli::sandbox::{SandboxConfig, SandboxOperation};
-use crate::cli::{Config, panic_message};
+use crate::cli::{Config, IteratorExt, panic_message};
 use crate::commands::validate::ValidatorSettings;
-use crate::plugin::library::{PluginLibrary, PluginMetadata};
-use crate::plugin::util::IteratorExt;
-use crate::tests::{PluginLibraryTestCase, PluginTestCase, TestCase, TestResult, TestStatus};
+use crate::plugin::library::PluginLibrary;
+use crate::tests::{PluginInstanceTestCase, PluginLibraryTestCase, TestCase, TestGroup, TestResult, TestStatus};
 use anyhow::{Context, Result};
-use clap_sys::version::clap_version_is_compatible;
 use regex_lite::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -18,20 +16,11 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 
-/// The results of running the validation test suite on one or more plugins. Use the
-/// [`tally()`][Self::tally()] method to compute the number of successful and failed tests.
-///
-/// Uses `BTreeMap`s purely so the order is stable.
-#[derive(Debug, Default, Serialize)]
+/// The results of running the validation test suite on one or more plugins.
+#[derive(Default, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ValidationResult {
-    /// A map indexed by plugin library paths containing the results of running the per-plugin
-    /// library tests on one or more plugin libraries. These tests mainly examine the plugin's
-    /// scanning behavior.
-    pub plugin_library_tests: BTreeMap<PathBuf, Vec<TestResult>>,
-    /// A map indexed by plugin IDs containing the results of running the per-plugin tests on one or
-    /// more plugins.
-    pub plugin_tests: BTreeMap<String, Vec<TestResult>>,
+    pub results: Vec<TestResult>,
 }
 
 /// Statistics for the validator.
@@ -44,6 +33,55 @@ pub struct ValidationTally {
     pub num_skipped: usize,
     /// The number of test cases resulting in a warning.
     pub num_warnings: usize,
+}
+
+impl ValidationResult {
+    /// Count the number of passing, failing, and skipped tests.
+    pub fn tally(&self) -> ValidationTally {
+        let mut num_passed = 0;
+        let mut num_failed = 0;
+        let mut num_skipped = 0;
+        let mut num_warnings = 0;
+
+        for test in &self.results {
+            match test.status {
+                TestStatus::Success { .. } => num_passed += 1,
+                TestStatus::Crashed { .. } | TestStatus::Failed { .. } => num_failed += 1,
+                TestStatus::Skipped { .. } => num_skipped += 1,
+                TestStatus::Warning { .. } => num_warnings += 1,
+            }
+        }
+
+        ValidationTally {
+            num_passed,
+            num_failed,
+            num_skipped,
+            num_warnings,
+        }
+    }
+
+    pub fn group(&self) -> BTreeMap<TestGroup, Vec<TestResult>> {
+        let mut groups: BTreeMap<TestGroup, Vec<TestResult>> = BTreeMap::new();
+
+        for test in &self.results {
+            groups.entry(test.test.group()).or_default().push(test.clone());
+        }
+
+        groups
+    }
+
+    /// Filter the test results using the specified filter function.
+    pub fn filter(mut self, f: impl FnMut(&TestResult) -> bool) -> Self {
+        self.results.retain(f);
+        self
+    }
+}
+
+impl ValidationTally {
+    /// Get the total number of tests run.
+    pub fn total(&self) -> usize {
+        self.num_passed + self.num_failed + self.num_skipped + self.num_warnings
+    }
 }
 
 /// Run the validator using the specified settings. Returns an error if any of the plugin paths
@@ -75,265 +113,113 @@ pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings, config: &Con
         }
     };
 
-    let filter_plugin = |metadata: &PluginMetadata| {
-        settings
-            .plugin_id
-            .as_ref()
-            .is_none_or(|plugin_id| &metadata.id == plugin_id)
+    let workers = match settings.jobs {
+        _ if settings.in_process => Some(1),
+        jobs => jobs,
     };
 
-    // The tests can optionally be run in parallel. This is not the default since some plugins may
-    // not handle it correctly, event when the plugins are loaded in different processes. It's also
-    // incompatible with the in-process mode.
-    let parallel = !settings.no_parallel && !settings.in_process;
-    let mut results = settings
-        .paths
-        .iter()
-        .map_parallel(parallel, |library_path| {
-            // We distinguish between two separate classes of tests: tests for an entire plugin
-            // library, and tests for a single plugin contained witin that library. The former
-            // group of tests are run first and they only receive the path to the plugin library
-            // as their argument, while the second class of tests receive an already loaded
-            // plugin library and a plugin ID as their arugmetns. We'll start with the tests for
-            // entire plugin libraries so the in-process mode makes a bit more sense. Otherwise
-            // we would be measuring plugin scanning time on libraries that may still be loaded
-            // in the process.
-            let mut plugin_library_tests = BTreeMap::new();
-            plugin_library_tests.insert(
-                library_path.clone(),
-                PluginLibraryTestCase::iter()
-                    .filter(|test| filter_test(&test.to_string()))
-                    .map_parallel(parallel, |test| {
-                        run_test(
-                            verbosity,
-                            settings,
-                            SandboxedValidation::PluginLibrary {
-                                test,
-                                path: library_path.clone(),
-                            },
-                        )
-                    })
-                    .collect::<Result<Vec<TestResult>>>()?,
-            );
+    // find all tests to run
+    let tests = discover(&settings.paths, settings.plugin_id.as_deref(), filter_test)?;
 
-            // And these are the per-plugin instance tests
-            let plugin_library = PluginLibrary::load(library_path)
-                .with_context(|| format!("Could not load '{}'", library_path.display()))?;
+    let mut results = tests
+        .into_iter()
+        .parallel_map(workers, |test| run_test(verbosity, settings, test))
+        .collect::<Result<Vec<_>>>()?;
 
-            let plugin_metadata = plugin_library
-                .metadata()
-                .with_context(|| format!("Could not fetch plugin metadata for '{}'", library_path.display()))?;
+    results.sort_unstable_by(|a, b| a.test.cmp(&b.test));
 
-            if !clap_version_is_compatible(plugin_metadata.clap_version()) {
-                log::debug!(
-                    "'{}' uses an unsupported CLAP version ({}.{}.{}), skipping...",
-                    library_path.display(),
-                    plugin_metadata.version.0,
-                    plugin_metadata.version.1,
-                    plugin_metadata.version.2
-                );
-
-                // Since this is a map-reduce, this acts like a continue statement in a loop. We
-                // could use `.filter_map()` instead but that would only make things more
-                // complicated
-                return Ok(ValidationResult::default());
-            }
-
-            let plugin_tests = plugin_metadata
-                .plugins
-                .iter()
-                .filter(|plugin_metadata| filter_plugin(plugin_metadata))
-                .map_parallel(parallel, |plugin_metadata| {
-                    let tests = PluginTestCase::iter()
-                        .filter(|test| filter_test(&test.to_string()))
-                        .map_parallel(parallel, |test| {
-                            run_test(
-                                verbosity,
-                                settings,
-                                SandboxedValidation::Plugin {
-                                    test,
-                                    path: library_path.clone(),
-                                    plugin_id: plugin_metadata.id.clone(),
-                                },
-                            )
-                        });
-
-                    Ok((plugin_metadata.id.clone(), tests.collect::<Result<Vec<TestResult>>>()?))
-                })
-                .collect::<Result<BTreeMap<_, _>>>()?;
-
-            Ok(ValidationResult {
-                plugin_library_tests,
-                plugin_tests,
-            })
-        })
-        .reduce(|a, b| {
-            let (a, b) = (a?, b?);
-
-            // In the serial version this could be done when iterating over the plugins, but
-            // when using iterators you can't do that. But it's still essential to make sure we
-            // don't test two versionsq of the same plugin.
-            if a.intersects(&b) {
-                anyhow::bail!(
-                    "Duplicate plugin ID in validation results. Maybe multiple versions of the same plugin are being \
-                     validated."
-                );
-            }
-
-            Ok(ValidationResult::union(a, b))
-        })
-        .unwrap_or_else(|| Ok(ValidationResult::default()))?;
-
-    // The parallel iterators don't preserve order, so this needs to be sorted to make sure the test
-    // results are always reported in the same order
-    for tests in results
-        .plugin_tests
-        .values_mut()
-        .chain(results.plugin_library_tests.values_mut())
-    {
-        tests.sort_by(|a, b| Ord::cmp(&a.name, &b.name));
+    if results.is_empty() {
+        anyhow::bail!("No tests selected to run");
     }
 
-    if let Some(plugin_id) = &settings.plugin_id
-        && results.plugin_tests.is_empty()
-    {
-        anyhow::bail!("No plugins matched the plugin ID '{plugin_id}'.");
-    }
-
-    Ok(results)
+    Ok(ValidationResult { results })
 }
 
-fn run_test(verbosity: Verbosity, settings: &ValidatorSettings, request: SandboxedValidation) -> Result<TestResult> {
+/// Run a single test case with the specified settings.
+fn run_test(verbosity: Verbosity, settings: &ValidatorSettings, test: TestCase) -> Result<TestResult> {
     let start = Instant::now();
-    let (status, duration) = request
-        .invoke((!settings.in_process).then_some(SandboxConfig {
-            verbosity,
-            hide_output: settings.hide_output,
-            timeout: Some(Duration::from_secs(45)),
-        }))
-        .unwrap_or_else(|err| {
-            (
-                TestStatus::Crashed {
-                    details: err.to_string(),
-                },
-                start.elapsed(),
-            )
-        });
-
-    let (name, description) = match &request {
-        SandboxedValidation::PluginLibrary { test, .. } => (test.to_string(), test.description()),
-        SandboxedValidation::Plugin { test, .. } => (test.to_string(), test.description()),
+    let validation = SandboxedValidation(test.clone());
+    let (status, duration) = match settings.in_process {
+        true => validation.run(),
+        false => validation
+            .run_sandboxed(SandboxConfig {
+                hide_output: settings.hide_output,
+                verbosity,
+                timeout: Some(Duration::from_secs(45)),
+            })
+            .unwrap_or_else(|err| {
+                (
+                    TestStatus::Crashed {
+                        details: err.to_string(),
+                    },
+                    start.elapsed(),
+                )
+            }),
     };
 
     match &status {
         TestStatus::Success { .. } => {
-            log::info!("Test {} completed", name)
+            log::info!("Test {} completed", test.name())
         }
         TestStatus::Warning { .. } => {
-            log::warn!("Test {} completed with a warning", name)
+            log::warn!("Test {} completed with a warning", test.name())
         }
         TestStatus::Failed { .. } => {
-            log::error!("Test {} failed", name)
+            log::error!("Test {} failed", test.name())
         }
         TestStatus::Crashed { details } => {
-            log::error!("Test {} crashed: {}", name, details)
+            log::error!("Test {} crashed: {}", test.name(), details)
         }
         TestStatus::Skipped { .. } => {}
     }
 
-    Ok(TestResult {
-        name,
-        description,
-        duration,
-        status,
-    })
+    Ok(TestResult { test, duration, status })
 }
 
-impl ValidationResult {
-    /// Count the number of passing, failing, and skipped tests.
-    pub fn tally(&self) -> ValidationTally {
-        let mut num_passed = 0;
-        let mut num_failed = 0;
-        let mut num_skipped = 0;
-        let mut num_warnings = 0;
+/// Scan the plugins and construct a list of tests to run based on the specified paths, plugin ID filter, and test filter.
+fn discover(paths: &[PathBuf], plugin_id: Option<&str>, filter_test: impl Fn(&str) -> bool) -> Result<Vec<TestCase>> {
+    let mut result = Vec::new();
 
-        for test in self
-            .plugin_library_tests
-            .values()
-            .chain(self.plugin_tests.values())
-            .flatten()
-        {
-            match test.status {
-                TestStatus::Success { .. } => num_passed += 1,
-                TestStatus::Crashed { .. } | TestStatus::Failed { .. } => num_failed += 1,
-                TestStatus::Skipped { .. } => num_skipped += 1,
-                TestStatus::Warning { .. } => num_warnings += 1,
+    for path in paths {
+        let library = PluginLibrary::load(path)?;
+
+        let metadata = library
+            .metadata()
+            .with_context(|| format!("Could not get the plugin metadata for library '{}'", path.display()))?;
+
+        for test in PluginLibraryTestCase::iter() {
+            if !filter_test(&test.to_string()) {
+                continue;
+            }
+
+            result.push(TestCase::PluginLibrary {
+                test,
+                path: path.clone(),
+            });
+        }
+
+        for plugin in metadata.plugins {
+            if plugin_id.as_ref().is_none_or(|id| id == &plugin.id) {
+                for test in PluginInstanceTestCase::iter() {
+                    if !filter_test(&test.to_string()) {
+                        continue;
+                    }
+
+                    result.push(TestCase::PluginInstance {
+                        test,
+                        path: path.clone(),
+                        plugin_id: plugin.id.clone(),
+                    });
+                }
             }
         }
-
-        ValidationTally {
-            num_passed,
-            num_failed,
-            num_skipped,
-            num_warnings,
-        }
     }
 
-    // Check whether the maps in the object intersect. Useful to ensure that a plugin ID only occurs
-    // once in the outputs before merging them.
-    pub fn intersects(&self, other: &Self) -> bool {
-        for key in other.plugin_library_tests.keys() {
-            if self.plugin_library_tests.contains_key(key) {
-                return true;
-            }
-        }
-
-        for key in other.plugin_tests.keys() {
-            if self.plugin_tests.contains_key(key) {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    /// Merge the results from two validation result objects. If `other` contains a key that also
-    /// exists in this object, then the version from `other` is used.
-    pub fn union(mut self, other: Self) -> Self {
-        self.plugin_library_tests.extend(other.plugin_library_tests);
-        self.plugin_tests.extend(other.plugin_tests);
-        self
-    }
-
-    /// Filter the test results using the specified filter function.
-    pub fn filter(mut self, mut f: impl FnMut(&TestResult) -> bool) -> Self {
-        self.plugin_tests.values_mut().for_each(|tests| tests.retain(&mut f));
-        self.plugin_library_tests
-            .values_mut()
-            .for_each(|tests| tests.retain(&mut f));
-        self
-    }
-}
-
-impl ValidationTally {
-    /// Get the total number of tests run.
-    pub fn total(&self) -> usize {
-        self.num_passed + self.num_failed + self.num_skipped + self.num_warnings
-    }
+    Ok(result)
 }
 
 #[derive(Serialize, Deserialize)]
-pub enum SandboxedValidation {
-    PluginLibrary {
-        test: PluginLibraryTestCase,
-        path: PathBuf,
-    },
-    Plugin {
-        test: PluginTestCase,
-        path: PathBuf,
-        plugin_id: String,
-    },
-}
+pub struct SandboxedValidation(TestCase);
 
 impl SandboxOperation for SandboxedValidation {
     const ID: &'static str = "validate";
@@ -342,17 +228,8 @@ impl SandboxOperation for SandboxedValidation {
     fn run(&self) -> Self::Result {
         let start = Instant::now();
 
-        let closure = || match self {
-            SandboxedValidation::PluginLibrary { test, path } => test.run(path),
-            SandboxedValidation::Plugin { test, path, plugin_id } => test.run((path, plugin_id)),
-        };
-
-        let status = match catch_unwind(AssertUnwindSafe(closure)) {
-            Ok(Ok(test_status)) => test_status,
-            Ok(Err(err)) => {
-                let error = err.chain().map(|x| x.to_string()).collect::<Vec<_>>().join("\n");
-                TestStatus::Failed { details: Some(error) }
-            }
+        let status = match catch_unwind(AssertUnwindSafe(|| self.0.run())) {
+            Ok(status) => status,
             Err(panic) => TestStatus::Crashed {
                 details: panic_message(&*panic),
             },

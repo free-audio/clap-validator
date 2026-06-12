@@ -2,8 +2,10 @@
 
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
+use crate::tests::rng::new_prng;
 use anyhow::{Context, Result};
 use clap_sys::version::clap_version_is_compatible;
+use rand::Rng;
 use std::path::Path;
 
 /// The test for `PluginLibraryTestCase::QueryNonexistentFactory`.
@@ -11,21 +13,21 @@ pub fn test_query_nonexistent_factory(library_path: &Path) -> Result<TestStatus>
     let library =
         PluginLibrary::load(library_path).with_context(|| format!("Could not load '{}'", library_path.display()))?;
 
-    // This should be actually random instead of using a fixed seed like the other tests. This
-    // factory ID may not be used by anything.
-    let nonexistent_factory_id = format!("foo-factory-{}", rand::random::<u64>());
-    let nonexistent_factory_exists = library.factory_exists(&nonexistent_factory_id);
+    let mut prng = new_prng();
+    for _ in 0..10 {
+        let factory_id = format!("foo-factory-{}", prng.next_u64());
+        let factory_exists = library.factory_exists(&factory_id);
 
-    // Since this factory doesn't exist, the plugin should always return a null pointer.
-    if nonexistent_factory_exists {
-        anyhow::bail!(
-            "Querying a factory with the non-existent factory ID '{nonexistent_factory_id} should return a null \
-             pointer, but the plugin returned a non-null pointer instead. The plugin may be unconditionally returning \
-             the plugin factory."
-        );
-    } else {
-        Ok(TestStatus::Success { details: None })
+        if factory_exists {
+            anyhow::bail!(
+                "Querying a factory with the non-existent factory ID '{factory_id}' should return a null pointer, but \
+                 the plugin returned a non-null pointer instead. The plugin may be unconditionally returning the \
+                 plugin factory."
+            );
+        }
     }
+
+    Ok(TestStatus::Success { details: None })
 }
 
 /// The test for `PluginLibraryTestCase::CreateIdWithTrailingGarbage`.

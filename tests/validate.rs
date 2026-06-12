@@ -1,14 +1,32 @@
 #[test]
 fn validate_clack_effect() {
-    validate("clack-effect", false);
+    validate("clack-effect", TestType::ValidateOk);
 }
 
 #[test]
 fn validate_clack_synth() {
-    validate("clack-synth", false);
+    validate("clack-synth", TestType::ValidateOk);
 }
 
-fn validate(package: &str, should_fail: bool) {
+#[test]
+fn fuzz_clack_effect() {
+    validate("clack-effect", TestType::Fuzz);
+}
+
+#[test]
+fn fuzz_clack_synth() {
+    validate("clack-synth", TestType::Fuzz);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TestType {
+    ValidateOk,
+    ValidateFail,
+    Fuzz,
+}
+
+/// Runs the validator on the specified package and checks that it behaves as expected.
+fn validate(package: &str, test: TestType) {
     use std::fs::{copy, create_dir_all, write};
     use std::process::{Command, Stdio};
 
@@ -65,28 +83,52 @@ fn validate(package: &str, should_fail: bool) {
         dylib_path
     };
 
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "--package",
-            "clap-validator",
-            "--",
-            "validate",
-            "--only-failed",
-            &plugin_path,
-        ])
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .output()
-        .unwrap();
+    match test {
+        TestType::ValidateOk | TestType::ValidateFail => {
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "--package",
+                    "clap-validator",
+                    "--",
+                    "validate",
+                    "--only-failed",
+                    &plugin_path,
+                ])
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()
+                .unwrap();
 
-    if should_fail {
-        assert!(
-            !output.status.success(),
-            "Validation unexpectedly succeeded for '{}'",
-            package
-        );
-    } else {
-        assert!(output.status.success(), "Validation failed for '{}'", package);
+            if test == TestType::ValidateFail {
+                assert!(
+                    !output.status.success(),
+                    "Validation unexpectedly succeeded for '{}'",
+                    package
+                );
+            } else {
+                assert!(output.status.success(), "Validation failed for '{}'", package);
+            }
+        }
+
+        TestType::Fuzz => {
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "--package",
+                    "clap-validator",
+                    "--",
+                    "fuzz",
+                    "-d",
+                    "10s",
+                    &plugin_path,
+                ])
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()
+                .unwrap();
+
+            assert!(output.status.success(), "Fuzzing failed for '{}'", package);
+        }
     }
 }

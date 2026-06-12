@@ -87,7 +87,11 @@ impl<'a> PluginAudioProcessor<'a, GainPluginShared, GainPluginMainThread<'a>> fo
             let volume = self.shared.params.get_volume();
             for buf in channel_buffers.iter_mut().flatten() {
                 for sample in buf.iter_mut() {
-                    *sample *= volume
+                    *sample *= volume;
+
+                    if sample.is_subnormal() {
+                        *sample = 0.0;
+                    }
                 }
             }
         }

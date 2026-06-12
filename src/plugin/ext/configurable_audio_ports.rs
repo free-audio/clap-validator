@@ -4,11 +4,8 @@ use crate::plugin::instance::Plugin;
 use crate::plugin::util::clap_call;
 use clap_sys::ext::ambisonic::{CLAP_PORT_AMBISONIC, clap_ambisonic_config};
 use clap_sys::ext::audio_ports::{CLAP_PORT_MONO, CLAP_PORT_STEREO};
-use clap_sys::ext::configurable_audio_ports::{
-    CLAP_EXT_CONFIGURABLE_AUDIO_PORTS, CLAP_EXT_CONFIGURABLE_AUDIO_PORTS_COMPAT, clap_audio_port_configuration_request,
-    clap_plugin_configurable_audio_ports,
-};
-use clap_sys::ext::surround::CLAP_PORT_SURROUND;
+use clap_sys::ext::configurable_audio_ports::*;
+use clap_sys::ext::surround::*;
 use std::ffi::CStr;
 use std::fmt::{Debug, Display};
 use std::ptr::{NonNull, null};
@@ -53,10 +50,10 @@ impl<'a> Extension for ConfigurableAudioPorts<'a> {
     type Plugin = &'a Plugin<'a>;
     type Struct = clap_plugin_configurable_audio_ports;
 
-    unsafe fn new(plugin: &'a Plugin<'a>, extension_struct: NonNull<Self::Struct>) -> Self {
+    unsafe fn new(plugin: &'a Plugin<'a>, configurable_audio_ports: NonNull<Self::Struct>) -> Self {
         Self {
             plugin,
-            configurable_audio_ports: extension_struct,
+            configurable_audio_ports,
         }
     }
 }
@@ -170,6 +167,34 @@ impl Recordable for AudioPortsRequest<'_> {
 
 impl Recordable for AudioPortsRequestInfo<'_> {
     fn record(&self, record: &mut dyn Recorder) {
+        fn surround_map_to_string(channel_map: &[u8]) -> String {
+            channel_map
+                .iter()
+                .map(|&ch| match ch as u32 {
+                    CLAP_SURROUND_FL => "FL",
+                    CLAP_SURROUND_FR => "FR",
+                    CLAP_SURROUND_FC => "FC",
+                    CLAP_SURROUND_LFE => "LFE",
+                    CLAP_SURROUND_BL => "BL",
+                    CLAP_SURROUND_BR => "BR",
+                    CLAP_SURROUND_FLC => "FLC",
+                    CLAP_SURROUND_FRC => "FRC",
+                    CLAP_SURROUND_BC => "BC",
+                    CLAP_SURROUND_SL => "SL",
+                    CLAP_SURROUND_SR => "SR",
+                    CLAP_SURROUND_TC => "TC",
+                    CLAP_SURROUND_TFL => "TFL",
+                    CLAP_SURROUND_TFC => "TFC",
+                    CLAP_SURROUND_TFR => "TFR",
+                    CLAP_SURROUND_TBL => "TBL",
+                    CLAP_SURROUND_TBC => "TBC",
+                    CLAP_SURROUND_TBR => "TBR",
+                    _ => "?",
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
         match self {
             AudioPortsRequestInfo::Mono => {
                 record.record("type", "mono");
@@ -191,7 +216,7 @@ impl Recordable for AudioPortsRequestInfo<'_> {
             AudioPortsRequestInfo::Surround { channel_map } => {
                 record.record("type", "surround");
                 record.record("channel_count", channel_map.len() as u32);
-                record.record("channel_map", format!("{:?}", channel_map));
+                record.record("channel_map", surround_map_to_string(channel_map));
             }
         }
     }

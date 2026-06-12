@@ -1,7 +1,6 @@
+use crate::cli::tracing::{Recordable, Recorder};
 use clap_sys::events::*;
 use clap_sys::fixedpoint::*;
-
-use crate::cli::tracing::{Recordable, Recorder};
 
 /// The current transport state. This can be modified between process calls to simulate
 /// transport changes.
@@ -13,25 +12,25 @@ pub struct TransportState {
     /// When true, `null` is passed as the transport pointer to the plugin.
     pub is_freerun: bool,
 
-    /// Whether playback is active. Sets `CLAP_TRANSPORT_IS_PLAYING` flag.
+    /// Whether playback is active. Sets [`CLAP_TRANSPORT_IS_PLAYING`] flag.
     pub is_playing: bool,
 
-    /// Whether recording is active. Sets `CLAP_TRANSPORT_IS_RECORDING` flag.
+    /// Whether recording is active. Sets [`CLAP_TRANSPORT_IS_RECORDING`] flag.
     pub is_recording: bool,
 
-    /// Whether the transport is currently within the preroll section. Sets `CLAP_TRANSPORT_IS_WITHIN_PRE_ROLL` flag.
+    /// Whether the transport is currently within the preroll section. Sets [`CLAP_TRANSPORT_IS_WITHIN_PRE_ROLL`] flag.
     pub is_within_preroll: bool,
 
-    /// Current tempo in BPM and its increment per sample. Sets `CLAP_TRANSPORT_HAS_TEMPO` flag.
+    /// Current tempo in BPM and its increment per sample. Sets [`CLAP_TRANSPORT_HAS_TEMPO`] flag.
     pub tempo: Option<(f64, f64)>,
 
-    /// Current time signature as (numerator, denominator). Sets `CLAP_TRANSPORT_HAS_TIME_SIGNATURE` flag.
+    /// Current time signature as (numerator, denominator). Sets [`CLAP_TRANSPORT_HAS_TIME_SIGNATURE`] flag.
     pub time_signature: Option<(u16, u16)>,
 
-    /// Current position in beats. Sets `CLAP_TRANSPORT_HAS_BEATS_TIMELINE` flag.
+    /// Current position in beats. Sets [`CLAP_TRANSPORT_HAS_BEATS_TIMELINE`] flag.
     pub position_beats: Option<f64>,
 
-    /// Current position in seconds. Sets `CLAP_TRANSPORT_HAS_SECONDS_TIMELINE` flag.
+    /// Current position in seconds. Sets [`CLAP_TRANSPORT_HAS_SECONDS_TIMELINE`] flag.
     pub position_seconds: Option<f64>,
 }
 
@@ -117,8 +116,8 @@ impl TransportState {
             loop_end_beats: i64::MIN,
             loop_start_seconds: i64::MAX,
             loop_end_seconds: i64::MIN,
-            bar_start: i64::MAX,
-            bar_number: i32::MIN,
+            bar_start: 0,
+            bar_number: 0, // TODO: implement those 2
             tsig_num: self.time_signature.map(|(n, _)| n).unwrap_or(u16::MAX),
             tsig_denom: self.time_signature.map(|(_, d)| d).unwrap_or(0),
         }
@@ -133,6 +132,11 @@ pub struct ConstantMask(pub u64);
 impl ConstantMask {
     pub const DYNAMIC: Self = ConstantMask(0);
     pub const CONSTANT: Self = ConstantMask(u64::MAX);
+
+    pub fn with_channel_constant(mut self, channel: u32) -> Self {
+        self.0 |= 1u64.unbounded_shl(channel);
+        self
+    }
 
     /// Check if the specified channel marked as constant.
     pub fn is_channel_constant(&self, channel: u32) -> bool {

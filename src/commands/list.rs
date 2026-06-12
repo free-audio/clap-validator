@@ -1,14 +1,16 @@
 //! Commands for listing information about the validator or installed plugins.
 
 use crate::Verbosity;
+use crate::cli::IteratorExt;
 use crate::cli::sandbox::{SandboxConfig, SandboxOperation};
 use crate::plugin::index::{SandboxedScanLibrary, ScanStatus, index_plugins};
-use crate::plugin::util::IteratorExt;
 use anyhow::{Context, Result};
 use clap::Subcommand;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use strum::IntoEnumIterator;
 
 /// Commands for listing tests and data realted to the installed plugins.
 #[derive(Subcommand)]
@@ -22,7 +24,7 @@ pub enum ListCommand {
         #[arg(long)]
         in_process: bool,
         /// When running the scans out-of-process, hide the plugin's output.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "in_process")]
         hide_output: bool,
         /// Paths to one or more plugins that should be loaded and scanned, optional.
         ///
@@ -38,7 +40,7 @@ pub enum ListCommand {
         #[arg(long)]
         in_process: bool,
         /// When running the scans out-of-process, hide the plugin's output.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "in_process")]
         hide_output: bool,
         /// Paths to one or more plugins that should be indexed for presets, optional.
         ///
@@ -48,6 +50,7 @@ pub enum ListCommand {
         #[arg(short, long, conflicts_with = "json")]
         limit: Option<usize>,
     },
+
     /// Lists all available test cases.
     Tests {
         /// Print JSON instead of a human readable format.
@@ -98,7 +101,7 @@ fn list_presets(
 
     let results = plugins
         .into_iter()
-        .map_parallel(!in_process, |path| {
+        .parallel_map(in_process.then_some(1), |path| {
             scan_single(path, in_process, true, hide_output, verbosity)
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -130,7 +133,7 @@ fn list_plugins(
 
     let results = plugins
         .into_iter()
-        .map_parallel(!in_process, |path| {
+        .parallel_map(in_process.then_some(1), |path| {
             scan_single(path, in_process, false, hide_output, verbosity)
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -149,16 +152,37 @@ fn list_plugins(
 
 /// Lists all available test cases.
 fn list_tests(json: bool) -> Result<ExitCode> {
-    let list = crate::tests::TestList::default();
-    let config = crate::cli::Config::from_current()?;
+    #[derive(Serialize)]
+    #[serde(tag = "type", rename_all = "kebab-case")]
+    enum TestJson {
+        PluginLibrary { name: String, description: String },
+        PluginInstance { name: String, description: String },
+    }
 
     if json {
+        let mut list = Vec::new();
+
+        for test in crate::tests::PluginLibraryTestCase::iter() {
+            list.push(TestJson::PluginLibrary {
+                name: test.to_string(),
+                description: test.description().to_string(),
+            });
+        }
+
+        for test in crate::tests::PluginInstanceTestCase::iter() {
+            list.push(TestJson::PluginInstance {
+                name: test.to_string(),
+                description: test.description().to_string(),
+            });
+        }
+
         println!(
             "{}",
             serde_json::to_string_pretty(&list).expect("Could not format JSON")
         );
     } else {
-        pretty::print_tests(&list, &config);
+        let config = crate::cli::Config::from_current()?;
+        pretty::print_tests(&config);
     }
 
     Ok(ExitCode::SUCCESS)
@@ -176,19 +200,18 @@ fn scan_single(
         scan_presets,
     };
 
-    let result = request
-        .invoke(if in_process {
-            None
-        } else {
-            Some(SandboxConfig {
+    let result = match in_process {
+        true => request.run(),
+        false => request
+            .run_sandboxed(SandboxConfig {
                 verbosity,
                 hide_output,
                 timeout: Some(std::time::Duration::from_secs(10)),
             })
-        })
-        .unwrap_or_else(|err| ScanStatus::Crashed {
-            details: err.to_string(),
-        });
+            .unwrap_or_else(|err| ScanStatus::Crashed {
+                details: err.to_string(),
+            }),
+    };
 
     Ok((path, result))
 }
@@ -197,31 +220,35 @@ mod pretty {
     use crate::cli::{Config, Report, ReportItem, pluralize};
     use crate::plugin::index::ScanStatus;
     use crate::plugin::preset_discovery::*;
-    use crate::tests::TestList;
+    use crate::tests::{PluginInstanceTestCase, PluginLibraryTestCase};
     use std::path::PathBuf;
+    use strum::IntoEnumIterator;
     use yansi::Paint;
 
-    pub fn print_tests(list: &TestList, config: &Config) {
-        let report_test = |test: &crate::tests::TestListItem| {
+    pub fn print_tests(config: &Config) {
+        let report_test = |name: &str, description: &str| {
             let mut report = Report {
-                header: test.name.clone(),
-                items: vec![ReportItem::Text(test.description.clone())],
+                header: name.to_string(),
+                items: vec![ReportItem::Text(description.to_string())],
                 footer: vec![],
             };
 
-            if !config.is_test_enabled(&test.name) {
+            if !config.is_test_enabled(name) {
                 report.footer.push("disabled".dim().italic().to_string());
             }
 
             report
         };
 
+        let plugin_library_tests = PluginLibraryTestCase::iter().collect::<Vec<_>>();
+        let plugin_instance_tests = PluginInstanceTestCase::iter().collect::<Vec<_>>();
+
         let mut library = Report {
             header: "Plugin Library".to_string(),
             items: vec![ReportItem::Text(
                 "Tests for plugin factories, preset providers and plugin libraries (files) in general".to_string(),
             )],
-            footer: vec![pluralize(list.plugin_library_tests.len(), "test")],
+            footer: vec![pluralize(plugin_library_tests.len(), "test")],
         };
 
         let mut plugin = Report {
@@ -231,15 +258,19 @@ mod pretty {
                  deinitialization, audio processing and callback handling."
                     .to_string(),
             )],
-            footer: vec![pluralize(list.plugin_tests.len(), "test")],
+            footer: vec![pluralize(plugin_instance_tests.len(), "test")],
         };
 
-        for test in &list.plugin_library_tests {
-            library.items.push(ReportItem::Child(report_test(test)));
+        for test in &plugin_library_tests {
+            library
+                .items
+                .push(ReportItem::Child(report_test(&test.to_string(), &test.description())));
         }
 
-        for test in &list.plugin_tests {
-            plugin.items.push(ReportItem::Child(report_test(test)));
+        for test in &plugin_instance_tests {
+            plugin
+                .items
+                .push(ReportItem::Child(report_test(&test.to_string(), &test.description())));
         }
 
         println!("\n{}", library);

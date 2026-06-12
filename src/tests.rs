@@ -9,39 +9,42 @@
 //! To facilitate this, the test cases are all identified by variants in an enum, and that enum can
 //! be converted to and from a string representation.
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
-use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Duration;
-use strum::IntoEnumIterator;
 
-mod plugin;
+mod plugin_instance;
 mod plugin_library;
-mod rng;
+pub mod rng;
 
-pub use plugin::PluginTestCase;
+pub use plugin_instance::PluginInstanceTestCase;
 pub use plugin_library::PluginLibraryTestCase;
 
-/// A test case for testing the behavior of a plugin. This `Test` object contains the result of a
-/// test, which is serialized to and from JSON so the test can be run in another process.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TestResult {
-    /// The name of this test.
-    pub name: String,
-    /// A description of what this test case has tested.
-    pub description: String,
-    /// The outcome of the test.
-    pub status: TestStatus,
-    /// How much time it took
-    pub duration: Duration,
+/// A description for a single test invocation. This contains all of the information necessary to run a single test.
+#[derive(Deserialize, Serialize, Ord, PartialOrd, Eq, PartialEq, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum TestCase {
+    PluginLibrary {
+        test: PluginLibraryTestCase,
+        path: PathBuf,
+    },
+
+    PluginInstance {
+        test: PluginInstanceTestCase,
+        path: PathBuf,
+        plugin_id: String,
+    },
+}
+
+#[derive(Eq, PartialOrd, Ord, PartialEq)]
+pub enum TestGroup {
+    PluginLibrary(PathBuf),
+    PluginInstance(PathBuf, String),
 }
 
 /// The result of running a test. Skipped and failed test may optionally include an explanation for
 /// why this happened.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(tag = "code")]
 pub enum TestStatus {
@@ -60,64 +63,45 @@ pub enum TestStatus {
     Warning { details: Option<String> },
 }
 
-/// Stores all of the available tests and their descriptions. Used solely for pretty printing
-/// purposes in `clap-validator list tests`.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct TestList {
-    pub plugin_library_tests: Vec<TestListItem>,
-    pub plugin_tests: Vec<TestListItem>,
+pub struct TestResult {
+    pub test: TestCase,
+    pub status: TestStatus,
+    pub duration: Duration,
 }
 
-/// A single item in the test list.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct TestListItem {
-    pub name: String,
-    pub description: String,
-}
-
-/// An abstraction for a test case. This mostly exists because we need two separate kinds of tests
-/// (per library and per plugin), and it's good to keep the interface uniform.
-pub trait TestCase<'a>: Into<&'static str> + Display + FromStr + Sized + 'static {
-    /// The type of the arguments the test cases are parameterized over. This can be an instance of
-    /// the plugin library and a plugin ID, or just the file path to the plugin library.
-    type TestArgs: Serialize + Deserialize<'a>;
-
-    /// Get the textual description for a test case. This description won't contain any line breaks,
-    /// but it may consist of multiple sentences.
-    fn description(&self) -> String;
-
-    /// Run a test case for a specified arguments in the current, returning the result. If the test
-    /// cuases the plugin to segfault, then this will obviously not return. See
-    /// [`run_out_of_process()`][Self::run_out_of_process()] for a generic way to run test cases in
-    /// a separate process.
-    ///
-    /// In the event that this is called for a plugin ID that does not exist within the plugin
-    /// library, then the test will also be marked as failed.
-    fn run(&self, args: Self::TestArgs) -> Result<TestStatus>;
-
-    /// Get a writable temporary file handle for this test case. The file will be located at
-    /// `$TMP_DIR/clap-validator/$plugin_id/$test_name/$file_name`. The temporary files directory is
-    /// cleared on a new validator run, but the files will persist until then.
-    fn temporary_file(&self, plugin_id: &str, name: &str) -> Result<(PathBuf, fs::File)> {
-        let path = crate::cli::validator_temp_dir()
-            .join(plugin_id)
-            .join(self.to_string())
-            .join(name);
-
-        if path.exists() {
-            panic!(
-                "Tried to create a temporary file at '{}', but this file already exists",
-                path.display()
-            )
+impl TestCase {
+    pub fn name(&self) -> String {
+        match self {
+            Self::PluginLibrary { test, .. } => test.to_string(),
+            Self::PluginInstance { test, .. } => test.to_string(),
         }
+    }
 
-        fs::create_dir_all(path.parent().unwrap())
-            .expect("Could not create the directory for the test's temporary files");
-        let file = fs::File::create(&path).expect("Could not create a temporary file for the test");
+    pub fn description(&self) -> String {
+        match self {
+            Self::PluginLibrary { test, .. } => test.description(),
+            Self::PluginInstance { test, .. } => test.description(),
+        }
+    }
 
-        Ok((path, file))
+    pub fn group(&self) -> TestGroup {
+        match self {
+            Self::PluginLibrary { path, .. } => TestGroup::PluginLibrary(path.clone()),
+            Self::PluginInstance { path, plugin_id, .. } => TestGroup::PluginInstance(path.clone(), plugin_id.clone()),
+        }
+    }
+
+    pub fn run(&self) -> TestStatus {
+        match self {
+            Self::PluginLibrary { test, path } => test.run(path),
+            Self::PluginInstance { test, path, plugin_id } => test.run(path, plugin_id),
+        }
+        .unwrap_or_else(|err| {
+            let err = err.chain().map(|x| x.to_string()).collect::<Vec<_>>().join("\n");
+            TestStatus::Failed { details: Some(err) }
+        })
     }
 }
 
@@ -143,20 +127,22 @@ impl TestStatus {
     }
 }
 
-impl TestListItem {
-    pub fn from<'a, T: TestCase<'a>>(test_case: &T) -> Self {
-        Self {
-            name: test_case.to_string(),
-            description: test_case.description(),
-        }
-    }
-}
+pub fn temporary_file(test_name: &str, plugin_id: &str, name: &str) -> anyhow::Result<(PathBuf, std::fs::File)> {
+    let path = crate::cli::validator_temp_dir()
+        .join(plugin_id)
+        .join(test_name)
+        .join(name);
 
-impl Default for TestList {
-    fn default() -> Self {
-        Self {
-            plugin_library_tests: PluginLibraryTestCase::iter().map(|c| TestListItem::from(&c)).collect(),
-            plugin_tests: PluginTestCase::iter().map(|c| TestListItem::from(&c)).collect(),
-        }
+    if path.exists() {
+        panic!(
+            "Tried to create a temporary file at '{}', but this file already exists",
+            path.display()
+        )
     }
+
+    std::fs::create_dir_all(path.parent().unwrap())
+        .expect("Could not create the directory for the test's temporary files");
+    let file = std::fs::File::create(&path).expect("Could not create a temporary file for the test");
+
+    Ok((path, file))
 }
