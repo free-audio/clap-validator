@@ -864,7 +864,7 @@ impl<'a> ParamFuzzer<'a> {
         let (param_id, param_info) = self
             .params
             .iter()
-            .filter(|(_, info)| !info.is_readonly() && !info.is_hidden())
+            .filter(|(_, info)| !info.is_readonly())
             .choose(prng)?;
 
         if !self.snap_to_bounds && param_info.is_modulatable() && prng.random_bool(0.5) {
