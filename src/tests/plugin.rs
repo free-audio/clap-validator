@@ -56,7 +56,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
         match self {
             PluginTestCase::DescriptorConsistency => String::from(
                 "The plugin descriptor returned from the plugin factory and the plugin descriptor \
-                 stored on the 'clap_plugin object should be equivalent.",
+                 stored on the 'clap_plugin' object should be equivalent.",
             ),
             PluginTestCase::FeaturesCategories => String::from(
                 "The plugin needs to have at least one of the main CLAP category features.",
@@ -81,7 +81,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             ),
             PluginTestCase::ParamConversions => String::from(
                 "Asserts that value to string and string to value conversions are supported for \
-                 ether all or none of the plugin's parameters, and that conversions between \
+                 either all or none of the plugin's parameters, and that conversions between \
                  values and strings roundtrip consistently.",
             ),
             PluginTestCase::ParamFuzzBasic => format!(
@@ -92,7 +92,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 params::FUZZ_RUNS_PER_PERMUTATION
             ),
             PluginTestCase::ParamSetWrongNamespace => String::from(
-                "Sends events to the plugin with the 'CLAP_EVENT_PARAM_VALUE' event tyep but with \
+                "Sends events to the plugin with the 'CLAP_EVENT_PARAM_VALUE' event type but with \
                  a mismatching namespace ID. Asserts that the plugin's parameter values don't \
                  change.",
             ),
@@ -115,7 +115,7 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::StateReproducibilityFlush => String::from(
                 "Randomizes a plugin's parameters, saves its state, recreates the plugin \
                  instance, sets the same parameters as before, saves the state again, and then \
-                 asserts that the two states are identical. The parameter values are set updated \
+                 asserts that the two states are identical. The parameter values are updated \
                  using the process function to create the first state, and using the flush \
                  function to create the second state.",
             ),
