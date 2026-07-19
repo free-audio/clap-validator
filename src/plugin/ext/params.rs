@@ -183,7 +183,7 @@ impl Params<'_> {
             let module = util::c_char_slice_to_string(&info.module).with_context(|| {
                 format!(
                     "Could not read the module name for parameter '{}' (stable ID {})",
-                    &name, info.id
+                    name, info.id
                 )
             })?;
 

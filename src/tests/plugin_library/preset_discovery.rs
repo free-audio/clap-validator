@@ -206,10 +206,11 @@ pub fn test_descriptor_consistency(library_path: &Path) -> Result<TestStatus> {
         let provider = preset_discovery_factory
             .create_provider(&factory_metadata)
             .with_context(|| format!("Could not create the provider with ID '{}'", factory_metadata.id))?;
+
         let provider_metadata = provider.descriptor().with_context(|| {
             format!(
                 "Could not grab the descriptor from the 'clap_preset_discovery_provider''s 'desc' field for '{}'",
-                &factory_metadata.id
+                factory_metadata.id
             )
         })?;
 
