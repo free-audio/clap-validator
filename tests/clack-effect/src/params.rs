@@ -83,6 +83,11 @@ impl PluginStateImpl for GainPluginMainThread<'_> {
         self.shared.params.set_volume(f32::from_le_bytes(buf));
         input.read_exact(&mut buf)?;
         self.shared.params.set_drive(f32::from_le_bytes(buf));
+
+        if let Some(ext) = self.host.get_extension::<HostParams>() {
+            ext.rescan(&mut self.host, ParamRescanFlags::VALUES);
+        }
+
         Ok(())
     }
 }

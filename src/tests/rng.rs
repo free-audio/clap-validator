@@ -662,7 +662,7 @@ impl<'a> NoteGenerator<'a> {
 
                     let Some((param_id, param)) = params
                         .iter()
-                        .filter(|(_, param)| !param.readonly() && !param.hidden() && param.poly_automatable())
+                        .filter(|(_, param)| !param.is_readonly() && !param.is_hidden() && param.is_poly_automatable())
                         .choose(prng)
                     else {
                         continue;
@@ -698,7 +698,7 @@ impl<'a> NoteGenerator<'a> {
                             flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         param_id: *param_id,
-                        cookie: param.cookie,
+                        cookie: param.cookie.map_or(null_mut(), |x| x.as_ptr()),
                         note_id,
                         port_index,
                         channel,
@@ -713,7 +713,7 @@ impl<'a> NoteGenerator<'a> {
 
                     let Some((param_id, param)) = params
                         .iter()
-                        .filter(|(_, param)| !param.readonly() && !param.hidden() && param.poly_modulatable())
+                        .filter(|(_, param)| !param.is_readonly() && !param.is_hidden() && param.is_poly_modulatable())
                         .choose(prng)
                     else {
                         continue;
@@ -749,7 +749,7 @@ impl<'a> NoteGenerator<'a> {
                             flags: if note.live { CLAP_EVENT_IS_LIVE } else { 0 },
                         },
                         param_id: *param_id,
-                        cookie: param.cookie,
+                        cookie: param.cookie.map_or(null_mut(), |x| x.as_ptr()),
                         note_id,
                         port_index,
                         channel,
@@ -864,10 +864,10 @@ impl<'a> ParamFuzzer<'a> {
         let (param_id, param_info) = self
             .params
             .iter()
-            .filter(|(_, info)| !info.readonly() && !info.hidden())
+            .filter(|(_, info)| !info.is_readonly() && !info.is_hidden())
             .choose(prng)?;
 
-        if !self.snap_to_bounds && param_info.modulatable() && prng.random_bool(0.5) {
+        if !self.snap_to_bounds && param_info.is_modulatable() && prng.random_bool(0.5) {
             Some(Event::ParamValue(clap_event_param_value {
                 header: clap_event_header {
                     size: std::mem::size_of::<clap_event_param_value>() as u32,
@@ -877,7 +877,10 @@ impl<'a> ParamFuzzer<'a> {
                     flags: 0,
                 },
                 param_id: *param_id,
-                cookie: if self.no_cookies { null_mut() } else { param_info.cookie },
+                cookie: param_info
+                    .cookie
+                    .filter(|_| !self.no_cookies)
+                    .map_or(null_mut(), |x| x.as_ptr()),
                 note_id: -1,
                 port_index: -1,
                 channel: -1,
@@ -891,14 +894,17 @@ impl<'a> ParamFuzzer<'a> {
                     time: 0,
                     space_id: CLAP_CORE_EVENT_SPACE_ID,
                     type_: CLAP_EVENT_PARAM_VALUE,
-                    flags: if param_info.automatable() {
+                    flags: if param_info.is_automatable() {
                         0
                     } else {
                         CLAP_EVENT_IS_LIVE
                     },
                 },
                 param_id: *param_id,
-                cookie: if self.no_cookies { null_mut() } else { param_info.cookie },
+                cookie: param_info
+                    .cookie
+                    .filter(|_| !self.no_cookies)
+                    .map_or(null_mut(), |x| x.as_ptr()),
                 note_id: -1,
                 port_index: -1,
                 channel: -1,
@@ -915,7 +921,7 @@ impl<'a> ParamFuzzer<'a> {
             // We can send parameter changes for parameters that are not automatable:
             //
             // > The host can send live user changes for this parameter regardless of this flag.
-            if param_info.readonly() || param_info.hidden() {
+            if param_info.is_readonly() || param_info.is_hidden() {
                 return None;
             }
 
@@ -935,14 +941,17 @@ impl<'a> ParamFuzzer<'a> {
                     time: time_offset,
                     space_id: CLAP_CORE_EVENT_SPACE_ID,
                     type_: CLAP_EVENT_PARAM_VALUE,
-                    flags: if param_info.automatable() {
+                    flags: if param_info.is_automatable() {
                         0
                     } else {
                         CLAP_EVENT_IS_LIVE
                     },
                 },
                 param_id: *param_id,
-                cookie: if self.no_cookies { null_mut() } else { param_info.cookie },
+                cookie: param_info
+                    .cookie
+                    .filter(|_| !self.no_cookies)
+                    .map_or(null_mut(), |x| x.as_ptr()),
                 note_id: -1,
                 port_index: -1,
                 channel: -1,
@@ -953,7 +962,7 @@ impl<'a> ParamFuzzer<'a> {
     }
 
     pub fn random_value(param: &Param, prng: &mut impl Rng) -> f64 {
-        if param.stepped() {
+        if param.is_stepped() {
             // We already confirmed that the range starts and ends in an integer when
             // constructing the parameter info
             prng.random_range(param.range.clone()).round()
@@ -965,7 +974,7 @@ impl<'a> ParamFuzzer<'a> {
     pub fn random_modulation(param: &Param, prng: &mut impl Rng) -> f64 {
         let range = (param.range.end() - param.range.start()).abs() * 0.5;
 
-        if param.stepped() {
+        if param.is_stepped() {
             prng.random_range(-range..=range).round()
         } else {
             prng.random_range(-range..=range)

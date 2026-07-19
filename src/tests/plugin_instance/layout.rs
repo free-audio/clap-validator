@@ -1,5 +1,5 @@
 use crate::cli::tracing::{Span, from_fn, record};
-use crate::plugin::ext::audio_ports::AudioPorts;
+use crate::plugin::ext::audio_ports::{AudioPortType, AudioPorts};
 use crate::plugin::ext::audio_ports_activation::{AudioPortsActivation, AudioPortsActivationAudio};
 use crate::plugin::ext::audio_ports_config::{AudioPortsConfig, AudioPortsConfigInfo};
 use crate::plugin::ext::configurable_audio_ports::{AudioPortsRequest, AudioPortsRequestInfo, ConfigurableAudioPorts};
@@ -9,8 +9,6 @@ use crate::plugin::process::{AudioBuffers, ProcessScope};
 use crate::tests::TestStatus;
 use crate::tests::rng::{NoteGenerator, new_prng, random_layout_requests};
 use anyhow::{Context, Result};
-use clap_sys::ext::ambisonic::CLAP_PORT_AMBISONIC;
-use clap_sys::ext::surround::CLAP_PORT_SURROUND;
 use rand::RngExt;
 use std::fmt::Display;
 
@@ -100,13 +98,13 @@ pub fn test_layout_audio_ports_config(library: &PluginLibrary, plugin_id: &str) 
                 .inputs
                 .first()
                 .filter(|x| x.is_main)
-                .and_then(|x| x.port_type.as_deref());
+                .map(|x| &x.port_type);
 
             let main_output_port_type = config_audio_ports
                 .outputs
                 .first()
                 .filter(|x| x.is_main)
-                .and_then(|x| x.port_type.as_deref());
+                .map(|x| &x.port_type);
 
             anyhow::ensure!(
                 config_audio_ports.inputs.len() as u32 == config_audio_ports_config.input_port_count,
@@ -127,7 +125,7 @@ pub fn test_layout_audio_ports_config(library: &PluginLibrary, plugin_id: &str) 
             );
 
             anyhow::ensure!(
-                main_input_port_type == config_audio_ports_config.main_input_port_type.as_deref(),
+                main_input_port_type == config_audio_ports_config.main_input_port_type.as_ref(),
                 "The main input port type for the '{}' configuration info ({:?}) does not match the type reported by \
                  'audio-ports' ({:?})",
                 config_audio_ports_config.name,
@@ -136,7 +134,7 @@ pub fn test_layout_audio_ports_config(library: &PluginLibrary, plugin_id: &str) 
             );
 
             anyhow::ensure!(
-                main_output_port_type == config_audio_ports_config.main_output_port_type.as_deref(),
+                main_output_port_type == config_audio_ports_config.main_output_port_type.as_ref(),
                 "The main output port type for the '{}' configuration info ({:?}) does not match the type reported by \
                  'audio-ports' ({:?})",
                 config_audio_ports_config.name,
@@ -389,9 +387,7 @@ pub fn test_layout_configurable_audio_ports(library: &PluginLibrary, plugin_id: 
             }
 
             match request.request_info {
-                AudioPortsRequestInfo::Ambisonic { config, .. }
-                    if port.port_type.as_deref() == Some(CLAP_PORT_AMBISONIC) =>
-                {
+                AudioPortsRequestInfo::Ambisonic { config, .. } if port.port_type == AudioPortType::AMBISONIC => {
                     let result = ambisonic
                         .as_ref()
                         .expect("already checked")
@@ -407,9 +403,7 @@ pub fn test_layout_configurable_audio_ports(library: &PluginLibrary, plugin_id: 
                     }
                 }
 
-                AudioPortsRequestInfo::Surround { channel_map }
-                    if port.port_type.as_deref() == Some(CLAP_PORT_SURROUND) =>
-                {
+                AudioPortsRequestInfo::Surround { channel_map } if port.port_type == AudioPortType::SURROUND => {
                     let result_map = surround.as_ref().expect("already checked").get_channel_map(
                         request.is_input,
                         request.port_index,

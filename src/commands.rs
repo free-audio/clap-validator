@@ -13,7 +13,7 @@ pub struct Arguments {
     /// clap-validator's own logging verbosity.
     ///
     /// This can be used to silence all non-essential output, or to enable more in depth tracing.
-    #[arg(short, long, default_value = "info")]
+    #[arg(short, long, default_value = "info", env = "CLAP_VALIDATOR_VERBOSITY")]
     pub verbosity: Verbosity,
 
     #[command(subcommand)]

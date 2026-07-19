@@ -6,7 +6,7 @@ use crate::plugin::ext::audio_ports_activation::{AudioPortsActivation, AudioPort
 use crate::plugin::ext::audio_ports_config::AudioPortsConfig;
 use crate::plugin::ext::configurable_audio_ports::ConfigurableAudioPorts;
 use crate::plugin::ext::note_ports::NotePorts;
-use crate::plugin::ext::params::Params;
+use crate::plugin::ext::params::{Params, ParamsRescan};
 use crate::plugin::ext::render::{Render, RenderMode};
 use crate::plugin::ext::state::State;
 use crate::plugin::ext::voice_info::VoiceInfo;
@@ -183,7 +183,7 @@ pub fn run_fuzzer(library: &Path, plugin_id: &str, seed: u64) -> Result<FuzzStat
                     | CallbackEvent::AudioPortsConfigRescan => {
                         audio_config_changed = true;
                     }
-                    CallbackEvent::ParamsRescanAll | CallbackEvent::ParamsRescanInfo => {
+                    CallbackEvent::ParamsRescan(ParamsRescan::All | ParamsRescan::Info) => {
                         params_changed = true;
                     }
                     CallbackEvent::NotePortsRescanAll => {

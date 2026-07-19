@@ -2,13 +2,13 @@
 use crate::plugin::instance::{PluginAudioThread, PluginStatus, ProcessInfo, ProcessStatus};
 use crate::plugin::util::Proxy;
 use anyhow::Result;
+use either::Either;
 
 mod buffer;
 mod events;
 mod transport;
 
 pub use buffer::*;
-use either::Either;
 pub use events::*;
 pub use transport::*;
 

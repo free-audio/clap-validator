@@ -64,10 +64,11 @@ impl DefaultPluginFactory for PolySynthPlugin {
     }
 
     fn new_main_thread<'a>(
-        _host: HostMainThreadHandle<'a>,
+        host: HostMainThreadHandle<'a>,
         shared: &'a PolySynthPluginShared,
     ) -> Result<PolySynthPluginMainThread<'a>, PluginError> {
         Ok(PolySynthPluginMainThread {
+            host,
             shared,
             config: ClapId::new(2),
             active: true,
@@ -332,6 +333,7 @@ pub struct PolySynthPluginShared {
 impl PluginShared<'_> for PolySynthPluginShared {}
 
 pub struct PolySynthPluginMainThread<'a> {
+    host: HostMainThreadHandle<'a>,
     shared: &'a PolySynthPluginShared,
     config: ClapId,
     active: bool,

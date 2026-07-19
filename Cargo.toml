@@ -2,15 +2,15 @@
 members = [
     ".",
     "tests/clack-synth",
-    "tests/clack-effect",
+    "tests/clack-effect", 
 ]
 
 [package]
 name = "clap-validator"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 license = "MIT"
-rust-version = "1.93.0"  # MSRV
+rust-version = "1.95.0"  # MSRV
 description = "A validator and automatic test suite for CLAP plugins"
 readme = "README.md"
 repository = "https://github.com/free-audio/clap-validator"
@@ -23,7 +23,7 @@ authors = [
 anyhow = "1.0.58"
 basic-toml = "0.1.10"
 either = "1.9.0"
-clap = { version = "4.5.58", features = ["derive", "wrap_help"] }
+clap = { version = "4.5.58", features = ["derive", "wrap_help", "env"] }
 clap-sys = "0.5.0"
 crossbeam-utils = "0.8.21"
 libloading = "0.9.0"

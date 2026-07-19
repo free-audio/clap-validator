@@ -685,7 +685,7 @@ pub fn param_get_values(params: &Params) -> Result<BTreeMap<clap_id, f64>> {
 }
 
 pub fn param_compare_approx(param: &Param, actual: f64, expected: f64) -> bool {
-    if param.stepped() {
+    if param.is_stepped() {
         let actual = actual.round() as i64;
         let expected = expected.round() as i64;
 
