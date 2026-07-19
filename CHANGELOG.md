@@ -6,24 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-03-28 (fork)
+## [0.4.1] - 2026-07-19 (fork)
+
+### Added
+- Added an experimental fuzzing harness that runs plugins for an extended period of time to discover potential issues.
+- Add parameter rescan checks to `state-reproducibility-*` tests.
+- Add `render` extension support, call `render::set` while fuzzing.
+- Add overlapping & wildcard event checks.
+- Add out-of-bounds write checks for output/inplace buffers.
 
 ### Changed
+- Bump MSRV to 1.95.0.
+- Remove `features-standard` test (too strict).
 
-- Update `clap-sys` to latest (CLAP 1.2.2)
-- Having both the `CLAP_PARAM_IS_READONLY` flag and any of the
-  `CLAP_PARAM_IS_AUTOMATABLE` or `CLAP_PARAM_IS_MODULATABLE` flags set now
-  results in an error.
-- The logic for which parameters can be randomized has changed. Previously all
-  parameters marked as automatable could be changed. Now parameters marked as
-  hidden or readonly are ignored instead, as non-automatable parameters can
-  still be changed as the result of live user input.
-- When doing out-of-process validation, the validator now also checks for timeouts in addition to crashes. 
-If a plugin takes too long to respond during validation, the validator will kill the process and report a timeout error. The timeout duration is currently set to 45 seconds.
-- Pretty printing of validation/list/scan results in non-JSON output modes has been improved.
-- Changed log formatting to be prettier, plugin log messages are propagated to the validator's output via the `log` extension.
-- Added `clap-validator.toml` config files for easier per-project test enabling/disabling.
-- When running validation in-process, it is possible to turn on tracing, which emits a detailed Chrome-tracing compatible .json trace file that can be loaded into Chrome's tracing viewer or other compatible tools. This is especially useful for debugging test failures and crashes.
+### Fixed
+- Allow calling host methods inside `clap_plugin::init`.
+- Fix `clap_plugin::activate` cycle detection logic (thanks @edwloef!)
+
+## [0.4.0] - 2026-03-28 (fork)
+
+### Added
 
 - New tests: 
   - `features-standard`
@@ -51,11 +53,7 @@ If a plugin takes too long to respond during validation, the validator will kill
   - `transport-null`
   - `transport-fuzz`
   - `transport-fuzz-sample-accurate`
-  
-- Removed tests:
-  - `state-reproducibility-flush` - replaced by `param-set-events`.
-  - `state-reproducibility-null-cookies` - replaced by `param-set-no-cookies`.
-
+ 
 - Extra checks:
   - `ambisonic`/`surround` checks when querying audio port info.
   - Thread/state/extension checks for host callback functions.
@@ -63,7 +61,28 @@ If a plugin takes too long to respond during validation, the validator will kill
   - Object validity checks, now passing an invalid object pointer to a callback will catch it and report it as an error instead of causing undefined behavior in the validator. This has some performance impact but it is negligible. 
   - Implemented more host-side extensions and specific checks for each host-side extension callback.
   - Implemented infinite restart loop check in activate (similar to the infinite `request_callback` loop check for `on_main_thread`).
-  - Check if `clap_audio_buffer` data is not modified by the plugin within the `clap_plugin::process` call.
+  - Check if `clap_audio_buffer` data is not modified by the plugin within the `clap_plugin::process` call. 
+
+### Changed
+
+- Update `clap-sys` to latest (CLAP 1.2.2)
+- Having both the `CLAP_PARAM_IS_READONLY` flag and any of the
+  `CLAP_PARAM_IS_AUTOMATABLE` or `CLAP_PARAM_IS_MODULATABLE` flags set now
+  results in an error.
+- The logic for which parameters can be randomized has changed. Previously all
+  parameters marked as automatable could be changed. Now parameters marked as
+  hidden or readonly are ignored instead, as non-automatable parameters can
+  still be changed as the result of live user input.
+- When doing out-of-process validation, the validator now also checks for timeouts in addition to crashes. 
+If a plugin takes too long to respond during validation, the validator will kill the process and report a timeout error. The timeout duration is currently set to 45 seconds.
+- Pretty printing of validation/list/scan results in non-JSON output modes has been improved.
+- Changed log formatting to be prettier, plugin log messages are propagated to the validator's output via the `log` extension.
+- Added `clap-validator.toml` config files for easier per-project test enabling/disabling.
+- When running validation in-process, it is possible to turn on tracing, which emits a detailed Chrome-tracing compatible .json trace file that can be loaded into Chrome's tracing viewer or other compatible tools. This is especially useful for debugging test failures and crashes.
+
+- Removed tests:
+  - `state-reproducibility-flush` - replaced by `param-set-events`.
+  - `state-reproducibility-null-cookies` - replaced by `param-set-no-cookies`.
 
 ### Fixed
   - Wrong state transition check on plugin instance destroy.

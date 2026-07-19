@@ -190,7 +190,7 @@ impl Params<'_> {
             if module.starts_with('/') {
                 anyhow::bail!(
                     "The module name for parameter '{}' (stable ID {}) starts with a leading slash: '{}'.",
-                    &name,
+                    name,
                     info.id,
                     module
                 )
@@ -199,7 +199,7 @@ impl Params<'_> {
             if module.ends_with('/') {
                 anyhow::bail!(
                     "The module name for parameter '{}' (stable ID {}) ends with a trailing slash: '{}'.",
-                    &name,
+                    name,
                     info.id,
                     module
                 )
@@ -208,7 +208,7 @@ impl Params<'_> {
             if module.contains("//") {
                 anyhow::bail!(
                     "The module name for parameter '{}' (stable ID {}) contains multiple subsequent slashes: '{}'.",
-                    &name,
+                    name,
                     info.id,
                     module
                 )
@@ -218,7 +218,7 @@ impl Params<'_> {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) has a minimum value ({:?}) that's higher than it's maximum value \
                      ({:?}).",
-                    &name,
+                    name,
                     info.id,
                     info.min_value,
                     info.max_value
@@ -229,7 +229,7 @@ impl Params<'_> {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) has a default value ({:?}) that falls outside of its value range \
                      ({:?}).",
-                    &name,
+                    name,
                     info.id,
                     info.default_value,
                     info.min_value..=info.max_value
@@ -241,7 +241,7 @@ impl Params<'_> {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a stepped parameter, but its minimum value ({:?}) is not an \
                          integer.",
-                        &name,
+                        name,
                         info.id,
                         info.min_value,
                     )
@@ -250,7 +250,7 @@ impl Params<'_> {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a stepped parameter, but its maximum value ({:?}) is not an \
                          integer.",
-                        &name,
+                        name,
                         info.id,
                         info.max_value,
                     )
@@ -270,7 +270,7 @@ impl Params<'_> {
                 if (info.flags & CLAP_PARAM_IS_STEPPED) == 0 {
                     anyhow::bail!(
                         "Parameter '{}' (stable ID {}) is a bypass parameter, but it is not stepped.",
-                        &name,
+                        name,
                         info.id
                     )
                 }
@@ -290,7 +290,7 @@ impl Params<'_> {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) is automatable per note ID, key, channel, or port, but does not \
                      have CLAP_PARAM_IS_AUTOMATABLE. This is likely a bug.",
-                    &name,
+                    name,
                     info.id
                 )
             }
@@ -306,7 +306,7 @@ impl Params<'_> {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) is modulatable per note ID, key, channel, or port, but does not \
                      have CLAP_PARAM_IS_MODULATABLE. This is likely a bug.",
-                    &name,
+                    name,
                     info.id
                 )
             }
@@ -317,7 +317,7 @@ impl Params<'_> {
                 anyhow::bail!(
                     "Parameter '{}' (stable ID {}) has the 'CLAP_PARAM_IS_READONLY' flag set, but it is also marked \
                      as automatable or modulatable. This is likely a bug.",
-                    &name,
+                    name,
                     info.id
                 )
             }

@@ -148,7 +148,7 @@ checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
 
 [[package]]
 name = "clap-validator"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "basic-toml",
