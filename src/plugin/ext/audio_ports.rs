@@ -11,8 +11,9 @@ use clap_sys::ext::ambisonic::CLAP_PORT_AMBISONIC;
 use clap_sys::ext::audio_ports::*;
 use clap_sys::ext::surround::CLAP_PORT_SURROUND;
 use clap_sys::id::{CLAP_INVALID_ID, clap_id};
+use std::borrow::Cow;
 use std::collections::HashSet;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, c_char};
 use std::mem::zeroed;
 use std::ptr::NonNull;
 
@@ -31,6 +32,37 @@ pub struct AudioPortConfig {
     pub outputs: Vec<AudioPort>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AudioPortType(Option<Cow<'static, CStr>>);
+
+impl AudioPortType {
+    /// `null`-typed audio port.
+    pub const UNTYPED: Self = Self(None);
+    pub const MONO: Self = Self(Some(Cow::Borrowed(CLAP_PORT_MONO)));
+    pub const STEREO: Self = Self(Some(Cow::Borrowed(CLAP_PORT_STEREO)));
+    pub const SURROUND: Self = Self(Some(Cow::Borrowed(CLAP_PORT_SURROUND)));
+    pub const AMBISONIC: Self = Self(Some(Cow::Borrowed(CLAP_PORT_AMBISONIC)));
+
+    pub unsafe fn from_raw(ptr: *const c_char) -> Self {
+        if ptr.is_null() {
+            Self(None)
+        } else {
+            let str = unsafe { CStr::from_ptr(ptr) };
+            if str == CLAP_PORT_MONO {
+                Self::MONO
+            } else if str == CLAP_PORT_STEREO {
+                Self::STEREO
+            } else if str == CLAP_PORT_SURROUND {
+                Self::SURROUND
+            } else if str == CLAP_PORT_AMBISONIC {
+                Self::AMBISONIC
+            } else {
+                Self(Some(Cow::Borrowed(str)))
+            }
+        }
+    }
+}
+
 /// The configuration for a single audio port.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioPort {
@@ -40,7 +72,8 @@ pub struct AudioPort {
     /// Whether this is the main audio port.
     pub is_main: bool,
 
-    pub port_type: Option<CString>,
+    /// The type of the audio port.
+    pub port_type: AudioPortType,
 
     /// The number of channels for an audio port.
     pub channel_count: u32,
@@ -222,17 +255,13 @@ pub fn check_audio_port_info_valid(
         anyhow::bail!("Port prefers 64-bit sample size, but does not support it.");
     }
 
-    let port_type = if info.port_type.is_null() {
-        None
-    } else {
-        Some(unsafe { CStr::from_ptr(info.port_type) })
-    };
+    let port_type = unsafe { AudioPortType::from_raw(info.port_type) };
 
     // check consistency between port type and channel count / extensions
     check_audio_port_type_consistent(
         is_input,
         port_index,
-        port_type,
+        &port_type,
         info.channel_count,
         ext_ambisonic.as_ref(),
         ext_surround.as_ref(),
@@ -242,7 +271,7 @@ pub fn check_audio_port_info_valid(
         id: info.id,
         is_main: (info.flags & CLAP_AUDIO_PORT_IS_MAIN) != 0,
         channel_count: info.channel_count,
-        port_type: port_type.map(|s| s.to_owned()),
+        port_type,
         in_place_pair: if info.in_place_pair == CLAP_INVALID_ID {
             None
         } else {
@@ -260,16 +289,16 @@ pub fn check_audio_port_info_valid(
 pub fn check_audio_port_type_consistent(
     is_input: bool,
     port_index: u32,
-    port_type: Option<&CStr>,
+    port_type: &AudioPortType,
     channel_count: u32,
     ext_ambisonic: Option<&Ambisonic>,
     ext_surround: Option<&Surround>,
 ) -> Result<()> {
-    if port_type.is_none() {
+    if port_type == &AudioPortType::UNTYPED {
         return Ok(());
     }
 
-    if port_type == Some(CLAP_PORT_MONO) {
+    if port_type == &AudioPortType::MONO {
         if channel_count == 1 {
             Ok(())
         } else {
@@ -278,7 +307,7 @@ pub fn check_audio_port_type_consistent(
                 channel_count
             );
         }
-    } else if port_type == Some(CLAP_PORT_STEREO) {
+    } else if port_type == &AudioPortType::STEREO {
         if channel_count == 2 {
             Ok(())
         } else {
@@ -287,7 +316,7 @@ pub fn check_audio_port_type_consistent(
                 channel_count
             );
         }
-    } else if port_type == Some(CLAP_PORT_SURROUND) {
+    } else if port_type == &AudioPortType::SURROUND {
         let Some(ext_surround) = ext_surround else {
             anyhow::bail!("Audio port type is 'surround', but the plugin does not implement the 'surround' extension.");
         };
@@ -311,7 +340,7 @@ pub fn check_audio_port_type_consistent(
         }
 
         Ok(())
-    } else if port_type == Some(CLAP_PORT_AMBISONIC) {
+    } else if port_type == &AudioPortType::AMBISONIC {
         let Some(ext_ambisonic) = ext_ambisonic else {
             anyhow::bail!(
                 "Audio port type is 'ambisonic', but the plugin does not implement the 'ambisonic' extension."

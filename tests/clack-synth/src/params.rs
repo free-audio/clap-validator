@@ -85,6 +85,11 @@ impl PluginStateImpl for PolySynthPluginMainThread<'_> {
         input.read_exact(&mut buf)?;
         let volume_value = f32::from_le_bytes(buf);
         self.shared.params.set_volume(volume_value);
+
+        if let Some(ext) = self.host.get_extension::<HostParams>() {
+            ext.rescan(&mut self.host, ParamRescanFlags::VALUES);
+        }
+
         Ok(())
     }
 }

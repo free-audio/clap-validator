@@ -427,6 +427,7 @@ unsafe impl Sync for AudioBuffers {}
 
 impl Deref for AudioBuffers {
     type Target = [AudioBuffer];
+
     fn deref(&self) -> &Self::Target {
         &self.buffers
     }

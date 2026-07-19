@@ -1,8 +1,9 @@
 //! Tests surrounding state handling.
 
 use super::PluginInstanceTestCase;
-use crate::plugin::ext::params::Params;
+use crate::plugin::ext::params::{Params, ParamsRescan};
 use crate::plugin::ext::state::State;
+use crate::plugin::instance::CallbackEvent;
 use crate::plugin::library::PluginLibrary;
 use crate::plugin::process::{InputEventQueue, OutputEventQueue};
 use crate::tests::plugin_instance::params::{param_generate_diff, param_get_values};
@@ -202,6 +203,9 @@ pub fn test_state_reproducibility(
 
     plugin.poll_callback(|_| Ok(()))?;
 
+    let before_load_params = params.info()?;
+    let before_load_values = param_get_values(&params)?;
+
     if buffered_streams {
         // This is a buffered load that only loads 17 bytes at a time. Why 17? Because.
         state.load_buffered(&expected_state, 17)?;
@@ -209,20 +213,67 @@ pub fn test_state_reproducibility(
         state.load(&expected_state)?;
     }
 
-    plugin.poll_callback(|_| Ok(()))?;
+    let mut param_rescan_values = false;
+    let mut param_rescan_info = false;
+    let mut param_rescan_all = false;
 
-    let actual_param_values = param_get_values(&params)?;
+    plugin.poll_callback(|event| {
+        if let CallbackEvent::ParamsRescan(rescan) = event {
+            match rescan {
+                ParamsRescan::Values => param_rescan_values = true,
+                ParamsRescan::Text => {} // this could be checked as well
+                ParamsRescan::Info => param_rescan_info = true,
+                ParamsRescan::All => {
+                    param_rescan_values = true;
+                    param_rescan_info = true;
+                    param_rescan_all = true;
+                }
+            }
+        }
 
-    if let Some(diff) = param_generate_diff(&actual_param_values, &expected_param_values, &params)? {
+        Ok(())
+    })?;
+
+    let after_load_params = params.info()?;
+    let after_load_values = param_get_values(&params)?;
+
+    if !param_rescan_values && let Some(diff) = param_generate_diff(&before_load_values, &after_load_values, &params)? {
         anyhow::bail!(
-            "After reloading the state, these parameter values do not match the old values: \n{}",
+            "After reloading the state, these parameter values changed without a rescan request: \n{}",
+            diff
+        );
+    }
+
+    if !param_rescan_all {
+        if before_load_params.keys().collect::<Vec<_>>() != after_load_params.keys().collect::<Vec<_>>() {
+            anyhow::bail!("After reloading the state, the parameter list changed without a rescan request.");
+        }
+
+        for (previous, current) in before_load_params.values().zip(after_load_params.values()) {
+            let missed_rescan = match current.needs_rescan(previous) {
+                Some(ParamsRescan::Info) => !param_rescan_info,
+                Some(ParamsRescan::All) => true,
+                _ => continue,
+            };
+
+            if missed_rescan {
+                anyhow::bail!(
+                    "After reloading the state, the parameter '{}' changed without a rescan request.",
+                    current.name
+                );
+            }
+        }
+    }
+
+    if let Some(diff) = param_generate_diff(&after_load_values, &expected_param_values, &params)? {
+        anyhow::bail!(
+            "After reloading the state, these parameter values do not match the previously saved values: \n{}",
             diff
         );
     }
 
     plugin.poll_callback(|_| Ok(()))?;
 
-    // Now for the moment of truth
     let actual_state = state.save()?;
 
     plugin.poll_callback(|_| Ok(()))?;

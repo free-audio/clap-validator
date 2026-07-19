@@ -215,23 +215,22 @@ fn walk_clap_plugins(directory: &Path) -> impl Iterator<Item = DirEntry> {
         .same_file_system(false)
         .into_iter()
         .filter_map(|entry| entry.ok())
-        // Only consider valid `.clap` files or bundles. We'll need to follow symlinks as part of
-        // that check.
-        .filter(|entry| match entry.file_name().to_str() {
-            #[cfg(not(target_os = "macos"))]
-            Some(file_name) => {
-                file_name.ends_with(".clap")
-                    && std::fs::canonicalize(entry.path())
-                        .map(|path| path.is_file())
-                        .unwrap_or(false)
-            }
-            #[cfg(target_os = "macos")]
-            Some(file_name) => {
-                file_name.ends_with(".clap")
-                    && std::fs::canonicalize(entry.path())
-                        .map(|path| path.is_dir())
-                        .unwrap_or(false)
-            }
-            None => false,
-        })
+        .filter(|entry| is_clap_plugin(entry.path()))
+}
+
+fn is_clap_plugin(path: &Path) -> bool {
+    if path.extension().is_some_and(|ext| ext == "clap") {
+        return false;
+    }
+
+    let path = match std::fs::canonicalize(path) {
+        Ok(path) => path,
+        Err(_) => return false,
+    };
+
+    if cfg!(target_os = "macos") {
+        path.is_dir()
+    } else {
+        path.is_file()
+    }
 }

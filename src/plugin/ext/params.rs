@@ -36,16 +36,28 @@ impl<'a> Extension for Params<'a> {
 /// Information about a parameter.
 #[derive(Debug, Clone)]
 pub struct Param {
+    /// Display name of the parameter.
     pub name: String,
+    /// This is the module name for the parameter.
+    pub module: String,
     /// This should be provided to the plugin when sending automation or modulation events for this
     /// parameter.
-    pub cookie: *mut c_void,
+    pub cookie: Option<NonNull<c_void>>,
     /// The parameter's value range.
     pub range: RangeInclusive<f64>,
     /// The parameter's default value.
     pub default: f64,
     /// The raw parameter flags bit field.
     pub flags: clap_param_info_flags,
+}
+
+/// Type of rescan requested by the plugin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParamsRescan {
+    Values,
+    Text,
+    Info,
+    All,
 }
 
 unsafe impl Send for Param {}
@@ -168,10 +180,7 @@ impl Params<'_> {
             let name = util::c_char_slice_to_string(&info.name)
                 .with_context(|| format!("Could not read the name for parameter with stable ID {}", info.id))?;
 
-            // We don't use the module string, but we'll still check it for consistency. Basically
-            // anything goes here as long as there are no trailing, leading, or multiple subsequent
-            // slashes.
-            let module = util::c_char_slice_to_string(&info.name).with_context(|| {
+            let module = util::c_char_slice_to_string(&info.module).with_context(|| {
                 format!(
                     "Could not read the module name for parameter '{}' (stable ID {})",
                     &name, info.id
@@ -315,7 +324,8 @@ impl Params<'_> {
 
             let processed_info = Param {
                 name,
-                cookie: info.cookie,
+                module,
+                cookie: NonNull::new(info.cookie),
                 range: info.min_value..=info.max_value,
                 default: info.default_value,
                 flags: info.flags,
@@ -382,28 +392,57 @@ impl Params<'_> {
 }
 
 impl Param {
+    /// Returns the `ParamsRescan` that should be requested if the parameter has changed from `previous` to `self`.
+    pub fn needs_rescan(&self, previous: &Param) -> Option<ParamsRescan> {
+        if self.cookie != previous.cookie
+            || self.range != previous.range
+            || self.default != previous.default
+            || self.is_readonly() != previous.is_readonly()
+            || self.is_stepped() != previous.is_stepped()
+            || self.is_automatable() != previous.is_automatable()
+            || self.is_modulatable() != previous.is_modulatable()
+        {
+            return Some(ParamsRescan::All);
+        }
+
+        if self.is_hidden() != previous.is_hidden()
+            || self.is_periodic() != previous.is_periodic()
+            || self.name != previous.name
+            || self.module != previous.module
+        {
+            return Some(ParamsRescan::Info);
+        }
+
+        None
+    }
+
     /// Whether the parameter is hidden and should be ignored.
-    pub fn hidden(&self) -> bool {
+    pub fn is_hidden(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_HIDDEN) != 0
     }
 
     /// Whether the parameter is read-only and should not be changed.
-    pub fn readonly(&self) -> bool {
+    pub fn is_readonly(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_READONLY) != 0
     }
 
     /// Whether this parameter is stepped.
-    pub fn stepped(&self) -> bool {
+    pub fn is_stepped(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_STEPPED) != 0
     }
 
+    /// Whether this parameter is periodic.
+    pub fn is_periodic(&self) -> bool {
+        (self.flags & CLAP_PARAM_IS_PERIODIC) != 0
+    }
+
     /// Whether this parameter is automatable.
-    pub fn automatable(&self) -> bool {
+    pub fn is_automatable(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_AUTOMATABLE) != 0
     }
 
     /// Whether this parameter is automatable per note ID, key, channel, or port.
-    pub fn poly_automatable(&self) -> bool {
+    pub fn is_poly_automatable(&self) -> bool {
         (self.flags
             & (CLAP_PARAM_IS_AUTOMATABLE_PER_NOTE_ID
                 | CLAP_PARAM_IS_AUTOMATABLE_PER_KEY
@@ -413,12 +452,12 @@ impl Param {
     }
 
     /// Whether this parameter is modulatable.
-    pub fn modulatable(&self) -> bool {
+    pub fn is_modulatable(&self) -> bool {
         (self.flags & CLAP_PARAM_IS_MODULATABLE) != 0
     }
 
     /// Whether this parameter is modulatable per note ID, key, channel, or port.
-    pub fn poly_modulatable(&self) -> bool {
+    pub fn is_poly_modulatable(&self) -> bool {
         (self.flags
             & (CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID
                 | CLAP_PARAM_IS_MODULATABLE_PER_KEY

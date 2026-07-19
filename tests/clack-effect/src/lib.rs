@@ -34,10 +34,10 @@ impl DefaultPluginFactory for GainPlugin {
     }
 
     fn new_main_thread<'a>(
-        _host: HostMainThreadHandle<'a>,
+        host: HostMainThreadHandle<'a>,
         shared: &'a Self::Shared<'a>,
     ) -> Result<Self::MainThread<'a>, PluginError> {
-        Ok(Self::MainThread { shared })
+        Ok(Self::MainThread { host, shared })
     }
 }
 
@@ -135,6 +135,7 @@ pub struct GainPluginShared {
 impl PluginShared<'_> for GainPluginShared {}
 
 pub struct GainPluginMainThread<'a> {
+    host: HostMainThreadHandle<'a>,
     shared: &'a GainPluginShared,
 }
 

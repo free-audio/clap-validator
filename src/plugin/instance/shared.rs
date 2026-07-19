@@ -5,7 +5,7 @@ use crate::plugin::ext::audio_ports::AudioPorts;
 use crate::plugin::ext::audio_ports_config::AudioPortsConfig;
 use crate::plugin::ext::latency::Latency;
 use crate::plugin::ext::note_ports::NotePorts;
-use crate::plugin::ext::params::Params;
+use crate::plugin::ext::params::{Params, ParamsRescan};
 use crate::plugin::ext::preset_load::PresetLoad;
 use crate::plugin::ext::state::State;
 use crate::plugin::ext::tail::Tail;
@@ -664,15 +664,21 @@ impl PluginShared {
             this.assert_has_extension::<Params>()?;
 
             if flags & CLAP_PARAM_RESCAN_VALUES != 0 {
-                this.callback_sender.send(CallbackEvent::ParamsRescanValues).unwrap();
+                this.callback_sender
+                    .send(CallbackEvent::ParamsRescan(ParamsRescan::Values))
+                    .unwrap();
             }
 
             if flags & CLAP_PARAM_RESCAN_TEXT != 0 {
-                this.callback_sender.send(CallbackEvent::ParamsRescanText).unwrap();
+                this.callback_sender
+                    .send(CallbackEvent::ParamsRescan(ParamsRescan::Text))
+                    .unwrap();
             }
 
             if flags & CLAP_PARAM_RESCAN_INFO != 0 {
-                this.callback_sender.send(CallbackEvent::ParamsRescanInfo).unwrap();
+                this.callback_sender
+                    .send(CallbackEvent::ParamsRescan(ParamsRescan::Info))
+                    .unwrap();
             }
 
             if flags & CLAP_PARAM_RESCAN_ALL != 0 {
@@ -681,7 +687,9 @@ impl PluginShared {
                     "Called while the plugin is active"
                 );
 
-                this.callback_sender.send(CallbackEvent::ParamsRescanAll).unwrap();
+                this.callback_sender
+                    .send(CallbackEvent::ParamsRescan(ParamsRescan::All))
+                    .unwrap();
             }
 
             Ok(())

@@ -1,13 +1,13 @@
 use crate::cli::tracing::{Recordable, Recorder, Span, record};
 use crate::plugin::ext::Extension;
-use crate::plugin::ext::audio_ports::{AudioPort, check_audio_port_info_valid};
+use crate::plugin::ext::audio_ports::{AudioPort, AudioPortType, check_audio_port_info_valid};
 use crate::plugin::instance::Plugin;
 use crate::plugin::util::{c_char_slice_to_string, clap_call, cstr_ptr_to_string};
 use anyhow::Result;
 use clap_sys::ext::audio_ports::clap_audio_port_info;
 use clap_sys::ext::audio_ports_config::*;
 use clap_sys::id::clap_id;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::mem::zeroed;
 use std::ptr::NonNull;
 
@@ -30,8 +30,8 @@ pub struct AudioPortsConfigConfig {
     pub input_port_count: u32,
     pub output_port_count: u32,
 
-    pub main_input_port_type: Option<CString>,
-    pub main_output_port_type: Option<CString>,
+    pub main_input_port_type: Option<AudioPortType>,
+    pub main_output_port_type: Option<AudioPortType>,
 
     pub main_input_channel_count: Option<u32>,
     pub main_output_channel_count: Option<u32>,
@@ -74,23 +74,15 @@ impl AudioPortsConfig<'_> {
             .map(|i| unsafe {
                 let info = self.get_raw_config_info(i)?;
 
-                let input_port_type = if info.main_input_port_type.is_null() {
-                    None
-                } else {
-                    Some(CStr::from_ptr(info.main_input_port_type))
-                };
-
-                let output_port_type = if info.main_output_port_type.is_null() {
-                    None
-                } else {
-                    Some(CStr::from_ptr(info.main_output_port_type))
-                };
-
                 Ok(AudioPortsConfigConfig {
                     id: info.id,
                     name: c_char_slice_to_string(&info.name)?,
-                    main_input_port_type: input_port_type.map(|s| s.to_owned()),
-                    main_output_port_type: output_port_type.map(|s| s.to_owned()),
+                    main_input_port_type: info
+                        .has_main_input
+                        .then(|| AudioPortType::from_raw(info.main_input_port_type)),
+                    main_output_port_type: info
+                        .has_main_output
+                        .then(|| AudioPortType::from_raw(info.main_output_port_type)),
                     input_port_count: info.input_port_count,
                     output_port_count: info.output_port_count,
                     main_input_channel_count: info.has_main_input.then_some(info.main_input_channel_count),

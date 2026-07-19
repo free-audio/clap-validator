@@ -56,8 +56,11 @@ pub trait SandboxOperation: Serialize + DeserializeOwned {
                 .as_secs_f64()
                 .to_string(),
         );
-        command.arg("--verbosity");
-        command.arg(config.verbosity.to_possible_value().unwrap().get_name());
+        command.env(
+            "CLAP_VALIDATOR_VERBOSITY",
+            config.verbosity.to_possible_value().unwrap().get_name(),
+        );
+
         command.arg("sandbox");
         command.arg(Self::ID);
         command.arg(serde_json::to_string(&self).expect("Failed to serialize sandbox data"));
