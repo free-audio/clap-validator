@@ -1,13 +1,13 @@
 # clap-validator
 
-[![Automated builds](https://github.com/blepfx/clap-validator/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/blepfx/clap-validator/actions/workflows/build.yml?query=branch%3Amaster)
+[![Automated builds](https://github.com/free-audio/clap-validator/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/free-audio/clap-validator/actions/workflows/build.yml?query=branch%3Amaster)
 
 A validator and automatic test suite for [CLAP](https://github.com/free-audio/clap) plugins. Clap-validator can automatically test one or more plugins for common bugs and incorrect behavior. See [CHANGELOG](./CHANGELOG.md) for a detailed list of changes and additions in each version.
 
 ## Download
 
 Development builds can be found
-[here](https://nightly.link/blepfx/clap-validator/workflows/build/master).
+[here](https://nightly.link/free-audio/clap-validator/workflows/build/master).
 The macOS builds are unsigned and may require Gatekeeper to be disabled or the
 quarantine bit to be removed
 ([instructions](https://disable-gatekeeper.github.io/)).
