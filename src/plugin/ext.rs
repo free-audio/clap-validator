@@ -6,10 +6,13 @@ use std::ffi::CStr;
 use std::ptr::NonNull;
 
 pub mod audio_ports;
+pub mod latency;
 pub mod note_ports;
 pub mod params;
 pub mod preset_load;
+pub mod render;
 pub mod state;
+pub mod tail;
 
 /// An abstraction for a CLAP plugin extension. `P` here is the plugin type. In practice, this is
 /// either `Plugin` or `PluginAudioThread`. Abstractions for main thread functions will implement

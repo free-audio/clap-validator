@@ -21,8 +21,10 @@ pub struct State<'a> {
 }
 
 /// An input stream backed by a slice.
+///
+/// `pub(crate)` so sibling extensions (e.g. `state-context`) can reuse the same stream helpers.
 #[derive(Debug)]
-struct InputStream<'a> {
+pub(crate) struct InputStream<'a> {
     // The `ctx` pointer is set to this struct after creating the object
     vtable: clap_istream,
 
@@ -37,8 +39,10 @@ struct InputStream<'a> {
 }
 
 /// An output stream backed by a vector.
+///
+/// `pub(crate)` so sibling extensions (e.g. `state-context`) can reuse the same stream helpers.
 #[derive(Debug)]
-struct OutputStream {
+pub(crate) struct OutputStream {
     // The `ctx` pointer is set to this struct after creating the object
     vtable: clap_ostream,
 
