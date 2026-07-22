@@ -643,3 +643,166 @@ fn format_mismatching_values(
         .collect::<Vec<String>>()
         .join(", ")
 }
+
+/// DAW-typical state round-trip: create → init → process → save → destroy →
+/// recreate → load → process → save → compare.
+/// Catches state corruption that only manifests during audio processing after
+/// a state restore (e.g. uninitialized buffers, stale pointers).
+pub fn test_state_reproducibility_process_after_load(
+    library: &PluginLibrary,
+    plugin_id: &str,
+) -> Result<TestStatus> {
+    let mut prng = new_prng();
+
+    let host = Host::new();
+    let plugin = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance")?;
+
+    let (expected_state, expected_param_values) = {
+        plugin.init().context("Error during initialization")?;
+
+        let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+            Some(audio_ports) => audio_ports
+                .config()
+                .context("Error while querying 'audio-ports' IO configuration")?,
+            None => AudioPortConfig::default(),
+        };
+        let params = match plugin.get_extension::<Params>() {
+            Some(params) => params,
+            None => {
+                return Ok(TestStatus::Skipped {
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        Params::EXTENSION_ID.to_str().unwrap(),
+                    )),
+                });
+            }
+        };
+        let state = match plugin.get_extension::<State>() {
+            Some(state) => state,
+            None => {
+                return Ok(TestStatus::Skipped {
+                    details: Some(format!(
+                        "The plugin does not implement the '{}' extension.",
+                        State::EXTENSION_ID.to_str().unwrap(),
+                    )),
+                });
+            }
+        };
+        host.handle_callbacks_once();
+
+        let param_infos = params
+            .info()
+            .context("Failure while fetching the plugin's parameters")?;
+        let param_fuzzer = ParamFuzzer::new(&param_infos);
+        let random_param_set_events: Vec<_> =
+            param_fuzzer.randomize_params_at(&mut prng, 0).collect();
+
+        let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
+        ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
+            .run_once(ProcessConfig::default(), move |process_data| {
+                *process_data.input_events.events.lock() = random_param_set_events;
+                Ok(())
+            })?;
+
+        let expected_param_values: BTreeMap<clap_id, f64> = param_infos
+            .keys()
+            .map(|param_id| params.get(*param_id).map(|value| (*param_id, value)))
+            .collect::<Result<BTreeMap<clap_id, f64>>>()?;
+
+        let expected_state = state.save()?;
+        host.handle_callbacks_once();
+
+        (expected_state, expected_param_values)
+    };
+
+    drop(plugin);
+
+    // Second instance: load state, then process, then save again
+    let plugin = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance a second time")?;
+    plugin
+        .init()
+        .context("Error while initializing the second plugin instance")?;
+
+    let params = match plugin.get_extension::<Params>() {
+        Some(params) => params,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    Params::EXTENSION_ID.to_str().unwrap(),
+                )),
+            });
+        }
+    };
+    let state = match plugin.get_extension::<State>() {
+        Some(state) => state,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(format!(
+                    "The plugin's second instance does not implement the '{}' extension.",
+                    State::EXTENSION_ID.to_str().unwrap()
+                )),
+            });
+        }
+    };
+    host.handle_callbacks_once();
+
+    state.load(&expected_state)?;
+    host.handle_callbacks_once();
+
+    // Verify params match after load
+    let actual_param_values: BTreeMap<clap_id, f64> = expected_param_values
+        .keys()
+        .map(|param_id| params.get(*param_id).map(|value| (*param_id, value)))
+        .collect::<Result<BTreeMap<clap_id, f64>>>()?;
+    if actual_param_values != expected_param_values {
+        let param_infos = params
+            .info()
+            .context("Failure while fetching the plugin's parameters")?;
+        anyhow::bail!(
+            "After reloading the state, the plugin's parameter values do not match. \
+             Mismatching values are {}.",
+            format_mismatching_values(actual_param_values, &expected_param_values, &param_infos)
+        );
+    }
+
+    // Process AFTER load — this is the DAW-typical sequence
+    let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+        Some(audio_ports) => audio_ports
+            .config()
+            .context("Error while querying 'audio-ports' IO configuration")?,
+        None => AudioPortConfig::default(),
+    };
+    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
+    ProcessingTest::new_out_of_place(&plugin, &mut input_buffers, &mut output_buffers)?
+        .run_once(ProcessConfig::default(), |_process_data| Ok(()))?;
+
+    // Save again and compare
+    let actual_state = state.save()?;
+    host.handle_callbacks_once();
+
+    host.callback_error_check()
+        .context("An error occurred during a host callback")?;
+    if actual_state == expected_state {
+        Ok(TestStatus::Success { details: None })
+    } else {
+        let (expected_state_file_path, mut expected_state_file) =
+            PluginTestCase::StateReproducibilityBasic.temporary_file(plugin_id, EXPECTED_STATE_FILE_NAME)?;
+        let (actual_state_file_path, mut actual_state_file) =
+            PluginTestCase::StateReproducibilityBasic.temporary_file(plugin_id, ACTUAL_STATE_FILE_NAME)?;
+
+        expected_state_file.write_all(&expected_state)?;
+        actual_state_file.write_all(&actual_state)?;
+
+        anyhow::bail!(
+            "Re-saving the loaded state after processing resulted in a different state file. \
+             Expected: '{}'. Actual: '{}'.",
+            expected_state_file_path.display(),
+            actual_state_file_path.display(),
+        )
+    }
+}

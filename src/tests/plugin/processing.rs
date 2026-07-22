@@ -452,3 +452,75 @@ fn check_out_of_place_output_consistency(
 
     Ok(())
 }
+
+/// DAW-typical lifecycle test: create → init → activate → process → deactivate →
+/// activate → process → deactivate → destroy.
+/// Catches crashes during reactivation and state leaks between cycles.
+pub fn test_lifecycle_reactivate(
+    library: &PluginLibrary,
+    plugin_id: &str,
+) -> Result<TestStatus> {
+    let mut prng = new_prng();
+
+    let host = Host::new();
+    let plugin = library
+        .create_plugin(plugin_id, host.clone())
+        .context("Could not create the plugin instance")?;
+    plugin.init().context("Error during initialization")?;
+
+    let audio_ports_config = match plugin.get_extension::<AudioPorts>() {
+        Some(audio_ports) => audio_ports
+            .config()
+            .context("Error while querying 'audio-ports' IO configuration")?,
+        None => {
+            return Ok(TestStatus::Skipped {
+                details: Some(format!(
+                    "The plugin does not implement the '{}' extension.",
+                    AudioPorts::EXTENSION_ID.to_str().unwrap(),
+                )),
+            });
+        }
+    };
+    host.handle_callbacks_once();
+
+    let (mut input_buffers, mut output_buffers) = audio_ports_config.create_buffers(512);
+
+    // First cycle: activate → process → deactivate
+    {
+        let mut pt = ProcessingTest::new_out_of_place(
+            &plugin,
+            &mut input_buffers,
+            &mut output_buffers,
+        )?;
+        pt.run(
+            3,
+            ProcessConfig::default(),
+            |process_data| {
+                process_data.buffers.randomize(&mut prng);
+                Ok(())
+            },
+        )?;
+    }
+
+    // Second cycle: reactivate → process → deactivate
+    // DAWs do this on buffer-size changes, sample-rate changes, etc.
+    {
+        let mut pt = ProcessingTest::new_out_of_place(
+            &plugin,
+            &mut input_buffers,
+            &mut output_buffers,
+        )?;
+        pt.run(
+            3,
+            ProcessConfig::default(),
+            |process_data| {
+                process_data.buffers.randomize(&mut prng);
+                Ok(())
+            },
+        )?;
+    }
+
+    host.callback_error_check()
+        .context("An error occurred during a host callback")?;
+    Ok(TestStatus::Success { details: None })
+}

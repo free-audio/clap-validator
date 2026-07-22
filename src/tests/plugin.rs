@@ -29,6 +29,8 @@ pub enum PluginTestCase {
     ProcessNoteOutOfPlaceBasic,
     #[strum(serialize = "process-note-inconsistent")]
     ProcessNoteInconsistent,
+    #[strum(serialize = "lifecycle-reactivate")]
+    LifecycleReactivate,
     #[strum(serialize = "param-conversions")]
     ParamConversions,
     #[strum(serialize = "param-fuzz-basic")]
@@ -43,6 +45,8 @@ pub enum PluginTestCase {
     StateReproducibilityNullCookies,
     #[strum(serialize = "state-reproducibility-flush")]
     StateReproducibilityFlush,
+    #[strum(serialize = "state-reproducibility-process-after-load")]
+    StateReproducibilityProcessAfterLoad,
     #[strum(serialize = "state-buffered-streams")]
     StateBufferedStreams,
 }
@@ -78,6 +82,11 @@ impl<'a> TestCase<'a> for PluginTestCase {
                 "Sends intentionally inconsistent and mismatching note and MIDI events to the \
                  plugin with its default parameter values and tests the output for consistency. \
                  Uses out-of-place audio processing.",
+            ),
+            PluginTestCase::LifecycleReactivate => String::from(
+                "Activates the plugin, processes a few buffers, deactivates it, then reactivates \
+                 and processes again. Catches crashes and state leaks during the reactivation \
+                 cycle that DAWs perform on buffer-size or sample-rate changes.",
             ),
             PluginTestCase::ParamConversions => String::from(
                 "Asserts that value to string and string to value conversions are supported for \
@@ -118,6 +127,12 @@ impl<'a> TestCase<'a> for PluginTestCase {
                  asserts that the two states are identical. The parameter values are set updated \
                  using the process function to create the first state, and using the flush \
                  function to create the second state.",
+            ),
+            PluginTestCase::StateReproducibilityProcessAfterLoad => String::from(
+                "Randomizes a plugin's parameters, processes audio, saves the state, recreates \
+                 the plugin instance, reloads the state, processes audio again, and then \
+                 asserts that re-saving the state produces the same result. Catches state \
+                 corruption that only manifests during audio processing after a state restore.",
             ),
             PluginTestCase::StateBufferedStreams => format!(
                 "Performs the same state and parameter reproducibility check as in '{}', but this \
@@ -163,6 +178,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
             PluginTestCase::ProcessNoteInconsistent => {
                 processing::test_process_note_inconsistent(library, plugin_id)
             }
+            PluginTestCase::LifecycleReactivate => {
+                processing::test_lifecycle_reactivate(library, plugin_id)
+            }
             PluginTestCase::ParamConversions => params::test_param_conversions(library, plugin_id),
             PluginTestCase::ParamFuzzBasic => params::test_param_fuzz_basic(library, plugin_id),
             PluginTestCase::ParamSetWrongNamespace => {
@@ -177,6 +195,9 @@ impl<'a> TestCase<'a> for PluginTestCase {
             }
             PluginTestCase::StateReproducibilityFlush => {
                 state::test_state_reproducibility_flush(library, plugin_id)
+            }
+            PluginTestCase::StateReproducibilityProcessAfterLoad => {
+                state::test_state_reproducibility_process_after_load(library, plugin_id)
             }
             PluginTestCase::StateBufferedStreams => {
                 state::test_state_buffered_streams(library, plugin_id)
