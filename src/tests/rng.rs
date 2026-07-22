@@ -662,7 +662,7 @@ impl<'a> NoteGenerator<'a> {
 
                     let Some((param_id, param)) = params
                         .iter()
-                        .filter(|(_, param)| !param.is_readonly() && !param.is_hidden() && param.is_poly_automatable())
+                        .filter(|(_, param)| !param.is_readonly() && param.is_poly_automatable())
                         .choose(prng)
                     else {
                         continue;
@@ -713,7 +713,7 @@ impl<'a> NoteGenerator<'a> {
 
                     let Some((param_id, param)) = params
                         .iter()
-                        .filter(|(_, param)| !param.is_readonly() && !param.is_hidden() && param.is_poly_modulatable())
+                        .filter(|(_, param)| !param.is_readonly() && param.is_poly_modulatable())
                         .choose(prng)
                     else {
                         continue;
@@ -921,7 +921,7 @@ impl<'a> ParamFuzzer<'a> {
             // We can send parameter changes for parameters that are not automatable:
             //
             // > The host can send live user changes for this parameter regardless of this flag.
-            if param_info.is_readonly() || param_info.is_hidden() {
+            if param_info.is_readonly() {
                 return None;
             }
 
