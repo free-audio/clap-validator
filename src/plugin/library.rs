@@ -1,24 +1,24 @@
 //! Interactions with CLAP plugin libraries, which may contain multiple plugins.
 
-use anyhow::{Context, Result};
-use clap_sys::entry::clap_plugin_entry;
-use clap_sys::factory::draft::preset_discovery::{
-    clap_preset_discovery_factory, CLAP_PRESET_DISCOVERY_FACTORY_ID,
-};
-use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
-use clap_sys::plugin::clap_plugin_descriptor;
-use clap_sys::version::clap_version;
-use serde::Serialize;
-use std::collections::HashSet;
-use std::ffi::CString;
-use std::path::{Path, PathBuf};
-use std::ptr::NonNull;
-use std::rc::Rc;
-
 use super::instance::Plugin;
 use super::preset_discovery::PresetDiscoveryFactory;
-use crate::plugin::host::Host;
-use crate::util::{self, unsafe_clap_call};
+use super::util::{self, clap_call};
+use crate::cli::tracing::{Span, record};
+use crate::plugin::instance::{HostCapabilities, PluginShared};
+use anyhow::{Context, Result};
+use clap_sys::entry::clap_plugin_entry;
+use clap_sys::factory::plugin_factory::{CLAP_PLUGIN_FACTORY_ID, clap_plugin_factory};
+use clap_sys::factory::preset_discovery::{CLAP_PRESET_DISCOVERY_FACTORY_ID, clap_preset_discovery_factory};
+use clap_sys::plugin::clap_plugin_descriptor;
+use clap_sys::version::{clap_version, clap_version_is_compatible};
+use crossbeam_utils::atomic::AtomicCell;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::ffi::CString;
+use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
+use std::ptr::NonNull;
+use std::thread::ThreadId;
 
 /// A CLAP plugin library built from a CLAP plugin's entry point. This can be used to iterate over
 /// all plugins exposed by the library and to initialize plugins.
@@ -28,12 +28,16 @@ pub struct PluginLibrary {
     /// contained within the bundle.
     plugin_path: PathBuf,
     /// The plugin's library. Its entry point has already been initialized, and it will
-    /// autoamtically be deinitialized when this object gets dropped.
+    /// automatically be deinitialized when this object gets dropped.
     library: libloading::Library,
+
+    /// To honor CLAP's thread safety guidelines, the thread this object was created from is
+    /// designated the 'main thread', and this object cannot be shared with other threads.
+    _thread: PhantomData<*const ()>,
 }
 
 /// Metadata for a CLAP plugin library, which may contain multiple plugins.
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct PluginLibraryMetadata {
     pub version: (u32, u32, u32),
     pub plugins: Vec<PluginMetadata>,
@@ -42,13 +46,15 @@ pub struct PluginLibraryMetadata {
 /// Metadata for a single plugin within a CLAP plugin library. See
 /// [plugin.h](https://github.com/free-audio/clap/blob/main/include/clap/plugin.h) for a description
 /// of the fields.
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub struct PluginMetadata {
     pub id: String,
     pub name: String,
     pub version: Option<String>,
     pub vendor: Option<String>,
     pub description: Option<String>,
+    pub url: Option<String>,
     pub manual_url: Option<String>,
     pub support_url: Option<String>,
     pub features: Vec<String>,
@@ -56,25 +62,29 @@ pub struct PluginMetadata {
 
 impl PluginMetadata {
     pub fn from_descriptor(descriptor: &clap_plugin_descriptor) -> Result<Self> {
-        Ok(PluginMetadata {
-            id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
-                .context("Error parsing the plugin descriptor's 'id' field")?,
-            name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
-                .context("Error parsing the plugin descriptor's 'name' field")?,
-            // Empty strings should be treated as missing values in some cases
-            version: unsafe { util::cstr_ptr_to_optional_string(descriptor.version) }
-                .context("Error parsing the plugin descriptor's 'version' field")?,
-            vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
-                .context("Error parsing the plugin descriptor's 'vendor' field")?,
-            description: unsafe { util::cstr_ptr_to_optional_string(descriptor.description) }
-                .context("Error parsing the plugin descriptor's 'description' field")?,
-            manual_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.manual_url) }
-                .context("Error parsing the plugin descriptor's 'manual_url' field")?,
-            support_url: unsafe { util::cstr_ptr_to_optional_string(descriptor.support_url) }
-                .context("Error parsing the plugin descriptor's 'support_url' field")?,
-            features: unsafe { util::cstr_array_to_vec(descriptor.features)? }
-                .context("The plugin descriptor's 'features' array is malformed")?,
-        })
+        unsafe {
+            Ok(PluginMetadata {
+                id: util::cstr_ptr_to_mandatory_string(descriptor.id)
+                    .context("Error parsing the plugin descriptor's 'id' field")?,
+                name: util::cstr_ptr_to_mandatory_string(descriptor.name)
+                    .context("Error parsing the plugin descriptor's 'name' field")?,
+                // Empty strings should be treated as missing values in some cases
+                version: util::cstr_ptr_to_optional_string(descriptor.version)
+                    .context("Error parsing the plugin descriptor's 'version' field")?,
+                vendor: util::cstr_ptr_to_optional_string(descriptor.vendor)
+                    .context("Error parsing the plugin descriptor's 'vendor' field")?,
+                description: util::cstr_ptr_to_optional_string(descriptor.description)
+                    .context("Error parsing the plugin descriptor's 'description' field")?,
+                url: util::cstr_ptr_to_optional_string(descriptor.url)
+                    .context("Error parsing the plugin descriptor's 'url' field")?,
+                manual_url: util::cstr_ptr_to_optional_string(descriptor.manual_url)
+                    .context("Error parsing the plugin descriptor's 'manual_url' field")?,
+                support_url: util::cstr_ptr_to_optional_string(descriptor.support_url)
+                    .context("Error parsing the plugin descriptor's 'support_url' field")?,
+                features: util::cstr_array_to_vec(descriptor.features)?
+                    .context("The plugin descriptor's 'features' array is malformed")?,
+            })
+        }
     }
 }
 
@@ -82,9 +92,14 @@ impl Drop for PluginLibrary {
     fn drop(&mut self) {
         // The `Plugin` only exists if `init()` returned true, so we ned to deinitialize the
         // plugin here
-        let entry_point = get_clap_entry_point(&self.library)
-            .expect("A Plugin was constructed for a plugin with no entry point");
-        unsafe_clap_call! { entry_point=>deinit() };
+        let entry_point =
+            get_clap_entry_point(&self.library).expect("A Plugin was constructed for a plugin with no entry point");
+
+        let _span = Span::begin("clap_plugin_entry::deinit", ());
+
+        unsafe {
+            clap_call! { entry_point=>deinit() };
+        }
     }
 }
 
@@ -92,13 +107,17 @@ impl PluginLibrary {
     /// Load a CLAP plugin from a path to a `.clap` file or bundle. This will return an error if the
     /// plugin could not be loaded.
     pub fn load(path: impl AsRef<Path>) -> Result<PluginLibrary> {
-        Self::load_with(path, |path| {
-            unsafe { libloading::Library::new(path) }.context("Could not load the plugin library")
-        })
+        unsafe {
+            Self::load_with(path, |path| {
+                libloading::Library::new(path).context("Could not load the plugin library")
+            })
+        }
     }
 
     /// The same as [`load()`][`Self::load()`], but with a custom library loading function. Useful
     /// for testing different `dlopen()` options.
+    ///
+    /// This MUST be called on the OS main thread (if applicable).
     pub fn load_with(
         path: impl AsRef<Path>,
         load: impl FnOnce(&Path) -> Result<libloading::Library>,
@@ -113,12 +132,8 @@ impl PluginLibrary {
 
         // This is the path passed to `clap_entry::init()`. On macOS this should point to the
         // bundle, not the DSO.
-        let path_cstring = CString::new(
-            path.as_os_str()
-                .to_str()
-                .context("Path contains invalid UTF-8")?,
-        )
-        .context("Path contains null bytes")?;
+        let path_cstring = CString::new(path.as_os_str().to_str().context("Path contains invalid UTF-8")?)
+            .context("Path contains null bytes")?;
 
         // NOTE: Apple says you can dlopen() bundles. This is a lie.
         #[cfg(not(target_os = "macos"))]
@@ -128,9 +143,8 @@ impl PluginLibrary {
             use core_foundation::bundle::CFBundle;
             use core_foundation::url::CFURL;
 
-            let bundle =
-                CFBundle::new(CFURL::from_path(&path, true).context("Could not create CFURL")?)
-                    .context("Could not open bundle")?;
+            let bundle = CFBundle::new(CFURL::from_path(&path, true).context("Could not create CFURL")?)
+                .context("Could not open bundle")?;
             let executable = bundle
                 .executable_url()
                 .context("Could not get executable URL within bundle")?;
@@ -145,13 +159,37 @@ impl PluginLibrary {
         // The entry point needs to be initialized before it can be used. It will be deinitialized
         // when the `Plugin` object is dropped.
         let entry_point = get_clap_entry_point(&library)?;
-        if !unsafe_clap_call! { entry_point=>init(path_cstring.as_ptr()) } {
+
+        if !clap_version_is_compatible(entry_point.clap_version) {
+            anyhow::bail!(
+                "Unsupported CLAP version ({}.{}.{})",
+                entry_point.clap_version.major,
+                entry_point.clap_version.minor,
+                entry_point.clap_version.revision
+            );
+        }
+
+        let span = Span::begin(
+            "clap_plugin_entry::init",
+            record! {
+                path: path_cstring.to_string_lossy().to_string()
+            },
+        );
+
+        let result = unsafe {
+            clap_call! { entry_point=>init(path_cstring.as_ptr()) }
+        };
+
+        span.finish(record! { result: result });
+
+        if !result {
             anyhow::bail!("'clap_plugin_entry::init({path_cstring:?})' returned false.");
         }
 
         Ok(PluginLibrary {
             plugin_path: path,
             library,
+            _thread: PhantomData,
         })
     }
 
@@ -162,18 +200,11 @@ impl PluginLibrary {
     /// Get the metadata for all plugins stored in this plugin library. Most plugin libraries
     /// contain a single plugin, but this may return metadata for zero or more plugins.
     pub fn metadata(&self) -> Result<PluginLibraryMetadata> {
-        let entry_point = get_clap_entry_point(&self.library)
-            .expect("A Plugin was constructed for a plugin with no entry point");
-        let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
-            as *const clap_plugin_factory;
-        // TODO: Should we log anything here? In theory not supporting the plugin factory is
-        //       perfectly legal, but it's a bit weird
-        if plugin_factory.is_null() {
-            anyhow::bail!(
-                "The plugin does not support the '{}' factory.",
-                CLAP_PLUGIN_FACTORY_ID.to_str().unwrap()
-            );
-        }
+        let entry_point =
+            get_clap_entry_point(&self.library).expect("A Plugin was constructed for a plugin with no entry point");
+        let plugin_factory = unsafe {
+            clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
+        } as *const clap_plugin_factory;
 
         let mut metadata = PluginLibraryMetadata {
             version: (
@@ -183,14 +214,24 @@ impl PluginLibrary {
             ),
             plugins: Vec::new(),
         };
-        let num_plugins = unsafe_clap_call! { plugin_factory=>get_plugin_count(plugin_factory) };
+
+        if plugin_factory.is_null() {
+            return Ok(metadata);
+        }
+
+        let num_plugins = unsafe {
+            clap_call! { plugin_factory=>get_plugin_count(plugin_factory) }
+        };
+
         for i in 0..num_plugins {
-            let descriptor =
-                unsafe_clap_call! { plugin_factory=>get_plugin_descriptor(plugin_factory, i) };
+            let descriptor = unsafe {
+                clap_call! { plugin_factory=>get_plugin_descriptor(plugin_factory, i) }
+            };
+
             if descriptor.is_null() {
                 anyhow::bail!(
-                    "The plugin returned a null plugin descriptor for plugin index {i} (expected \
-                     {num_plugins} total plugins)."
+                    "The plugin returned a null plugin descriptor for plugin index {i} (expected {num_plugins} total \
+                     plugins)."
                 );
             }
 
@@ -216,26 +257,48 @@ impl PluginLibrary {
     /// assert that querying a factory with a non-existent ID returns a null pointer instead of
     /// always returning the plugin factory.
     pub fn factory_exists(&self, factory_id: &str) -> bool {
-        let factory_id_cstring =
-            CString::new(factory_id).expect("The factory ID contained internal null bytes");
+        let factory_id_cstring = CString::new(factory_id).expect("The factory ID contained internal null bytes");
 
-        let entry_point = get_clap_entry_point(&self.library)
-            .expect("A Plugin was constructed for a plugin with no entry point");
-        let factory_pointer =
-            unsafe_clap_call! { entry_point=>get_factory(factory_id_cstring.as_ptr()) };
+        let entry_point =
+            get_clap_entry_point(&self.library).expect("A Plugin was constructed for a plugin with no entry point");
+
+        let factory_pointer = unsafe {
+            clap_call! { entry_point=>get_factory(factory_id_cstring.as_ptr()) }
+        };
 
         !factory_pointer.is_null()
+    }
+
+    /// Same as [`Self::create_plugin_with`] but with default [`HostCapabilities`].
+    pub fn create_plugin(&self, id: &str) -> Result<Plugin<'_>> {
+        self.create_plugin_with(id, HostCapabilities::default())
     }
 
     /// Try to create the plugin with the given ID, and using the provided host instance. The plugin
     /// IDs supported by this plugin library can be found by calling
     /// [`metadata()`][Self::metadata()]. The returned plugin has not yet been initialized, and
     /// `destroy()` will be called automatically when the object is dropped.
-    pub fn create_plugin(&self, id: &str, host: Rc<Host>) -> Result<Plugin> {
-        let entry_point = get_clap_entry_point(&self.library)
-            .expect("A Plugin was constructed for a plugin with no entry point");
-        let plugin_factory = unsafe_clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
-            as *const clap_plugin_factory;
+    pub fn create_plugin_with(&self, id: &str, capabilities: HostCapabilities) -> Result<Plugin<'_>> {
+        if OS_MAIN_THREAD.load() != Some(std::thread::current().id()) {
+            anyhow::bail!("Plugins must be created from the OS main thread.");
+        }
+
+        let entry_point =
+            get_clap_entry_point(&self.library).expect("A Plugin was constructed for a plugin with no entry point");
+
+        let span = Span::begin(
+            "clap_plugin_factory::get_factory",
+            record!(
+                factory_id: CLAP_PLUGIN_FACTORY_ID.to_string_lossy()
+            ),
+        );
+
+        let plugin_factory = unsafe {
+            clap_call! { entry_point=>get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) }
+        } as *const clap_plugin_factory;
+
+        span.finish(record!(result: format_args!("{:p}", plugin_factory)));
+
         if plugin_factory.is_null() {
             anyhow::bail!(
                 "The plugin does not support the '{}' factory.",
@@ -244,21 +307,21 @@ impl PluginLibrary {
         }
 
         let id_cstring = CString::new(id).context("Plugin ID contained null bytes")?;
-        Plugin::new(self, host, unsafe { &*plugin_factory }, &id_cstring)
+        unsafe { PluginShared::create_plugin(plugin_factory, &id_cstring, capabilities) }
     }
 
     /// Returns the plugin's preset discovery factory, if it has one.
-    pub fn preset_discovery_factory(&self) -> Result<PresetDiscoveryFactory> {
-        let entry_point = get_clap_entry_point(&self.library)
-            .expect("A Plugin was constructed for a plugin with no entry point");
-        let preset_discovery_factory = unsafe_clap_call! {
-            entry_point=>get_factory(CLAP_PRESET_DISCOVERY_FACTORY_ID.as_ptr())
+    pub fn preset_discovery_factory(&self) -> Result<PresetDiscoveryFactory<'_>> {
+        let entry_point =
+            get_clap_entry_point(&self.library).expect("A Plugin was constructed for a plugin with no entry point");
+        let preset_discovery_factory = unsafe {
+            clap_call! {
+                entry_point=>get_factory(CLAP_PRESET_DISCOVERY_FACTORY_ID.as_ptr())
+            }
         } as *mut clap_preset_discovery_factory;
 
         match NonNull::new(preset_discovery_factory) {
-            Some(preset_discovery_factory) => {
-                Ok(PresetDiscoveryFactory::new(self, preset_discovery_factory))
-            }
+            Some(preset_discovery_factory) => Ok(PresetDiscoveryFactory::new(self, preset_discovery_factory)),
             None => {
                 anyhow::bail!(
                     "The plugin does not support the '{}' factory.",
@@ -283,11 +346,16 @@ impl PluginLibraryMetadata {
 /// Get a plugin's entry point.
 fn get_clap_entry_point(library: &libloading::Library) -> Result<&clap_plugin_entry> {
     let entry_point: libloading::Symbol<*const clap_plugin_entry> =
-        unsafe { library.get(b"clap_entry") }
-            .context("The library does not expose a 'clap_entry' symbol")?;
+        unsafe { library.get(b"clap_entry") }.context("The library does not expose a 'clap_entry' symbol")?;
     if entry_point.is_null() {
         anyhow::bail!("'clap_entry' is a null pointer.");
     }
 
     Ok(unsafe { &**entry_point })
+}
+
+static OS_MAIN_THREAD: AtomicCell<Option<ThreadId>> = AtomicCell::new(None);
+
+pub unsafe fn mark_current_thread_as_os_main_thread() {
+    OS_MAIN_THREAD.store(Some(std::thread::current().id()));
 }

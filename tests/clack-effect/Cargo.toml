@@ -1,0 +1,13 @@
+[package]
+name = "clack-effect"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+clack-plugin = { git = "https://github.com/prokopyl/clack", rev = "3f9b32dc47eeb5a500a9f589e84ee3eb20b44ae6" }
+clack-extensions = { git = "https://github.com/prokopyl/clack", rev = "3f9b32dc47eeb5a500a9f589e84ee3eb20b44ae6", features = ["audio-ports", "audio-ports-config", "audio-ports-activation", "configurable-audio-ports", "clack-plugin", "note-ports", "params", "state", "surround", "ambisonic"] }

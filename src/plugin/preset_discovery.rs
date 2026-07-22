@@ -1,22 +1,21 @@
 //! An abstraction for the preset discovery factory.
 
+use super::library::PluginLibrary;
+use super::util::{self, clap_call};
 use anyhow::{Context, Result};
-use clap_sys::factory::draft::preset_discovery::{
-    clap_preset_discovery_factory, clap_preset_discovery_provider_descriptor,
-};
+use clap_sys::factory::preset_discovery::{clap_preset_discovery_factory, clap_preset_discovery_provider_descriptor};
+use clap_sys::timestamp::{CLAP_TIMESTAMP_UNKNOWN, clap_timestamp};
 use clap_sys::version::{clap_version, clap_version_is_compatible};
 use std::collections::HashSet;
 use std::ptr::NonNull;
-
-use super::library::PluginLibrary;
-use crate::util::{self, unsafe_clap_call};
+use time::OffsetDateTime;
 
 mod indexer;
 mod metadata_receiver;
 mod provider;
 
-pub use self::indexer::{FileType, Flags, IndexerResults, Location, LocationValue, Soundpack};
-pub use self::metadata_receiver::{PluginAbi, Preset, PresetFile, PresetFlags};
+pub use self::indexer::{Flags, Location, LocationValue, Soundpack};
+pub use self::metadata_receiver::{PluginAbi, Preset, PresetFile};
 pub use self::provider::Provider;
 
 /// A `Send+Sync` wrapper around `*const clap_preset_discovery_factory`.
@@ -41,30 +40,37 @@ pub struct PresetDiscoveryFactory<'lib> {
 }
 
 /// Metadata (descriptor) for a preset discovery provider. These providers can be instantiated by
-/// passing the IDs to [`PresetDiscoveryFactory::create()`].
+/// passing the metadata to [`PresetDiscoveryFactory::create_provider()`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct ProviderMetadata {
-    pub version: (u32, u32, u32),
     pub id: String,
     pub name: String,
     pub vendor: Option<String>,
+    pub version: (u32, u32, u32),
 }
 
 impl ProviderMetadata {
     /// Parse the metadata from a `clap_preset_discovery_provider_descriptor`.
-    pub fn from_descriptor(descriptor: &clap_preset_discovery_provider_descriptor) -> Result<Self> {
+    pub unsafe fn from_descriptor(descriptor: *const clap_preset_discovery_provider_descriptor) -> Result<Self> {
+        anyhow::ensure!(
+            !descriptor.is_null(),
+            "The preset discovery provider descriptor is a null pointer."
+        );
+
+        let descriptor = unsafe { &*descriptor };
+
         Ok(ProviderMetadata {
-            version: (
-                descriptor.clap_version.major,
-                descriptor.clap_version.minor,
-                descriptor.clap_version.revision,
-            ),
             id: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.id) }
                 .context("Error parsing the provider's 'id' field")?,
             name: unsafe { util::cstr_ptr_to_mandatory_string(descriptor.name) }
                 .context("Error parsing the provider's 'name' field")?,
             vendor: unsafe { util::cstr_ptr_to_optional_string(descriptor.vendor) }
                 .context("Error parsing the provider's 'vendor' field")?,
+            version: (
+                descriptor.clap_version.major,
+                descriptor.clap_version.minor,
+                descriptor.clap_version.revision,
+            ),
         })
     }
 
@@ -81,10 +87,7 @@ impl ProviderMetadata {
 impl<'lib> PresetDiscoveryFactory<'lib> {
     /// Create a wrapper around a preset discovery factory instance returned from a CLAP plugin's
     /// entry point.
-    pub fn new(
-        library: &'lib PluginLibrary,
-        factory: NonNull<clap_preset_discovery_factory>,
-    ) -> Self {
+    pub fn new(library: &'lib PluginLibrary, factory: NonNull<clap_preset_discovery_factory>) -> Self {
         PresetDiscoveryFactory {
             handle: PresetDiscoveryHandle(factory),
             _library: library,
@@ -101,19 +104,24 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
     /// [`create()`][Self::create()].
     pub fn metadata(&self) -> Result<Vec<ProviderMetadata>> {
         let factory = self.as_ptr();
-        let num_providers = unsafe_clap_call! { factory=>count(factory) };
+        let num_providers = unsafe {
+            clap_call! { factory=>count(factory) }
+        };
 
         let mut metadata = Vec::with_capacity(num_providers as usize);
         for i in 0..num_providers {
-            let descriptor = unsafe_clap_call! { factory=>get_descriptor(factory, i) };
+            let descriptor = unsafe {
+                clap_call! { factory=>get_descriptor(factory, i) }
+            };
+
             if descriptor.is_null() {
                 anyhow::bail!(
-                    "The preset discovery factory returned a null pointer for the descriptor at \
-                     index {i} (expected {num_providers} total providers)."
+                    "The preset discovery factory returned a null pointer for the descriptor at index {i} (expected \
+                     {num_providers} total providers)."
                 );
             }
 
-            metadata.push(ProviderMetadata::from_descriptor(unsafe { &*descriptor })?);
+            metadata.push(unsafe { ProviderMetadata::from_descriptor(descriptor)? });
         }
 
         // As a sanity check we'll make sure there are no duplicate IDs in here
@@ -122,9 +130,7 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
             .map(|provider_metadata| provider_metadata.id.as_str())
             .collect();
         if unique_ids.len() != metadata.len() {
-            anyhow::bail!(
-                "The preset discovery factory contains multiple entries for the same provider ID."
-            );
+            anyhow::bail!("The preset discovery factory contains multiple entries for the same provider ID.");
         }
 
         Ok(metadata)
@@ -134,7 +140,7 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
     /// [`metadata()`][Self::metadata()].
     ///
     /// Returns an error if the provider's CLAP version is not supported.
-    pub fn create_provider(&self, metadata: &ProviderMetadata) -> Result<Provider> {
+    pub fn create_provider(&self, metadata: &ProviderMetadata) -> Result<Provider<'_>> {
         if !clap_version_is_compatible(metadata.clap_version()) {
             anyhow::bail!(
                 "The preset provider with ID '{}' has an unsupported CLAP version {:?}.",
@@ -145,4 +151,19 @@ impl<'lib> PresetDiscoveryFactory<'lib> {
 
         Provider::new(self, &metadata.id)
     }
+}
+
+/// Convert a `clap_timestamp` to an `Option<OffsetDateTime>`. A value of `CLAP_TIMESTAMP_UNKNOWN`
+/// gets translated to `None`.
+pub fn parse_timestamp(timestamp: clap_timestamp) -> Result<Option<OffsetDateTime>> {
+    let parsed = if timestamp == CLAP_TIMESTAMP_UNKNOWN {
+        None
+    } else {
+        Some(
+            OffsetDateTime::from_unix_timestamp_nanos(timestamp as i128 * 1_000_000)
+                .map_err(|_| anyhow::anyhow!("Could not parse the timestamp."))?,
+        )
+    };
+
+    Ok(parsed)
 }

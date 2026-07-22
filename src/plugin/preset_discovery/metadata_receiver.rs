@@ -2,24 +2,22 @@
 //! querying metadata for a plugin's file. This is sort of like a state machine the plugin writes
 //! one or more presets to.
 
+use super::{Flags, LocationValue};
+use crate::cli::fail_test;
+use crate::plugin::preset_discovery::parse_timestamp;
+use crate::plugin::util::{self, CHECK_POINTER, Proxy, Proxyable};
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
-use clap_sys::factory::draft::preset_discovery::{
-    clap_plugin_id, clap_preset_discovery_metadata_receiver, clap_timestamp,
-    CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT, CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT,
-    CLAP_PRESET_DISCOVERY_IS_FAVORITE, CLAP_PRESET_DISCOVERY_IS_USER_CONTENT,
-};
-use parking_lot::Mutex;
-use serde::Serialize;
+use clap_sys::factory::preset_discovery::*;
+use clap_sys::timestamp::clap_timestamp;
+use clap_sys::universal_plugin_id::clap_universal_plugin_id;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::ffi::{c_char, c_void};
+use std::ffi::c_char;
 use std::fmt::Display;
-use std::pin::Pin;
+use std::sync::Mutex;
 use std::thread::ThreadId;
-
-use super::{Flags, LocationValue};
-use crate::util::{self, check_null_ptr};
+use time::OffsetDateTime;
 
 /// An implementation of the preset discovery's metadata receiver. This borrows a
 /// `Result<PresetFile>` because the important work is done when this object is dropped. When this
@@ -35,7 +33,7 @@ use crate::util::{self, check_null_ptr};
 ///
 /// IO errors returned by the plugin are treated as hard errors for now.
 #[derive(Debug)]
-pub struct MetadataReceiver<'a> {
+pub struct MetadataReceiver {
     /// The thread ID for the thread this object was created on. This object is not thread-safe, so
     /// we'll assert that all callbacks are made from this thread.
     expected_thread_id: ThreadId,
@@ -43,18 +41,16 @@ pub struct MetadataReceiver<'a> {
     /// The location this metadata receiver was created for. If this is a single-file preset and a
     /// name has not been explicitly set, then the preset's name becomes the file name including the
     /// file extensions.
-    location: &'a LocationValue,
+    location: LocationValue,
     /// The crawled location's flags. This is used as a fallback for the preset flags if the
     /// provider does not explicitly set flags for a preset.
     location_flags: Flags,
+
     /// See this object's docstring. If an error occurs, then the error is written here immediately.
     /// If the object is dropped and all presets have been written to `pending_presets` without any
     /// errors occurring, then this will contain a [`PresetFile`] describing the preset(s) added by
     /// the plugin.
-    ///
-    /// Stored in a `RefCell` in the off chance that the plugin doesn't use this in a thread safe
-    /// way.
-    result: RefCell<&'a mut Option<Result<PresetFile>>>,
+    result: Mutex<Result<Option<PresetFile>>>,
 
     /// The data for the next preset. This is `None` until the plugin starts calling one of the data
     /// setter functions. After that point the preset's data is filled in piece by piece like in a
@@ -68,14 +64,10 @@ pub struct MetadataReceiver<'a> {
     /// on the presence of `load_key`. If this is not set, then subsequent `begin_preset()` calls
     /// are treated as errors. Used in `maybe_write_preset()`.
     next_load_key: RefCell<Option<String>>,
-
-    /// The vtable that's passed to the provider. The `receiver_data` field is populated with a
-    /// pointer to this object.
-    clap_preset_discovery_metadata_receiver: Mutex<clap_preset_discovery_metadata_receiver>,
 }
 
 /// One or more presets declared by the plugin through a preset provider metadata receiver.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PresetFile {
     Single(Preset),
@@ -95,8 +87,8 @@ struct PartialPreset {
     pub flags: Option<Flags>,
     pub creators: Vec<String>,
     pub description: Option<String>,
-    pub creation_time: Option<DateTime<Utc>>,
-    pub modification_time: Option<DateTime<Utc>>,
+    pub creation_time: Option<OffsetDateTime>,
+    pub modification_time: Option<OffsetDateTime>,
     pub features: Vec<String>,
     pub extra_info: BTreeMap<String, String>,
 }
@@ -122,10 +114,7 @@ impl PartialPreset {
     /// no flags set for this preset, then the location's flags will be used.
     pub fn finalize(self, location_flags: &Flags) -> Result<Preset> {
         if self.plugin_ids.is_empty() {
-            anyhow::bail!(
-                "The preset '{}' was defined without setting a plugin ID.",
-                self.name
-            );
+            anyhow::bail!("The preset '{}' was defined without setting a plugin ID.", self.name);
         }
 
         Ok(Preset {
@@ -133,8 +122,14 @@ impl PartialPreset {
             plugin_ids: self.plugin_ids,
             soundpack_id: self.soundpack_id,
             flags: match self.flags {
-                Some(flags) => PresetFlags::Explicit(flags),
-                None => PresetFlags::Inherited(*location_flags),
+                Some(flags) => PresetFlags {
+                    flags,
+                    is_inherited: false,
+                },
+                None => PresetFlags {
+                    flags: *location_flags,
+                    is_inherited: true,
+                },
             },
             creators: self.creators,
             description: self.description,
@@ -148,7 +143,7 @@ impl PartialPreset {
 
 /// The docs specify that you are not allowed to specify a preset name unless the preset is part of
 /// a container file.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "type", content = "value")]
 pub enum PresetName {
     Explicit(String),
@@ -166,24 +161,11 @@ impl Display for PresetName {
 
 /// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
 /// plugins.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginId {
-    #[serde(serialize_with = "plugin_abi_to_string")]
     pub abi: PluginAbi,
     pub id: String,
-}
-
-/// Always serialize this as a string. Having the `Other` enum variant is nice but it looks out of
-/// place in the JSON output.
-fn plugin_abi_to_string<S>(plugin_abi: &PluginAbi, ser: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match plugin_abi {
-        PluginAbi::Clap => "clap".serialize(ser),
-        PluginAbi::Other(s) => s.serialize(ser),
-    }
 }
 
 /// The plugin ABI the preset was defined for. Most plugins will define only presets for CLAP
@@ -194,8 +176,34 @@ pub enum PluginAbi {
     Other(String),
 }
 
+impl Serialize for PluginAbi {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            PluginAbi::Clap => serializer.serialize_str("clap"),
+            PluginAbi::Other(abi) => serializer.serialize_str(abi),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PluginAbi {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        if s == "clap" {
+            Ok(PluginAbi::Clap)
+        } else {
+            Ok(PluginAbi::Other(s))
+        }
+    }
+}
+
 /// A preset as declared by the plugin. Constructed from a [`PartialPreset`].
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Preset {
     pub name: PresetName,
@@ -204,140 +212,104 @@ pub struct Preset {
     pub flags: PresetFlags,
     pub creators: Vec<String>,
     pub description: Option<String>,
-    pub creation_time: Option<DateTime<Utc>>,
-    pub modification_time: Option<DateTime<Utc>>,
+
+    pub creation_time: Option<OffsetDateTime>,
+    pub modification_time: Option<OffsetDateTime>,
+
     pub features: Vec<String>,
     pub extra_info: BTreeMap<String, String>,
 }
 
 /// The flags applying to a preset. These are either explicitly set for the preset or inherited from
 /// the location.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "kebab-case", tag = "type")]
-pub enum PresetFlags {
-    /// The fall back to the location's flags if the provider did not explicitly set flags for the
-    /// preset.
-    Inherited(Flags),
-    /// Flags that were explicitly set for the preset.
-    Explicit(Flags),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PresetFlags {
+    #[serde(flatten)]
+    pub flags: Flags,
+    pub is_inherited: bool,
 }
 
-impl Display for PresetFlags {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PresetFlags::Inherited(flags) => write!(f, "{flags} (inherited)"),
-            PresetFlags::Explicit(flags) => flags.fmt(f),
+impl Proxyable for MetadataReceiver {
+    type Vtable = clap_preset_discovery_metadata_receiver;
+
+    fn init(&self) -> Self::Vtable {
+        clap_preset_discovery_metadata_receiver {
+            receiver_data: CHECK_POINTER,
+            on_error: Some(Self::on_error),
+            begin_preset: Some(Self::begin_preset),
+            add_plugin_id: Some(Self::add_plugin_id),
+            set_soundpack_id: Some(Self::set_soundpack_id),
+            set_flags: Some(Self::set_flags),
+            add_creator: Some(Self::add_creator),
+            set_description: Some(Self::set_description),
+            set_timestamps: Some(Self::set_timestamps),
+            add_feature: Some(Self::add_feature),
+            add_extra_info: Some(Self::add_extra_info),
         }
     }
 }
 
-impl Preset {
-    /// Format the supported plugin IDs as a comma separated string. CLAP plugins are listed as is,
-    /// plugins for other ABIs will have the ABI prepended to them.
-    pub fn plugin_ids_string(&self) -> String {
-        let plugin_id_strings: Vec<_> = self
-            .plugin_ids
-            .iter()
-            .map(|plugin_id| match &plugin_id.abi {
-                PluginAbi::Clap => plugin_id.id.to_owned(),
-                PluginAbi::Other(abi) => format!("{}: {}", abi, plugin_id.id),
-            })
-            .collect();
-
-        plugin_id_strings.join(", ")
-    }
-}
-
-impl Drop for MetadataReceiver<'_> {
-    fn drop(&mut self) {
-        // If the plugin declared a(nother) preset file, then this will be added to `self.result`
-        // now. If an error occurred at any point, then the result will instead contain that error.
-        self.maybe_write_preset();
-    }
-}
-
-impl<'a> MetadataReceiver<'a> {
-    /// Create a new metadata receiver that will write the results to the provided `result`. This is
-    /// needed because the actual writing happens when this object is dropped. After that point
-    /// `result` is either:
-    ///
-    /// - `None` if the plugin didn't write any presets.
-    /// - `Some(Err(err))` if an error occurred while declaring presets.
-    /// - `Some(Ok(preset_file))` if the plugin declared one or more presets successfully.
-    pub fn new(
-        result: &'a mut Option<Result<PresetFile>>,
-        location: &'a LocationValue,
-        location_flags: Flags,
-    ) -> Pin<Box<Self>> {
-        // In the event that the caller reuses result objects this needs to be initialized to a
-        // non-error value, since if it does contain an error at some point then nothing will be
-        // written to it in the `Drop` implementation
-        *result = None;
-
-        let metadata_receiver = Box::pin(Self {
+impl MetadataReceiver {
+    /// Create a new metadata receiver.
+    pub fn new(location: LocationValue, location_flags: Flags) -> Proxy<Self> {
+        Proxy::new(Self {
             expected_thread_id: std::thread::current().id(),
 
             location,
             location_flags,
-            result: RefCell::new(result),
+            result: Mutex::new(Ok(None)),
             next_preset_data: RefCell::new(None),
             next_load_key: RefCell::new(None),
-
-            clap_preset_discovery_metadata_receiver: Mutex::new(
-                clap_preset_discovery_metadata_receiver {
-                    // This is set to a pointer to this pinned data structure later
-                    receiver_data: std::ptr::null_mut(),
-                    on_error: Some(Self::on_error),
-                    begin_preset: Some(Self::begin_preset),
-                    add_plugin_id: Some(Self::add_plugin_id),
-                    set_soundpack_id: Some(Self::set_soundpack_id),
-                    set_flags: Some(Self::set_flags),
-                    add_creator: Some(Self::add_creator),
-                    set_description: Some(Self::set_description),
-                    set_timestamps: Some(Self::set_timestamps),
-                    add_feature: Some(Self::add_feature),
-                    add_extra_info: Some(Self::add_extra_info),
-                },
-            ),
-        });
-
-        metadata_receiver
-            .clap_preset_discovery_metadata_receiver
-            .lock()
-            .receiver_data = &*metadata_receiver as *const Self as *mut c_void;
-
-        metadata_receiver
+        })
     }
 
-    /// Get a `clap_preset_discovery_metadata_receiver` vtable pointer that can be passed to the
-    /// `clap_preset_discovery_factory` when creating a provider.
-    pub fn clap_preset_discovery_metadata_receiver_ptr(
-        self: &Pin<Box<Self>>,
-    ) -> *const clap_preset_discovery_metadata_receiver {
-        self.clap_preset_discovery_metadata_receiver.data_ptr()
+    /// Finish the preset declaration process and return the result. This finishes any pending
+    /// presets and returns the [`PresetFile`].
+    pub fn finish(&self) -> Result<Option<PresetFile>> {
+        self.flush_preset()?;
+        std::mem::replace(&mut *self.result.lock().unwrap(), Ok(None))
     }
 
-    /// Checks that this function is called from the same thread the indexer was created on. If it
-    /// is not, then an error indicating this can be retrieved using
-    /// [`callback_error_check()`][Self::callback_error_check()]. Subsequent thread safety errors
-    /// will not overwrite earlier ones.
-    fn assert_same_thread(&self, function_name: &str) {
+    /// Checks that this function is called from the same thread the indexer was created on.
+    fn assert_same_thread(&self) -> Result<()> {
         let current_thread_id = std::thread::current().id();
-        if current_thread_id != self.expected_thread_id {
-            self.set_callback_error(format!(
-                "'{}' may only be called from the same thread the 'clap_preset_indexer' was \
-                 created on (thread {:?}), but it was called from thread {:?}",
-                function_name, self.expected_thread_id, current_thread_id
-            ));
-        }
+        anyhow::ensure!(
+            current_thread_id == self.expected_thread_id,
+            "'clap_preset_discovery_metadata_receiver' methods may only be called from the same thread the \
+             'clap_preset_indexer' was created on (thread {:?}), but it was called from thread {:?}",
+            self.expected_thread_id,
+            current_thread_id
+        );
+        Ok(())
     }
 
-    /// Write an error to the result field if it did not already contain a value. Earlier errors are
-    /// not overwritten.
-    fn set_callback_error(&self, error: impl Into<String>) {
-        match &mut *self.result.borrow_mut() {
-            Some(Err(_)) => (),
-            result => **result = Some(Err(anyhow::anyhow!(error.into()))),
+    #[track_caller]
+    fn wrap<R>(
+        receiver: *const clap_preset_discovery_metadata_receiver,
+        function_name: &str,
+        f: impl FnOnce(&Self) -> Result<R>,
+    ) -> Option<R> {
+        let state = unsafe {
+            Proxy::<Self>::from_vtable(receiver).unwrap_or_else(|e| {
+                fail_test!("{}: {}", function_name, e);
+            })
+        };
+
+        if Proxy::vtable(&state).receiver_data != CHECK_POINTER {
+            fail_test!("{}: plugin messed with the 'receiver_data' pointer", function_name);
+        }
+
+        match f(&state) {
+            Ok(result) => Some(result),
+            Err(error) => {
+                let mut guard = state.result.lock().unwrap();
+                if guard.is_ok() {
+                    *guard = Err(error.context(function_name.to_string()));
+                }
+
+                None
+            }
         }
     }
 
@@ -346,41 +318,33 @@ impl<'a> MetadataReceiver<'a> {
     /// depending on whether a load key was passed to the `begin_preset()` function. If multiple
     /// presets are written for a single-file preset, then an error will be written to the result.
     /// If an error was previously written, then it will not be overwritten.
-    fn maybe_write_preset(&self) {
-        if let Some(partial_preset) = self.next_preset_data.borrow_mut().take() {
-            match (
-                &mut *self.result.borrow_mut(),
-                partial_preset.finalize(&self.location_flags),
-                // The `take()` is important here to catch the situation where the plugin adds a
-                // load key on the first `begin_preset()` call but not in subsequent calls
-                self.next_load_key.borrow_mut().take(),
-            ) {
-                // If an error was already produced then it should be preserved, and new errors
-                // should be written to the Result if there wasn't already one
-                (Some(Err(_)), _, _) => (),
-                (_, Err(err), _) => self.set_callback_error(format!("{err:#}")),
-                (result @ None, Ok(preset), None) => {
-                    **result = Some(Ok(PresetFile::Single(preset)))
-                }
-                (result @ None, Ok(preset), Some(load_key)) => {
-                    let mut presets = BTreeMap::new();
-                    presets.insert(load_key, preset);
+    fn flush_preset(&self) -> Result<()> {
+        let Some(partial_preset) = self.next_preset_data.borrow_mut().take() else {
+            return Ok(()); // No preset to flush
+        };
 
-                    **result = Some(Ok(PresetFile::Container(presets)));
-                }
-                (Some(Ok(PresetFile::Container(presets))), Ok(preset), Some(load_key)) => {
-                    presets.insert(load_key, preset);
-                }
-                // These situations have been caught in `begin_preset()`. If a second preset has
-                // been started when the first preset didn't have a load key this is a validator
-                // bug.
-                (Some(Ok(PresetFile::Single(_))), Ok(_), _)
-                | (Some(Ok(PresetFile::Container(_))), Ok(_), None) => unreachable!(
-                    "Inconsistent state in the validator's metadata receiver found, this is a \
-                     clap-validator bug."
-                ),
+        let mut result = self.result.lock().unwrap();
+        let Ok(result) = result.as_mut() else {
+            return Ok(()); // An error was already produced, no one cares
+        };
+
+        let preset = partial_preset.finalize(&self.location_flags)?;
+        let load_key = self.next_load_key.borrow_mut().take();
+
+        match (result, load_key) {
+            (result @ None, None) => *result = Some(PresetFile::Single(preset)),
+            (result @ None, Some(load_key)) => {
+                let mut presets = BTreeMap::new();
+                presets.insert(load_key, preset);
+                *result = Some(PresetFile::Container(presets));
             }
+            (Some(PresetFile::Container(presets)), Some(load_key)) => {
+                presets.insert(load_key, preset);
+            }
+            _ => unreachable!(),
         }
+
+        Ok(())
     }
 
     unsafe extern "C" fn on_error(
@@ -388,24 +352,20 @@ impl<'a> MetadataReceiver<'a> {
         os_error: i32,
         error_message: *const c_char,
     ) {
-        // We'll have a dedicated error message for a missing `error_message`
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::on_error",
+            |this| -> Result<()> {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::on_error()");
+                let error_message =
+                    unsafe { util::cstr_ptr_to_mandatory_string(error_message) }.context("Error message is invalid")?;
 
-        let error_message = unsafe { util::cstr_ptr_to_mandatory_string(error_message) }.context(
-            "'clap_preset_discovery_metadata_receiver::on_error()' called with an invalid error \
-             message",
+                anyhow::bail!(
+                    "Load error occurred: OS error code {os_error} with the following error message: {error_message}"
+                );
+            },
         );
-        match error_message {
-            Ok(error_message) => this.set_callback_error(format!(
-                "'clap_preset_discovery_metadata_receiver::on_error()' called for OS error code \
-                 {os_error} with the following error message: {error_message}"
-            )),
-            // This would be quite ironic
-            Err(err) => this.set_callback_error(format!("{err:#}")),
-        }
     }
 
     unsafe extern "C" fn begin_preset(
@@ -413,80 +373,47 @@ impl<'a> MetadataReceiver<'a> {
         name: *const c_char,
         load_key: *const c_char,
     ) -> bool {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::begin_preset",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::begin_preset()");
+                let name = unsafe { util::cstr_ptr_to_optional_string(name) }.context("Name argument is invalid")?;
+                let load_key =
+                    unsafe { util::cstr_ptr_to_optional_string(load_key) }.context("Load key argument is invalid")?;
 
-        let name = unsafe { util::cstr_ptr_to_optional_string(name) }.context(
-            "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
-             name parameter",
-        );
-        let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }.context(
-            "'clap_preset_discovery_metadata_receiver::begin_preset()' called with an invalid \
-             load_key parameter",
-        );
-        match (name, load_key) {
-            (Ok(name), Ok(load_key)) => {
-                // We'll check for some errorous situations first. The `result` borrow needs to be
-                // dropped before calling `maybe_write_preset()` as it will try to borrow it mutably
-                {
-                    let result = this.result.borrow();
-                    let error_message = match (&*result, &load_key) {
-                        // If there was an error then just immediately exit since nothing will change that
-                        (Some(Err(_)), _) => return false,
-                        (Some(Ok(PresetFile::Single(_))), None) => Some(
-                            "calling 'begin_preset()' a second time for a non-container preset \
-                             file with no load key is not allowed.",
-                        ),
-                        (Some(Ok(PresetFile::Single(_))), Some(_)) => Some(
-                            "'begin_preset()' was called without a load key for the first time, \
-                             and with a load key the second time. This is invalid behavior.",
-                        ),
-                        (Some(Ok(PresetFile::Container(_))), None) => Some(
-                            "'begin_preset()' was called with a load key for the first time, and \
-                             without a load key the second time. This is invalid behavior.",
-                        ),
-                        // If this is the first call and there are no errors then everything's fine
-                        (None, _) | (Some(Ok(PresetFile::Container(_))), Some(_)) => None,
-                    };
-
-                    if let Some(error_message) = error_message {
-                        this.set_callback_error(format!(
-                            "Error in 'clap_preset_discovery_metadata_receiver::begin_preset()' \
-                             call: {error_message}"
-                        ));
-                        return false;
-                    }
+                let result = this.result.lock().unwrap();
+                match (&*result, &load_key) {
+                    (Err(_), _) => return Ok(false),
+                    (Ok(Some(PresetFile::Single(_))), _) => anyhow::bail!(
+                        "Calling 'begin_preset()' a second time for a non-container (no load key) preset file is not \
+                         allowed"
+                    ),
+                    (Ok(Some(PresetFile::Container(_))), None) => anyhow::bail!(
+                        "'begin_preset()' was called with a load key for the first time, and without a load key the \
+                         second time. This is invalid behavior"
+                    ),
+                    _ => {}
                 }
 
                 // Container presets have a load key, single-preset files don't have a load key. The
                 // name field is mandatory for container presets, and optional for non-container
                 // presets. If it's not specified we'll use the file name instead.
                 let preset_name = match (name, &load_key) {
-                    (None, None) => PresetName::Filename(match this.location.file_name() {
-                        Ok(file_name) => file_name,
-                        Err(err) => {
-                            this.set_callback_error(format!(
-                                "Could not derive a file name from {}: {:#}",
-                                this.location, err
-                            ));
-                            return false;
-                        }
-                    }),
                     (Some(name), _) => PresetName::Explicit(name),
-                    (None, Some(_)) => {
-                        this.set_callback_error(
-                            "Container presets must specify a preset name.".to_string(),
-                        );
-                        return false;
-                    }
+                    (None, Some(_)) => anyhow::bail!("Container presets must specify a preset name"),
+                    (None, None) => PresetName::Filename(
+                        this.location
+                            .file_name()
+                            .with_context(|| format!("Could not derive a file name from {}", this.location))?,
+                    ),
                 };
 
                 // If this is a subsequent `begin_preset()` call for a container preset, then the
                 // old preset is written to `self.result` before starting a new one.
                 if load_key.is_some() {
-                    this.maybe_write_preset();
+                    this.flush_preset()?;
                 }
 
                 // This starts the declaration of a new preset. The methods below this write to this
@@ -495,45 +422,31 @@ impl<'a> MetadataReceiver<'a> {
                 *this.next_load_key.borrow_mut() = load_key;
                 *this.next_preset_data.borrow_mut() = Some(PartialPreset::new(preset_name));
 
-                true
-            }
-            (Err(err), _) | (_, Err(err)) => {
-                this.set_callback_error(format!("{err:#}"));
-
-                false
-            }
-        }
+                Ok(true)
+            },
+        )
+        .unwrap_or(false)
     }
 
     unsafe extern "C" fn add_plugin_id(
         receiver: *const clap_preset_discovery_metadata_receiver,
-        plugin_id: *const clap_plugin_id,
+        plugin_id: *const clap_universal_plugin_id,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data, plugin_id);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::add_plugin_id",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_plugin_id()");
+                let abi = unsafe { util::cstr_ptr_to_mandatory_string((*plugin_id).abi) }
+                    .context("'plugin_id.abi' is invalid")?;
+                let id = unsafe { util::cstr_ptr_to_mandatory_string((*plugin_id).id) }
+                    .context("'plugin_id.id' is invalid")?;
 
-        let abi = unsafe { util::cstr_ptr_to_mandatory_string((*plugin_id).abi) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_plugin_id()' called with an invalid \
-             abi field",
-        );
-        let id = unsafe { util::cstr_ptr_to_mandatory_string((*plugin_id).id) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_plugin_id()' called with an invalid id \
-             field",
-        );
-        match (abi, id) {
-            (Ok(abi), Ok(id)) => {
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::add_plugin_id()' with no \
-                             preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 if abi == "clap" {
@@ -543,148 +456,112 @@ impl<'a> MetadataReceiver<'a> {
                     });
                 } else if abi.trim().eq_ignore_ascii_case("clap") {
                     // Let's just assume noone comes up with a painfully sarcastic 'ClAp' standard
-                    this.set_callback_error(format!(
-                        "'{abi}' was provided as an ABI argument to \
-                         'clap_preset_discovery_metadata_receiver::add_plugin_id()'. This is \
-                         probably a typo. The expected value is 'clap' in all lowercase."
-                    ));
+                    anyhow::bail!(
+                        "'{abi}' was provided as an ABI argument. This is probably a typo. The expected value is \
+                         'clap' in all lowercase."
+                    );
                 } else {
                     next_preset_data.plugin_ids.push(PluginId {
                         abi: PluginAbi::Other(abi),
                         id,
                     });
                 }
-            }
-            (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
-        }
+
+                Ok(())
+            },
+        );
     }
 
     unsafe extern "C" fn set_soundpack_id(
         receiver: *const clap_preset_discovery_metadata_receiver,
         soundpack_id: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::set_soundpack_id",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_soundpack_id()");
+                let soundpack_id =
+                    unsafe { util::cstr_ptr_to_mandatory_string(soundpack_id) }.context("Soundpack ID is invalid")?;
 
-        let soundpack_id = unsafe { util::cstr_ptr_to_mandatory_string(soundpack_id) }.context(
-            "'clap_preset_discovery_metadata_receiver::set_soundpack_id()' called with an invalid \
-             parameter",
-        );
-        match soundpack_id {
-            Ok(soundpack_id) => {
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::set_soundpack_id()' with \
-                             no preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 next_preset_data.soundpack_id = Some(soundpack_id);
-            }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
-        }
+                Ok(())
+            },
+        );
     }
 
-    unsafe extern "C" fn set_flags(
-        receiver: *const clap_preset_discovery_metadata_receiver,
-        flags: u32,
-    ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+    unsafe extern "C" fn set_flags(receiver: *const clap_preset_discovery_metadata_receiver, flags: u32) {
+        Self::wrap(receiver, "clap_preset_discovery_metadata_receiver::set_flags", |this| {
+            this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_flags()");
+            let mut next_preset_data = this.next_preset_data.borrow_mut();
+            let next_preset_data = match &mut *next_preset_data {
+                Some(next_preset_data) => next_preset_data,
+                None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
+            };
 
-        let mut next_preset_data = this.next_preset_data.borrow_mut();
-        let next_preset_data = match &mut *next_preset_data {
-            Some(next_preset_data) => next_preset_data,
-            None => {
-                this.set_callback_error(
-                    "'clap_preset_discovery_metadata_receiver::set_flags()' with no preceding \
-                     'begin_preset()' call. This is not valid.",
-                );
-                return;
-            }
-        };
+            next_preset_data.flags = Some(Flags {
+                is_factory_content: (flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
+                is_user_content: (flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
+                is_demo_content: (flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
+                is_favorite: (flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            });
 
-        next_preset_data.flags = Some(Flags {
-            is_factory_content: (flags & CLAP_PRESET_DISCOVERY_IS_FACTORY_CONTENT) != 0,
-            is_user_content: (flags & CLAP_PRESET_DISCOVERY_IS_USER_CONTENT) != 0,
-            is_demo_content: (flags & CLAP_PRESET_DISCOVERY_IS_DEMO_CONTENT) != 0,
-            is_favorite: (flags & CLAP_PRESET_DISCOVERY_IS_FAVORITE) != 0,
+            Ok(())
         });
     }
 
-    unsafe extern "C" fn add_creator(
-        receiver: *const clap_preset_discovery_metadata_receiver,
-        creator: *const c_char,
-    ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+    unsafe extern "C" fn add_creator(receiver: *const clap_preset_discovery_metadata_receiver, creator: *const c_char) {
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::add_creator",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_creator()");
+                let creator = unsafe { util::cstr_ptr_to_mandatory_string(creator) }.context("Creator is invalid")?;
 
-        let creator = unsafe { util::cstr_ptr_to_mandatory_string(creator) }.context(
-            "'clap_preset_discovery_metadata_receiver::set_creator()' called with an invalid \
-             parameter",
-        );
-        match creator {
-            Ok(creator) => {
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::set_creator()' with no \
-                             preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 next_preset_data.creators.push(creator);
-            }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
-        }
+                Ok(())
+            },
+        );
     }
 
     unsafe extern "C" fn set_description(
         receiver: *const clap_preset_discovery_metadata_receiver,
         description: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::set_description",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_description()");
+                let description =
+                    unsafe { util::cstr_ptr_to_mandatory_string(description) }.context("Description is invalid")?;
 
-        let description = unsafe { util::cstr_ptr_to_mandatory_string(description) }.context(
-            "'clap_preset_discovery_metadata_receiver::set_description()' called with an invalid \
-             parameter",
-        );
-        match description {
-            Ok(description) => {
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::set_description()' with no \
-                             preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 next_preset_data.description = Some(description);
-            }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
-        }
+                Ok(())
+            },
+        );
     }
 
     unsafe extern "C" fn set_timestamps(
@@ -692,77 +569,53 @@ impl<'a> MetadataReceiver<'a> {
         creation_time: clap_timestamp,
         modification_time: clap_timestamp,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::set_timestamps",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::set_timestamps()");
+                // These are parsed to `None` values if the timestamp is 0/CLAP_TIMESTAMP_UNKNOWN
+                let creation_time = parse_timestamp(creation_time).context("Creation time is invalid")?;
+                let modification_time = parse_timestamp(modification_time).context("Modification time is invalid")?;
 
-        // These are parsed to `None` values if the timestamp is 0/CLAP_TIMESTAMP_UNKNOWN
-        let creation_time = util::parse_timestamp(creation_time).context(
-            "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with an invalid \
-             creation_time parameter",
-        );
-        let modification_time = util::parse_timestamp(modification_time).context(
-            "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with an invalid \
-             modification_time parameter",
-        );
-        match (creation_time, modification_time) {
-            // Calling the function like htis doesn't make any sense, so we'll point that out
-            (Ok(None), Ok(None)) => this.set_callback_error(
-                "'clap_preset_discovery_metadata_receiver::set_timestamps()' called with both \
-                 arguments set to 'CLAP_TIMESTAMP_UNKNOWN'.",
-            ),
-            (Ok(creation_time), Ok(modification_time)) => {
+                anyhow::ensure!(
+                    creation_time.is_some() || modification_time.is_some(),
+                    "Both arguments are set to 'CLAP_TIMESTAMP_UNKNOWN'"
+                );
+
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::set_timestamps()' with no \
-                             preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 next_preset_data.creation_time = creation_time;
                 next_preset_data.modification_time = modification_time;
-            }
-            (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
-        }
+
+                Ok(())
+            },
+        );
     }
 
-    unsafe extern "C" fn add_feature(
-        receiver: *const clap_preset_discovery_metadata_receiver,
-        feature: *const c_char,
-    ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+    unsafe extern "C" fn add_feature(receiver: *const clap_preset_discovery_metadata_receiver, feature: *const c_char) {
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::add_feature",
+            |this| {
+                this.assert_same_thread()?;
+                let feature = unsafe { util::cstr_ptr_to_mandatory_string(feature) }.context("Feature is invalid")?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_feature()");
-
-        let feature = unsafe { util::cstr_ptr_to_mandatory_string(feature) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_feature()' called with an invalid \
-             parameter",
-        );
-        match feature {
-            Ok(feature) => {
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::add_plugin_id()' with no \
-                             preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 next_preset_data.features.push(feature);
-            }
-            Err(err) => this.set_callback_error(format!("{err:#}")),
-        }
+                Ok(())
+            },
+        );
     }
 
     unsafe extern "C" fn add_extra_info(
@@ -770,36 +623,24 @@ impl<'a> MetadataReceiver<'a> {
         key: *const c_char,
         value: *const c_char,
     ) {
-        check_null_ptr!(receiver, (*receiver).receiver_data);
-        let this = &*((*receiver).receiver_data as *const Self);
+        Self::wrap(
+            receiver,
+            "clap_preset_discovery_metadata_receiver::add_extra_info",
+            |this| {
+                this.assert_same_thread()?;
 
-        this.assert_same_thread("clap_preset_discovery_metadata_receiver::add_extra_info()");
+                let key = unsafe { util::cstr_ptr_to_mandatory_string(key) }.context("Key is invalid")?;
+                let value = unsafe { util::cstr_ptr_to_mandatory_string(value) }.context("Value is invalid")?;
 
-        let key = unsafe { util::cstr_ptr_to_mandatory_string(key) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_extra_info()' called with an invalid \
-             key parameter",
-        );
-        let value = unsafe { util::cstr_ptr_to_mandatory_string(value) }.context(
-            "'clap_preset_discovery_metadata_receiver::add_extra_info()' called with an invalid \
-             value parameter",
-        );
-        match (key, value) {
-            (Ok(key), Ok(value)) => {
                 let mut next_preset_data = this.next_preset_data.borrow_mut();
                 let next_preset_data = match &mut *next_preset_data {
                     Some(next_preset_data) => next_preset_data,
-                    None => {
-                        this.set_callback_error(
-                            "'clap_preset_discovery_metadata_receiver::add_extra_info()' with no \
-                             preceding 'begin_preset()' call. This is not valid.",
-                        );
-                        return;
-                    }
+                    None => anyhow::bail!("No preceding 'begin_preset()' call. This is not valid."),
                 };
 
                 next_preset_data.extra_info.insert(key, value);
-            }
-            (Err(err), _) | (_, Err(err)) => this.set_callback_error(format!("{err:#}")),
-        }
+                Ok(())
+            },
+        );
     }
 }

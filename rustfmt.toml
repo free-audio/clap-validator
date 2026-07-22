@@ -1,0 +1,4 @@
+format_strings = true
+comment_width = 120
+max_width = 120
+imports_granularity = "Module"

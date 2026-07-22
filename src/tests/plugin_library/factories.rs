@@ -1,43 +1,41 @@
 //! Tests interacting with the plugin's factories.
 
-use anyhow::{Context, Result};
-use clap_sys::version::clap_version_is_compatible;
-use std::path::Path;
-
-use crate::plugin::host::Host;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
+use crate::tests::rng::new_prng;
+use anyhow::{Context, Result};
+use clap_sys::version::clap_version_is_compatible;
+use rand::Rng;
+use std::path::Path;
 
 /// The test for `PluginLibraryTestCase::QueryNonexistentFactory`.
 pub fn test_query_nonexistent_factory(library_path: &Path) -> Result<TestStatus> {
-    let library = PluginLibrary::load(library_path)
-        .with_context(|| format!("Could not load '{}'", library_path.display()))?;
+    let library =
+        PluginLibrary::load(library_path).with_context(|| format!("Could not load '{}'", library_path.display()))?;
 
-    // This should be actually random instead of using a fixed seed like the other tests. This
-    // factory ID may not be used by anything.
-    let nonexistent_factory_id = format!("foo-factory-{}", rand::random::<u64>());
-    let nonexistent_factory_exists = library.factory_exists(&nonexistent_factory_id);
+    let mut prng = new_prng();
+    for _ in 0..10 {
+        let factory_id = format!("foo-factory-{}", prng.next_u64());
+        let factory_exists = library.factory_exists(&factory_id);
 
-    // Since this factory doesn't exist, the plugin should always return a null pointer.
-    if nonexistent_factory_exists {
-        anyhow::bail!(
-            "Querying a factory with the non-existent factory ID '{nonexistent_factory_id} should \
-             return a null pointer, but the plugin returned a non-null pointer instead. The \
-             plugin may be unconditionally returning the plugin factory."
-        );
-    } else {
-        Ok(TestStatus::Success { details: None })
+        if factory_exists {
+            anyhow::bail!(
+                "Querying a factory with the non-existent factory ID '{factory_id}' should return a null pointer, but \
+                 the plugin returned a non-null pointer instead. The plugin may be unconditionally returning the \
+                 plugin factory."
+            );
+        }
     }
+
+    Ok(TestStatus::Success { details: None })
 }
 
 /// The test for `PluginLibraryTestCase::CreateIdWithTrailingGarbage`.
 pub fn test_create_id_with_trailing_garbage(library_path: &Path) -> Result<TestStatus> {
-    let library = PluginLibrary::load(library_path)
-        .with_context(|| format!("Could not load '{}'", library_path.display()))?;
+    let library =
+        PluginLibrary::load(library_path).with_context(|| format!("Could not load '{}'", library_path.display()))?;
 
-    let metadata = library
-        .metadata()
-        .context("Could not query the plugin's metadata")?;
+    let metadata = library.metadata().context("Could not query the plugin's metadata")?;
     if !clap_version_is_compatible(metadata.clap_version()) {
         return Ok(TestStatus::Skipped {
             details: Some(format!(
@@ -68,28 +66,26 @@ pub fn test_create_id_with_trailing_garbage(library_path: &Path) -> Result<TestS
                 None => {
                     return Ok(TestStatus::Skipped {
                         details: Some(String::from(
-                            "All of the coolest plugins already exists. In other words, could not \
-                             come up a fake unused plugin ID.",
+                            "All of the coolest plugins already exists. In other words, could not come up a fake \
+                             unused plugin ID.",
                         )),
-                    })
+                    });
                 }
             }
         }
         None => {
             return Ok(TestStatus::Skipped {
-                details: Some(String::from(
-                    "The plugin library does not expose any plugins",
-                )),
-            })
+                details: Some(String::from("The plugin library does not expose any plugins")),
+            });
         }
     };
 
     // This should return an error/null-pointer instead of actually instantiating a
     // plugin
-    if library.create_plugin(&fake_plugin_id, Host::new()).is_ok() {
+    if library.create_plugin(&fake_plugin_id).is_ok() {
         anyhow::bail!(
-            "Creating a plugin instance with a non-existent plugin ID '{fake_plugin_id}' should \
-             return a null pointer, but it did not."
+            "Creating a plugin instance with a non-existent plugin ID '{fake_plugin_id}' should return a null \
+             pointer, but it did not."
         );
     } else {
         Ok(TestStatus::Success { details: None })

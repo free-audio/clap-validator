@@ -1,15 +1,10 @@
 //! Tests surrounding plugin features.
 
-use anyhow::{Context, Result};
-use clap_sys::plugin_features::{
-    CLAP_PLUGIN_FEATURE_ANALYZER, CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_INSTRUMENT,
-    CLAP_PLUGIN_FEATURE_NOTE_DETECTOR, CLAP_PLUGIN_FEATURE_NOTE_EFFECT,
-};
-use std::collections::HashSet;
-
-use crate::plugin::host::Host;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
+use anyhow::{Context, Result};
+use clap_sys::plugin_features::*;
+use std::collections::HashSet;
 
 /// Verifies that the descriptor stored in the factory and the descriptor stored on the plugin
 /// object are equivalent.
@@ -24,11 +19,10 @@ pub fn test_consistency(library: &PluginLibrary, plugin_id: &str) -> Result<Test
         .plugins
         .into_iter()
         .find(|plugin_meta| plugin_meta.id == plugin_id)
-        .expect("Incorrect plugin ID for metadata query, this is a bug in clap-validator");
+        .expect("Incorrect plugin ID for metadata query");
 
-    let host = Host::new();
     let plugin = library
-        .create_plugin(plugin_id, host)
+        .create_plugin(plugin_id)
         .context("Could not create the plugin instance")?;
     let plugin_descriptor = plugin.descriptor()?;
 
@@ -37,8 +31,8 @@ pub fn test_consistency(library: &PluginLibrary, plugin_id: &str) -> Result<Test
     } else {
         Ok(TestStatus::Failed {
             details: Some(format!(
-                "The 'clap_plugin_descriptor' stored on '{plugin_id}'s 'clap_plugin' object \
-                 contains different values than the one returned by the factory."
+                "The 'clap_plugin_descriptor' stored on '{plugin_id}'s 'clap_plugin' object contains different values \
+                 than the one returned by the factory."
             )),
         })
     }
@@ -65,15 +59,15 @@ pub fn test_features_categories(library: &PluginLibrary, plugin_id: &str) -> Res
             || feature == analyzer_feature
     });
 
-    if has_main_category {
-        Ok(TestStatus::Success { details: None })
-    } else {
+    if !has_main_category {
         anyhow::bail!(
-            "The plugin needs to have at least one of thw following plugin category features: \
+            "The plugin needs to have at least one of the following plugin category features: \
              \"{instrument_feature}\", \"{audio_effect_feature}\", \"{note_effect_feature}\", or \
              \"{analyzer_feature}\"."
-        )
+        );
     }
+
+    Ok(TestStatus::Success { details: None })
 }
 
 /// Confirm that the plugin does not have any duplicate features.
@@ -102,12 +96,12 @@ fn plugin_features(library: &PluginLibrary, plugin_id: &str) -> Result<Vec<Strin
                 library.plugin_path().display()
             )
         })
-        .and_then(|metadata| {
+        .map(|metadata| {
             metadata
                 .plugins
                 .into_iter()
                 .find(|plugin_meta| plugin_meta.id == plugin_id)
-                .context("Incorrect plugin ID for metadata query, this is a bug in clap-validator")
+                .expect("Incorrect plugin ID for metadata query")
         })
         .map(|metadata| metadata.features)
 }

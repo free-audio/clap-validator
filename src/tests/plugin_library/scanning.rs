@@ -3,11 +3,12 @@
 use anyhow::{Context, Result};
 use clap_sys::version::clap_version_is_compatible;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use super::SCAN_TIME_LIMIT;
 use crate::plugin::library::PluginLibrary;
 use crate::tests::TestStatus;
+
+pub const SCAN_TIME_LIMIT: Duration = Duration::from_millis(100);
 
 /// The test for `PluginLibraryTestCase::ScanTime`.
 pub fn test_scan_time(library_path: &Path) -> Result<TestStatus> {
@@ -16,8 +17,8 @@ pub fn test_scan_time(library_path: &Path) -> Result<TestStatus> {
     {
         // The library will be unloaded when this object is dropped, so that is part of the
         // measurement
-        let library = PluginLibrary::load(library_path)
-            .with_context(|| format!("Could not load '{}'", library_path.display()));
+        let library =
+            PluginLibrary::load(library_path).with_context(|| format!("Could not load '{}'", library_path.display()));
 
         // This goes through all plugins and builds a data structure containing information for all
         // of those plugins, mimicing most of a DAW's plugin scanning process
@@ -47,11 +48,7 @@ pub fn test_scan_time(library_path: &Path) -> Result<TestStatus> {
             details: Some(format!(
                 "The plugin can be scanned in {} {}.",
                 millis,
-                if millis == 1 {
-                    "millisecond"
-                } else {
-                    "milliseconds"
-                }
+                if millis == 1 { "millisecond" } else { "milliseconds" }
             )),
         })
     } else {
@@ -80,21 +77,14 @@ pub fn test_scan_rtld_now(library_path: &Path) -> Result<TestStatus> {
         .map(libloading::Library::from)
         .context("Could not load the plugin library using 'RTLD_LOCAL | RTLD_NOW'")
     })
-    .with_context(|| {
-        format!(
-            "Could not load '{}' using 'RTLD_NOW",
-            library_path.display()
-        )
-    })?;
+    .with_context(|| format!("Could not load '{}' using 'RTLD_NOW", library_path.display()))?;
 
     Ok(TestStatus::Success { details: None })
 }
 
 #[cfg(not(unix))]
-pub fn test_scan_rtld_now(library_path: &Path) -> Result<TestStatus> {
+pub fn test_scan_rtld_now(_: &Path) -> Result<TestStatus> {
     Ok(TestStatus::Skipped {
-        details: Some(String::from(
-            "This test is only relevant to Unix-like platforms",
-        )),
+        details: Some(String::from("This test is only relevant to Unix-like platforms")),
     })
 }

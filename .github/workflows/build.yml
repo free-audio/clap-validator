@@ -25,25 +25,24 @@ jobs:
       matrix:
         include:
           - { name: ubuntu-22.04,     os: ubuntu-22.04,   cross-target: '' }
-          - { name: macos-12-x86_64,  os: macos-12,       cross-target: '' }
-          - { name: macos-12-aarch64, os: macos-12,       cross-target: aarch64-apple-darwin }
           - { name: windows,          os: windows-latest, cross-target: '' }
+          - { name: macos-15-aarch64, os: macos-15,       cross-target: '' }
+          - { name: macos-15-x86_64,  os: macos-15,       cross-target: x86_64-apple-darwin }
     name: Build binary
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Fetch all git history
         run: git fetch --force --prune --tags --unshallow
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: build-${{ matrix.name }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -92,7 +91,7 @@ jobs:
 
   universal-binary:
     name: Build a universal macOS binary
-    runs-on: macos-12
+    runs-on: macos-15
     needs: package
     steps:
       - uses: actions/checkout@v4
@@ -101,8 +100,8 @@ jobs:
 
       - name: Determine the previously build archive names
         run: |
-          echo "X86_64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-12-x86_64" >> "$GITHUB_ENV"
-          echo "AARCH64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-12-aarch64" >> "$GITHUB_ENV"
+          echo "X86_64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-15-x86_64" >> "$GITHUB_ENV"
+          echo "AARCH64_ARCHIVE_NAME=clap-validator-$(git describe --always)-macos-15-aarch64" >> "$GITHUB_ENV"
 
       - name: Determine archive name for the universal binary
         run: |

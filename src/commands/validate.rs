@@ -1,127 +1,82 @@
 //! Commands for validating plugins.
 
-use std::process::ExitCode;
-
+use crate::cli::{Config, Report, ReportItem, pluralize};
+use crate::tests::{TestGroup, TestResult, TestStatus};
+use crate::validator::{ValidationResult, ValidationTally};
+use crate::{Verbosity, validator};
 use anyhow::{Context, Result};
-use colored::Colorize;
+use clap::Args;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use yansi::Paint;
 
-use super::{println_wrapped, TextWrapper};
-use crate::tests::TestStatus;
-use crate::validator::{self, SingleTestSettings, ValidatorSettings};
-use crate::Verbosity;
+/// Options for the validator.
+#[derive(Debug, Args)]
+pub struct ValidatorSettings {
+    /// Paths to one or more plugins that should be validated.
+    #[arg(required = true)]
+    pub paths: Vec<PathBuf>,
+    /// Only validate plugins with this ID.
+    ///
+    /// If the plugin library contains multiple plugins, then you can pass a single plugin's ID
+    /// to this option to only validate that plugin. Otherwise all plugins in the library are
+    /// validated.
+    #[arg(short = 'p', long)]
+    pub plugin_id: Option<String>,
+    /// Print the test output as JSON instead of human readable text.
+    #[arg(long)]
+    pub json: bool,
+    /// Only run the tests that match this case-insensitive regular expression.
+    /// Multiple include patterns can be passed, in which case a test only needs to match one of them to be included.
+    #[arg(short = 't', long)]
+    pub include: Vec<String>,
+    /// Don't run the tests that match this case-insensitive regular expression.
+    /// Exclude takes precedence over include, so if a test matches both, it will be excluded.
+    #[arg(short = 'x', long)]
+    pub exclude: Vec<String>,
+    /// When running the validation out-of-process, hide the plugin's output.
+    ///
+    /// This can be useful for validating noisy plugins.
+    #[arg(long, conflicts_with = "in_process")]
+    pub hide_output: bool,
+    /// Only show failed tests.
+    ///
+    /// This affects both the human readable and the JSON output.
+    #[arg(long)]
+    pub only_failed: bool,
+    /// Run the tests within this process.
+    ///
+    /// Tests are normally run in separate processes in case the plugin crashes. Another benefit
+    /// of the out-of-process validation is that the test always starts from a clean state.
+    /// Using this option will remove those protections, but in turn the tests may run faster.
+    #[arg(long)]
+    pub in_process: bool,
+    /// Set the amount of parallelism when running the tests. Only for out-of-process tests.
+    #[arg(long, short = 'j', conflicts_with = "in_process")]
+    pub jobs: Option<usize>,
+    /// When running the validation in-process, emit a JSON trace file that can be viewed with
+    /// Chrome's tracing viewer or <https://ui.perfetto.dev>.
+    ///
+    /// This has a non-negligible performance impact.
+    #[arg(long, requires = "in_process")]
+    pub trace: bool,
+}
 
 /// The main validator command. This will validate one or more plugins and print the results.
-pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<ExitCode> {
-    let mut result =
-        validator::validate(verbosity, settings).context("Could not run the validator")?;
+pub fn validate(verbosity: Verbosity, settings: ValidatorSettings) -> Result<ExitCode> {
+    let config = Config::from_current()?;
+
+    let mut result = validator::validate(verbosity, &settings, &config).context("Could not run the validator")?;
     let tally = result.tally();
 
-    // Filtering out tests should be done after we did the tally for consistency's sake
     if settings.only_failed {
-        // The `.drain_filter()` methods have not been stabilized yet, so to make things
-        // easy for us we'll just inefficiently rebuild the data structures
-        result.plugin_library_tests = result
-            .plugin_library_tests
-            .into_iter()
-            .filter_map(|(library_path, tests)| {
-                let tests: Vec<_> = tests
-                    .into_iter()
-                    .filter(|test| test.status.failed_or_warning())
-                    .collect();
-                if tests.is_empty() {
-                    None
-                } else {
-                    Some((library_path, tests))
-                }
-            })
-            .collect();
-
-        result.plugin_tests = result
-            .plugin_tests
-            .into_iter()
-            .filter_map(|(plugin_id, tests)| {
-                let tests: Vec<_> = tests
-                    .into_iter()
-                    .filter(|test| test.status.failed_or_warning())
-                    .collect();
-                if tests.is_empty() {
-                    None
-                } else {
-                    Some((plugin_id, tests))
-                }
-            })
-            .collect();
+        result = result.filter(|test| test.status.failed_or_warning());
     }
 
     if settings.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&result).expect("Could not format JSON")
-        );
+        println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
-        let mut wrapper = TextWrapper::default();
-        // This doesn't need to be a macro but the alternatives are to either wrap `wrapper` in a
-        // refcell or to inline this, so this is probably still better
-        macro_rules! print_test {
-            ($test:expr) => {
-                println_wrapped!(wrapper, "   - {}: {}", $test.name, $test.description);
-
-                let status_text = match $test.status {
-                    TestStatus::Success { .. } => "PASSED".green(),
-                    TestStatus::Crashed { .. } => "CRASHED".red().bold(),
-                    TestStatus::Failed { .. } => "FAILED".red(),
-                    TestStatus::Skipped { .. } => "SKIPPED".yellow(),
-                    TestStatus::Warning { .. } => "WARNING".yellow(),
-                };
-                let test_result = match $test.status.details() {
-                    Some(reason) => format!("     {status_text}: {reason}"),
-                    None => format!("     {status_text}"),
-                };
-                wrapper.print_auto(test_result);
-            };
-        }
-
-        if !result.plugin_library_tests.is_empty() {
-            println!("Plugin library tests:");
-            for (library_path, tests) in result.plugin_library_tests {
-                println!();
-                println_wrapped!(wrapper, " - {}", library_path.display());
-
-                for test in tests {
-                    println!();
-                    print_test!(test);
-                }
-            }
-
-            println!();
-        }
-
-        if !result.plugin_tests.is_empty() {
-            println!("Plugin tests:");
-            for (plugin_id, tests) in result.plugin_tests {
-                println!();
-                println_wrapped!(wrapper, " - {plugin_id}");
-
-                for test in tests {
-                    println!();
-                    print_test!(test);
-                }
-            }
-
-            println!();
-        }
-
-        let num_tests = tally.total();
-        println_wrapped!(
-            wrapper,
-            "{} {} run, {} passed, {} failed, {} skipped, {} warnings",
-            num_tests,
-            if num_tests == 1 { "test" } else { "tests" },
-            tally.num_passed,
-            tally.num_failed,
-            tally.num_skipped,
-            tally.num_warnings
-        );
+        pretty_print(&result, &tally);
     }
 
     // If any of the tests failed, this process should exit with a failure code
@@ -132,12 +87,80 @@ pub fn validate(verbosity: Verbosity, settings: &ValidatorSettings) -> Result<Ex
     }
 }
 
-/// Run a single test and write the output to a file. This command is a hidden implementation detail
-/// used by the validator to run tests in a different process.
-pub fn run_single(settings: &SingleTestSettings) -> Result<ExitCode> {
-    // The result will be serialized as JSON and written to a file so the main validator process can
-    // read it
-    validator::run_single_test(settings)
-        .map(|()| ExitCode::SUCCESS)
-        .context("Could not run test the case")
+fn pretty_print(result: &ValidationResult, tally: &ValidationTally) {
+    fn report_test(result: &TestResult) -> Report {
+        let status_text = match result.status {
+            TestStatus::Success { .. } => "PASSED".green(),
+            TestStatus::Skipped { .. } => "SKIPPED".dim(),
+            TestStatus::Warning { .. } => "WARNING".yellow(),
+            TestStatus::Failed { .. } => "FAILED".red(),
+            TestStatus::Crashed { .. } => "CRASHED".red().bold(),
+        };
+
+        let mut items = vec![ReportItem::Text(result.test.description())];
+
+        if let Some(details) = result.status.details() {
+            items.push(ReportItem::Child(Report {
+                header: "".to_string(),
+                footer: vec![],
+                items: vec![ReportItem::Text(details.to_string())],
+            }));
+        }
+
+        Report {
+            items,
+            header: result.test.name(),
+            footer: vec![
+                status_text.to_string(),
+                format!("{}ms", result.duration.as_millis()).dim().to_string(),
+            ],
+        }
+    }
+
+    for (group, tests) in result.group() {
+        match group {
+            TestGroup::PluginLibrary(library_path) => {
+                let mut items = vec![ReportItem::Text(library_path.to_string_lossy().to_string())];
+
+                for test in &tests {
+                    items.push(ReportItem::Child(report_test(test)));
+                }
+
+                println!(
+                    "\n{}",
+                    Report {
+                        header: "Plugin Library".to_string(),
+                        footer: vec![pluralize(tests.len(), "test")],
+                        items,
+                    }
+                );
+            }
+
+            TestGroup::PluginInstance(_, plugin_id) => {
+                let mut items = vec![ReportItem::Text(plugin_id.clone())];
+
+                for test in &tests {
+                    items.push(ReportItem::Child(report_test(test)));
+                }
+
+                println!(
+                    "\n{}",
+                    Report {
+                        header: "Plugin".to_string(),
+                        footer: vec![pluralize(tests.len(), "test")],
+                        items,
+                    }
+                );
+            }
+        }
+    }
+
+    println!(
+        "{} run, {} passed, {} failed, {} warnings, {} skipped",
+        pluralize(tally.total(), "test"),
+        tally.num_passed.green().bold(),
+        tally.num_failed.red().bold(),
+        tally.num_warnings.yellow().bold(),
+        tally.num_skipped.bold(),
+    );
 }
