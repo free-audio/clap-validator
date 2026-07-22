@@ -167,7 +167,7 @@ impl PluginInstanceTestCase {
                  any crashes, and that the plugin still produces valid (non-NaN and non-infinite) output",
             ),
             Self::ParamConversions => String::from(
-                "Asserts that value to string and string to value conversions are supported for ether all or none of \
+                "Asserts that value to string and string to value conversions are supported for either all or none of \
                  the plugin's parameters, and that conversions between values and strings roundtrip consistently.",
             ),
             Self::ParamSetEvents => String::from(
