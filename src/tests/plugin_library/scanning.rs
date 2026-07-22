@@ -91,7 +91,7 @@ pub fn test_scan_rtld_now(library_path: &Path) -> Result<TestStatus> {
 }
 
 #[cfg(not(unix))]
-pub fn test_scan_rtld_now(library_path: &Path) -> Result<TestStatus> {
+pub fn test_scan_rtld_now(_library_path: &Path) -> Result<TestStatus> {
     Ok(TestStatus::Skipped {
         details: Some(String::from(
             "This test is only relevant to Unix-like platforms",
