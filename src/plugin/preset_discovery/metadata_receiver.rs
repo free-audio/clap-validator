@@ -383,18 +383,22 @@ impl MetadataReceiver {
                 let load_key =
                     unsafe { util::cstr_ptr_to_optional_string(load_key) }.context("Load key argument is invalid")?;
 
-                let result = this.result.lock().unwrap();
-                match (&*result, &load_key) {
-                    (Err(_), _) => return Ok(false),
-                    (Ok(Some(PresetFile::Single(_))), _) => anyhow::bail!(
-                        "Calling 'begin_preset()' a second time for a non-container (no load key) preset file is not \
-                         allowed"
-                    ),
-                    (Ok(Some(PresetFile::Container(_))), None) => anyhow::bail!(
-                        "'begin_preset()' was called with a load key for the first time, and without a load key the \
-                         second time. This is invalid behavior"
-                    ),
-                    _ => {}
+                // The lock must be released before `flush_preset()` is called below, since that
+                // function locks `self.result` again
+                {
+                    let result = this.result.lock().unwrap();
+                    match (&*result, &load_key) {
+                        (Err(_), _) => return Ok(false),
+                        (Ok(Some(PresetFile::Single(_))), _) => anyhow::bail!(
+                            "Calling 'begin_preset()' a second time for a non-container (no load key) preset file is \
+                             not allowed"
+                        ),
+                        (Ok(Some(PresetFile::Container(_))), None) => anyhow::bail!(
+                            "'begin_preset()' was called with a load key for the first time, and without a load key \
+                             the second time. This is invalid behavior"
+                        ),
+                        _ => {}
+                    }
                 }
 
                 // Container presets have a load key, single-preset files don't have a load key. The
