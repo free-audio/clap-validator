@@ -75,6 +75,12 @@ pub fn test_param_conversions(library: &PluginLibrary, plugin_id: &str) -> Resul
 
     let param_info = params.info().context("Failure while fetching the parameters")?;
 
+    if param_info.is_empty() {
+        return Ok(TestStatus::Warning {
+            details: Some(String::from("The plugin implements the 'params' extension, but does not have any parameters.")),
+        });
+    }
+    
     // We keep track of how many parameters support these conversions. A plugin
     // should support either conversion either for all of its parameters, or for
     // none of them.
