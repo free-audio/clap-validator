@@ -11,7 +11,7 @@ use clap_sys::version::CLAP_VERSION;
 use serde::{Deserialize, Serialize};
 use std::ffi::{CString, c_char, c_void};
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::thread::ThreadId;
 use time::OffsetDateTime;
@@ -175,8 +175,10 @@ impl LocationValue {
                     .context("Error parsing the location string for a file location")?
                     .unwrap_or_default();
 
-                if !path_str.starts_with('/') {
-                    anyhow::bail!("'{path_str}' should be an absolute path, i.e. '/{path_str}'.");
+                // The location is a native path, so what counts as absolute depends on the platform,
+                // e.g. `C:\Presets` on Windows
+                if !Path::new(&path_str).is_absolute() {
+                    anyhow::bail!("'{path_str}' should be an absolute path.");
                 }
 
                 Ok(LocationValue::File(CString::new(path_str).unwrap()))
@@ -434,5 +436,37 @@ impl Indexer {
             Ok(std::ptr::null())
         })
         .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file_location(path: &str) -> Result<LocationValue> {
+        let path = CString::new(path).unwrap();
+        unsafe { LocationValue::new(CLAP_PRESET_DISCOVERY_LOCATION_FILE, path.as_ptr()) }
+    }
+
+    #[test]
+    fn file_locations_must_be_absolute() {
+        assert!(file_location("").is_err());
+        assert!(file_location("Presets").is_err());
+        assert!(file_location("./Presets").is_err());
+
+        #[cfg(not(windows))]
+        assert!(file_location("/home/user/Presets").is_ok());
+
+        #[cfg(windows)]
+        {
+            assert!(file_location(r"C:\Users\user\Presets").is_ok());
+            assert!(file_location("C:/Users/user/Presets").is_ok());
+            assert!(file_location(r"\\server\share\Presets").is_ok());
+
+            // These are relative to the current drive or to the drive's current directory
+            assert!(file_location(r"\Presets").is_err());
+            assert!(file_location(r"/C:\Users\user\Presets").is_err());
+            assert!(file_location("C:Presets").is_err());
+        }
     }
 }
