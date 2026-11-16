@@ -19,7 +19,6 @@ use clack_extensions::state::PluginState;
 use clack_plugin::events::spaces::CoreEventSpace;
 use clack_plugin::prelude::*;
 use clack_plugin::process::ConstantMask;
-use std::f32;
 use std::ffi::CString;
 
 mod oscillator;
