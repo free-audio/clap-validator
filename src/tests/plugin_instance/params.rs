@@ -215,9 +215,8 @@ pub fn test_param_set_events(library: &PluginLibrary, plugin_id: &str, null_cook
     };
 
     let param_info = params.info().context("Failure while fetching the parameters")?;
-    let mut param_events = ParamFuzzer::new(&param_info)
-        .randomize_params_at(&mut new_prng(), 0)
-        .collect::<Vec<_>>();
+    let initial_param_values = param_get_values(&params)?;
+    let mut param_events = param_events_that_change(&ParamFuzzer::new(&param_info), &initial_param_values);
 
     if param_events.is_empty() {
         return Ok(TestStatus::Skipped {
@@ -277,10 +276,11 @@ pub fn test_param_set_events(library: &PluginLibrary, plugin_id: &str, null_cook
 
     // we have to recreate the events because of cookies (they can be different between plugin instances)
     let param_info = params.info().context("Failure while fetching the parameters")?;
-    let mut param_events = ParamFuzzer::new(&param_info)
-        .with_no_cookies(null_cookies)
-        .randomize_params_at(&mut new_prng(), 0)
-        .collect::<Vec<_>>();
+    let initial_param_values = param_get_values(&params)?;
+    let mut param_events = param_events_that_change(
+        &ParamFuzzer::new(&param_info).with_no_cookies(null_cookies),
+        &initial_param_values,
+    );
 
     if null_cookies {
         for event in param_events.iter_mut() {
@@ -292,10 +292,7 @@ pub fn test_param_set_events(library: &PluginLibrary, plugin_id: &str, null_cook
     }
 
     let process_param_values = {
-        let initial_param_values = param_get_values(&params)?;
-
         plugin.poll_callback(|_| Ok(()))?;
-
         plugin.on_audio_thread(|plugin| {
             let mut buffers = AudioBuffers::new_out_of_place_f32(&audio_ports_config, BUFFER_SIZE);
             let mut process = ProcessScope::new(&plugin, &mut buffers)?;
@@ -761,4 +758,22 @@ pub fn param_generate_diff(
     } else {
         Ok(Some(diff.join("\n")))
     }
+}
+
+fn param_events_that_change(fuzzer: &ParamFuzzer, initial_param_values: &BTreeMap<clap_id, f64>) -> Vec<Event> {
+    let mut prng = new_prng();
+
+    for _ in 0..100 {
+        let events = fuzzer.randomize_params_at(&mut prng, 0).collect::<Vec<_>>();
+        let changes_something = events.iter().any(|event| match event {
+            Event::ParamValue(event) => initial_param_values.get(&event.param_id) != Some(&event.value),
+            _ => false,
+        });
+
+        if changes_something {
+            return events;
+        }
+    }
+
+    Vec::new()
 }

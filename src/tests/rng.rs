@@ -7,7 +7,6 @@ use crate::plugin::ext::params::{Param, ParamInfo};
 use crate::plugin::process::{Event, MidiEvent, TransportState};
 use clap_sys::events::*;
 use clap_sys::ext::ambisonic::*;
-use core::f64;
 use rand::seq::{IndexedRandom, IteratorRandom};
 use rand::{Rng, RngExt, SeedableRng};
 use std::ops::RangeInclusive;
