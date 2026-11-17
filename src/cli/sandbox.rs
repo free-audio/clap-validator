@@ -71,22 +71,8 @@ pub trait SandboxOperation: Serialize + DeserializeOwned {
             command.stderr(std::process::Stdio::null());
         }
 
-        let status = match config.timeout {
-            None => command
-                .spawn()
-                .expect("Failed to spawn a child process")
-                .wait()
-                .expect("Failed to wait for the child process"),
-            Some(timeout) => match command
-                .spawn()
-                .expect("Failed to spawn a child process")
-                .wait_timeout(timeout)
-                .expect("Failed to wait for the child process")
-            {
-                Some(status) => status,
-                None => return Err(SandboxError::Timeout(timeout)),
-            },
-        };
+        let mut child = command.spawn().expect("Failed to spawn a child process");
+        let status = wait_child(&mut child, config.timeout)?;
 
         if !status.success() {
             return Err(SandboxError::Crashed(status));
@@ -98,6 +84,23 @@ pub trait SandboxOperation: Serialize + DeserializeOwned {
             serde_json::from_str(&output).expect("Failed to deserialize the output from the sandboxed operation");
 
         Ok(result)
+    }
+}
+
+fn wait_child(child: &mut std::process::Child, timeout: Option<Duration>) -> Result<ExitStatus, SandboxError> {
+    match timeout {
+        None => Ok(child.wait().expect("Failed to wait for the child process")),
+        Some(timeout) => match child
+            .wait_timeout(timeout)
+            .expect("Failed to wait for the child process")
+        {
+            Some(status) => Ok(status),
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                Err(SandboxError::Timeout(timeout))
+            }
+        },
     }
 }
 
@@ -130,5 +133,52 @@ impl std::fmt::Display for SandboxError {
             SandboxError::Timeout(duration) => write!(f, "Timed out after {} seconds", duration.as_secs()),
             SandboxError::Crashed(status) => write!(f, "{}", status),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    fn spawn_hung() -> std::process::Child {
+        let mut command = if cfg!(windows) {
+            let mut command = Command::new("ping");
+            command.args(["-n", "30", "127.0.0.1"]);
+            command
+        } else {
+            let mut command = Command::new("sleep");
+            command.arg("30");
+            command
+        };
+        command.stdin(Stdio::null());
+        command.stdout(Stdio::null());
+        command.stderr(Stdio::null());
+        command.spawn().expect("failed to spawn hung child")
+    }
+
+    fn process_alive(pid: u32) -> bool {
+        if cfg!(windows) {
+            let output = Command::new("tasklist")
+                .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+                .output()
+                .expect("tasklist failed");
+            String::from_utf8_lossy(&output.stdout).contains(&pid.to_string())
+        } else {
+            Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .is_ok_and(|s| s.success())
+        }
+    }
+
+    #[test]
+    fn timeout_kills_hung_child() {
+        let mut child = spawn_hung();
+        let pid = child.id();
+        let result = wait_child(&mut child, Some(Duration::from_millis(200)));
+        assert!(matches!(result, Err(SandboxError::Timeout(_))));
+        assert!(!process_alive(pid), "hung child {pid} is still running after timeout");
     }
 }
