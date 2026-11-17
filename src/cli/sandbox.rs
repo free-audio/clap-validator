@@ -21,6 +21,7 @@ pub struct SandboxConfig {
 pub enum SandboxError {
     Timeout(Duration),
     Crashed(ExitStatus),
+    MissingOutput,
 }
 
 #[derive(Serialize, Deserialize, Args)]
@@ -92,12 +93,7 @@ pub trait SandboxOperation: Serialize + DeserializeOwned {
             return Err(SandboxError::Crashed(status));
         }
 
-        let output =
-            std::fs::read_to_string(&output_file).expect("Failed to read the output file from the sandboxed operation");
-        let result: Self::Result =
-            serde_json::from_str(&output).expect("Failed to deserialize the output from the sandboxed operation");
-
-        Ok(result)
+        read_sandbox_result(&output_file)
     }
 }
 
@@ -123,12 +119,38 @@ impl SandboxPayload {
     }
 }
 
+fn read_sandbox_result<T: DeserializeOwned>(path: &std::path::Path) -> Result<T, SandboxError> {
+    let output = std::fs::read_to_string(path).map_err(|_| SandboxError::MissingOutput)?;
+    serde_json::from_str(&output).map_err(|_| SandboxError::MissingOutput)
+}
+
 impl std::error::Error for SandboxError {}
 impl std::fmt::Display for SandboxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             SandboxError::Timeout(duration) => write!(f, "Timed out after {} seconds", duration.as_secs()),
             SandboxError::Crashed(status) => write!(f, "{}", status),
+            SandboxError::MissingOutput => write!(f, "exited without writing a result"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn empty_result_file_is_a_crash_not_a_panic() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let result = read_sandbox_result::<i32>(file.path());
+        assert!(matches!(result, Err(SandboxError::MissingOutput)));
+    }
+
+    #[test]
+    fn valid_result_file_deserializes() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        write!(file, "42").unwrap();
+        assert_eq!(read_sandbox_result::<i32>(file.path()).unwrap(), 42);
     }
 }
