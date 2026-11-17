@@ -219,7 +219,7 @@ fn walk_clap_plugins(directory: &Path) -> impl Iterator<Item = DirEntry> {
 }
 
 fn is_clap_plugin(path: &Path) -> bool {
-    if path.extension().is_some_and(|ext| ext == "clap") {
+    if path.extension().is_none_or(|ext| ext != "clap") {
         return false;
     }
 
@@ -232,5 +232,42 @@ fn is_clap_plugin(path: &Path) -> bool {
         path.is_dir()
     } else {
         path.is_file()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn write_empty_file(path: &Path) {
+        fs::write(path, []).unwrap();
+    }
+
+    #[test]
+    fn clap_file_is_a_plugin_on_non_macos() {
+        let dir = tempfile::tempdir().unwrap();
+        let clap = dir.path().join("plugin.clap");
+        write_empty_file(&clap);
+
+        assert_eq!(is_clap_plugin(&clap), !cfg!(target_os = "macos"));
+    }
+
+    #[test]
+    fn non_clap_file_is_not_a_plugin() {
+        let dir = tempfile::tempdir().unwrap();
+        let dll = dir.path().join("plugin.dll");
+        write_empty_file(&dll);
+
+        assert!(!is_clap_plugin(&dll));
+    }
+
+    #[test]
+    fn clap_bundle_directory_is_a_plugin_on_macos() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("plugin.clap");
+        fs::create_dir(&bundle).unwrap();
+
+        assert_eq!(is_clap_plugin(&bundle), cfg!(target_os = "macos"));
     }
 }
