@@ -91,11 +91,9 @@ pub trait SandboxOperation: Serialize + DeserializeOwned {
             return Err(SandboxError::Crashed(status));
         }
 
-        let output =
-            std::fs::read_to_string(&output_file).expect("Failed to read the output file from the sandboxed operation");
+        let output = std::fs::read_to_string(&output_file).map_err(|_| SandboxError::Crashed(ExitStatus::default()))?;
         let result: Self::Result =
-            serde_json::from_str(&output).expect("Failed to deserialize the output from the sandboxed operation");
-
+            serde_json::from_str(&output).map_err(|_| SandboxError::Crashed(ExitStatus::default()))?;
         Ok(result)
     }
 }
