@@ -219,7 +219,7 @@ fn walk_clap_plugins(directory: &Path) -> impl Iterator<Item = DirEntry> {
 }
 
 fn is_clap_plugin(path: &Path) -> bool {
-    if path.extension().is_some_and(|ext| ext == "clap") {
+    if path.extension().is_none_or(|ext| ext != "clap") {
         return false;
     }
 
