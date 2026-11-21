@@ -71,20 +71,19 @@ pub trait SandboxOperation: Serialize + DeserializeOwned {
             command.stderr(std::process::Stdio::null());
         }
 
+        let mut child = command.spawn().expect("Failed to spawn a child process");
         let status = match config.timeout {
-            None => command
-                .spawn()
-                .expect("Failed to spawn a child process")
-                .wait()
-                .expect("Failed to wait for the child process"),
-            Some(timeout) => match command
-                .spawn()
-                .expect("Failed to spawn a child process")
+            None => child.wait().expect("Failed to wait for the child process"),
+            Some(timeout) => match child
                 .wait_timeout(timeout)
                 .expect("Failed to wait for the child process")
             {
                 Some(status) => status,
-                None => return Err(SandboxError::Timeout(timeout)),
+                None => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(SandboxError::Timeout(timeout));
+                }
             },
         };
 
