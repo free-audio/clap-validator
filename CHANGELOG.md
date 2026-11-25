@@ -11,6 +11,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Update `clap-sys` to v0.6.0 (CLAP 1.2.10).
+- Treat `CLAP_PARAM_IS_ENUM` without `CLAP_PARAM_IS_STEPPED` as an error.
 
 ## [0.4.1] - 2026-07-19
 
