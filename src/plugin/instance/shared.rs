@@ -710,7 +710,9 @@ impl PluginShared {
         Self::wrap(host, span.name(), |this| {
             this.assert_main_thread()?;
             this.assert_has_extension::<Params>()?;
-            log::debug!("TODO: Handle 'clap_host_params::clear()'");
+            this.callback_sender
+                .send(CallbackEvent::ParamsClear { param_id, flags })
+                .unwrap();
             Ok(())
         });
     }

@@ -12,6 +12,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Update `clap-sys` to v0.6.0 (CLAP 1.2.10).
 
+### Fixed
+
+- Emit a `ParamsClear` callback event from `clap_host_params::clear()`.
+
 ## [0.4.1] - 2026-07-19
 
 ### Added
