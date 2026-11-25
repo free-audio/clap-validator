@@ -90,6 +90,8 @@ impl TransportState {
         flags |= self.tempo.is_some() as u32 * CLAP_TRANSPORT_HAS_TEMPO;
         flags |= self.time_signature.is_some() as u32 * CLAP_TRANSPORT_HAS_TIME_SIGNATURE;
 
+        let bar_info = self.bar_info();
+
         clap_event_transport {
             flags,
             header: clap_event_header {
@@ -116,11 +118,27 @@ impl TransportState {
             loop_end_beats: i64::MIN,
             loop_start_seconds: i64::MAX,
             loop_end_seconds: i64::MIN,
-            bar_start: 0,
-            bar_number: 0, // TODO: implement those 2
+            bar_start: bar_info
+                .map(|(bar_start, _)| (bar_start * CLAP_BEATTIME_FACTOR as f64).round() as i64)
+                .unwrap_or(0),
+            bar_number: bar_info.map(|(_, bar_number)| bar_number).unwrap_or(0),
             tsig_num: self.time_signature.map(|(n, _)| n).unwrap_or(u16::MAX),
             tsig_denom: self.time_signature.map(|(_, d)| d).unwrap_or(0),
         }
+    }
+
+    // CLAP beat time is quarter notes, so bar length is tsig_num * 4 / tsig_denom.
+    fn bar_info(&self) -> Option<(f64, i32)> {
+        let position_beats = self.position_beats?;
+        let (tsig_num, tsig_denom) = self.time_signature?;
+        if tsig_num == 0 || tsig_denom == 0 {
+            return None;
+        }
+
+        let beats_per_bar = tsig_num as f64 * 4.0 / tsig_denom as f64;
+        let bar_number = (position_beats / beats_per_bar).floor() as i32;
+        let bar_start = bar_number as f64 * beats_per_bar;
+        Some((bar_start, bar_number))
     }
 }
 
@@ -225,5 +243,36 @@ impl Recordable for clap_event_transport {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bar_from(state: &TransportState) -> (f64, i32) {
+        let event = state.as_clap_transport(0);
+        (event.bar_start as f64 / CLAP_BEATTIME_FACTOR as f64, event.bar_number)
+    }
+
+    #[test]
+    fn bar_at_song_start() {
+        let state = TransportState::dummy();
+        assert_eq!(bar_from(&state), (0.0, 0));
+    }
+
+    #[test]
+    fn bar_in_4_4_at_eight_quarters() {
+        let mut state = TransportState::dummy();
+        state.position_beats = Some(8.0);
+        assert_eq!(bar_from(&state), (8.0, 2));
+    }
+
+    #[test]
+    fn bar_in_6_8_at_four_quarters() {
+        let mut state = TransportState::dummy();
+        state.time_signature = Some((6, 8));
+        state.position_beats = Some(4.0);
+        assert_eq!(bar_from(&state), (3.0, 1));
     }
 }
