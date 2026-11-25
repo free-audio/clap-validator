@@ -23,6 +23,12 @@ pub enum CallbackEvent {
     /// clap_plugin_params::rescan()
     ParamsRescan(ParamsRescan),
 
+    /// clap_host_params::clear()
+    ParamsClear {
+        param_id: u32,
+        flags: u32,
+    },
+
     AudioPortsRescanNames,
     AudioPortsRescanInfo,
     AudioPortsRescanList,
