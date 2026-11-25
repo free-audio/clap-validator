@@ -638,12 +638,14 @@ impl PluginShared {
             this.assert_main_thread()?;
             this.assert_has_extension::<PresetLoad>()?;
 
-            let _location = unsafe { LocationValue::new(location_kind, location) }
-                .context("'Called with invalid location parameters")?;
-            let _load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }
-                .context("'Called with an invalid load_key parameter")?;
+            let location = unsafe { LocationValue::new(location_kind, location) }
+                .context("'clap_host_preset_load::loaded()' called with invalid location parameters")?;
+            let load_key = unsafe { util::cstr_ptr_to_optional_string(load_key) }
+                .context("'clap_host_preset_load::loaded()' called with an invalid load_key parameter")?;
 
-            log::debug!("TODO: Handle 'clap_host_preset_load::loaded()'");
+            this.callback_sender
+                .send(CallbackEvent::PresetLoadLoaded { location, load_key })
+                .unwrap();
             Ok(())
         });
     }
