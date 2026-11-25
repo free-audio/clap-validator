@@ -91,7 +91,7 @@ version = "0.1.0"
 source = "git+https://github.com/prokopyl/clack?rev=3f9b32dc47eeb5a500a9f589e84ee3eb20b44ae6#3f9b32dc47eeb5a500a9f589e84ee3eb20b44ae6"
 dependencies = [
  "bitflags 2.10.0",
- "clap-sys",
+ "clap-sys 0.5.0",
 ]
 
 [[package]]
@@ -110,7 +110,7 @@ dependencies = [
  "bitflags 2.10.0",
  "clack-common",
  "clack-plugin",
- "clap-sys",
+ "clap-sys 0.5.0",
 ]
 
 [[package]]
@@ -119,7 +119,7 @@ version = "0.1.0"
 source = "git+https://github.com/prokopyl/clack?rev=3f9b32dc47eeb5a500a9f589e84ee3eb20b44ae6#3f9b32dc47eeb5a500a9f589e84ee3eb20b44ae6"
 dependencies = [
  "clack-common",
- "clap-sys",
+ "clap-sys 0.5.0",
 ]
 
 [[package]]
@@ -147,13 +147,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
 
 [[package]]
+name = "clap-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8506185e2773e968286c74ba5460a278e4c4604a224aef4d2a595383efd7d7c5"
+
+[[package]]
 name = "clap-validator"
 version = "0.4.1"
 dependencies = [
  "anyhow",
  "basic-toml",
  "clap",
- "clap-sys",
+ "clap-sys 0.6.0",
  "core-foundation",
  "crossbeam-utils",
  "either",
