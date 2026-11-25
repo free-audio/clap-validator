@@ -189,6 +189,8 @@ impl Recordable for AudioPortsRequestInfo<'_> {
                     CLAP_SURROUND_TBL => "TBL",
                     CLAP_SURROUND_TBC => "TBC",
                     CLAP_SURROUND_TBR => "TBR",
+                    CLAP_SURROUND_TSL => "TSL",
+                    CLAP_SURROUND_TSR => "TSR",
                     _ => "?",
                 })
                 .collect::<Vec<_>>()
