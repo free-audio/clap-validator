@@ -276,6 +276,14 @@ impl Params<'_> {
                 }
             }
 
+            if (info.flags & CLAP_PARAM_IS_ENUM) != 0 && (info.flags & CLAP_PARAM_IS_STEPPED) == 0 {
+                anyhow::bail!(
+                    "Parameter '{}' (stable ID {}) is an enum parameter, but it is not stepped.",
+                    name,
+                    info.id
+                )
+            }
+
             // The last check here makes sure that per-X automatable or modulatable parameters are
             // also _just_ automatable/modulatable. This is technically allowed, but it is almost
             // certainly a bug.
